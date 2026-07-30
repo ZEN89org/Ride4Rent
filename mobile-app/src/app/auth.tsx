@@ -7,7 +7,7 @@ import ScreenContainer from "@/components/ScreenContainer";
 import SecondaryButton from "@/components/SecondaryButton";
 
 import { Colors } from "@/constants/colors";
-import { FontSize, Spacing } from "@/constants/theme";
+import { FontFamily, FontSize, Spacing } from "@/constants/theme";
 
 export default function Auth() {
 
@@ -79,11 +79,11 @@ const styles = StyleSheet.create({
 
   brand: {
 
-    marginTop: Spacing.md,
+    marginTop: -20,
 
     fontSize: FontSize.heading,
 
-    fontWeight: "700",
+    fontFamily: FontFamily.medium,
 
     color: Colors.dark,
 

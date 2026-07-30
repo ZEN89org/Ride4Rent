@@ -1,42 +1,39 @@
 import { router } from "expo-router";
+import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
+import AuthRequiredBottomSheet from "@/components/AuthRequiredBottomSheet";
 import PrimaryButton from "@/components/PrimaryButton";
 import ScreenContainer from "@/components/ScreenContainer";
 
 import { useAuth } from "@/hooks/useAuth";
 
 import { Colors } from "@/constants/colors";
-import { FontFamily, FontSize, Spacing } from "@/constants/theme";
+import {
+  FontFamily,
+  FontSize,
+  Spacing,
+} from "@/constants/theme";
 
 export default function Home() {
-
   const {
-
     user,
-
     isGuest,
-
   } = useAuth();
 
+  const [showAuthSheet, setShowAuthSheet] = useState(false);
+
   const handleBookVehicle = () => {
-
     if (isGuest) {
-
-      router.push("/auth");
-
+      setShowAuthSheet(true);
       return;
-
     }
 
     router.push("/(tabs)/bookings");
-
   };
 
   return (
-
     <ScreenContainer>
-
       <View style={styles.container}>
 
         <Text style={styles.title}>
@@ -44,11 +41,9 @@ export default function Home() {
         </Text>
 
         <Text style={styles.subtitle}>
-
           {isGuest
             ? "You are browsing as Guest"
-            : `You are browsing as ${user.name}`}
-
+            : `You are browsing as ${user?.name}`}
         </Text>
 
         <PrimaryButton
@@ -58,48 +53,34 @@ export default function Home() {
 
       </View>
 
+      <AuthRequiredBottomSheet
+        visible={showAuthSheet}
+        onClose={() => setShowAuthSheet(false)}
+      />
+
     </ScreenContainer>
-
   );
-
 }
 
 const styles = StyleSheet.create({
-
   container: {
-
     flex: 1,
-
     justifyContent: "center",
-
     padding: Spacing.lg,
-
   },
 
   title: {
-
     fontSize: FontSize.heading,
-
     fontFamily: FontFamily.bold,
-
-    textAlign: "center",
-
-    marginBottom: 12,
-
     color: Colors.dark,
-
+    textAlign: "center",
   },
 
   subtitle: {
-
+    marginTop: 8,
+    marginBottom: Spacing.xl,
     fontFamily: FontFamily.regular,
-
-    textAlign: "center",
-
-    marginBottom: 35,
-
     color: Colors.secondary,
-
+    textAlign: "center",
   },
-
 });

@@ -1,165 +1,241 @@
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { BottomTabBarProps } from "expo-router/build/react-navigation/bottom-tabs/types";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import {
+    Pressable,
+    StyleSheet,
+    View,
+} from "react-native";
+
+import { useState } from "react";
+
+import AuthRequiredBottomSheet from "@/components/AuthRequiredBottomSheet";
 
 import { Colors } from "@/constants/colors";
+import { useAuth } from "@/hooks/useAuth";
+
+interface CustomTabBarProps {
+  state: any;
+  descriptors: any;
+  navigation: any;
+}
 
 export default function CustomTabBar({
   state,
-  descriptors,
   navigation,
-}: BottomTabBarProps) {
+}: CustomTabBarProps) {
+
+  const { isGuest } = useAuth();
+
+  const [showAuthSheet, setShowAuthSheet] = useState(false);
+
   const icons = {
     home: "home-outline",
     search: "search-outline",
-    bookings: "steering-wheel",
     favorites: "heart-outline",
     chats: "chatbubble-outline",
+  } as const;
+
+  const handleTabPress = (
+    routeName: string,
+    routeKey: string,
+    isFocused: boolean
+  ) => {
+
+    if (routeName === "bookings") {
+
+      if (isGuest) {
+        setShowAuthSheet(true);
+        return;
+      }
+
+      navigation.emit({
+        type: "tabPress",
+        target: routeKey,
+        canPreventDefault: true,
+      });
+
+      if (!isFocused) {
+        navigation.navigate(routeName);
+      }
+
+      return;
+    }
+
+    const event = navigation.emit({
+      type: "tabPress",
+      target: routeKey,
+      canPreventDefault: true,
+    });
+
+    if (!isFocused && !event.defaultPrevented) {
+      navigation.navigate(routeName);
+    }
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.tabBar}>
-        {state.routes.map((route, index) => {
-          const isFocused = state.index === index;
-          const isBooking = route.name === "bookings";
+    <>
+      <View style={styles.container}>
 
-          const onPress = () => {
-            const event = navigation.emit({
-              type: "tabPress",
-              target: route.key,
-              canPreventDefault: true,
-            });
+        {state.routes.map(
+          (route: any, index: number) => {
 
-            if (!isFocused && !event.defaultPrevented) {
-              navigation.navigate(route.name);
+            const isFocused =
+              state.index === index;
+
+            if (
+              ![
+                "home",
+                "search",
+                "bookings",
+                "favorites",
+                "chats",
+              ].includes(route.name)
+            ) {
+              return null;
             }
-          };
 
-          const onLongPress = () => {
-            navigation.emit({
-              type: "tabLongPress",
-              target: route.key,
-            });
-          };
-
-          if (isBooking) {
-            return (
-              <View key={route.key} style={styles.bookingContainer}>
+            if (route.name === "bookings") {
+              return (
                 <Pressable
-                  onPress={onPress}
-                  onLongPress={onLongPress}
+                  key={route.key}
+                  onPress={() =>
+                    handleTabPress(
+                      route.name,
+                      route.key,
+                      isFocused
+                    )
+                  }
                   style={styles.bookingButton}
                 >
-                    <MaterialCommunityIcons
-                    name="steering"
-                    size={40}
-                    color={Colors.white}
+                  <View
+                    style={[
+                      styles.bookingCircle,
+                      isFocused && styles.bookingCircleActive,
+                    ]}
+                  >
+                    <Ionicons
+                      name="car-sport"
+                      size={30}
+                      color={Colors.white}
                     />
+                  </View>
                 </Pressable>
-              </View>
+              );
+            }
+
+            return (
+              <Pressable
+                key={route.key}
+                onPress={() =>
+                  handleTabPress(
+                    route.name,
+                    route.key,
+                    isFocused
+                  )
+                }
+                style={styles.tabButton}
+              >
+                <View
+                  style={[
+                    styles.iconContainer,
+                    isFocused &&
+                      styles.activeIconContainer,
+                  ]}
+                >
+                  <Ionicons
+                    name={
+                      icons[
+                        route.name as keyof typeof icons
+                      ]
+                    }
+                    size={25}
+                    color={
+                      isFocused
+                        ? Colors.primary
+                        : Colors.secondary
+                    }
+                  />
+                </View>
+              </Pressable>
             );
           }
+        )}
 
-          return (
-            <Pressable
-              key={route.key}
-              onPress={onPress}
-              onLongPress={onLongPress}
-              style={styles.tab}
-            >
-              {isFocused && <View style={styles.activeLine} />}
-
-              {route.name === "home" && (
-                <Ionicons
-                  name={icons.home as any}
-                  size={25}
-                  color={isFocused ? Colors.primary : Colors.secondary}
-                />
-              )}
-
-              {route.name === "search" && (
-                <Ionicons
-                  name={icons.search as any}
-                  size={25}
-                  color={isFocused ? Colors.primary : Colors.secondary}
-                />
-              )}
-
-              {route.name === "favorites" && (
-                <Ionicons
-                  name={icons.favorites as any}
-                  size={25}
-                  color={isFocused ? Colors.primary : Colors.secondary}
-                />
-              )}
-
-              {route.name === "chats" && (
-                <Ionicons
-                  name={icons.chats as any}
-                  size={25}
-                  color={isFocused ? Colors.primary : Colors.secondary}
-                />
-              )}
-            </Pressable>
-          );
-        })}
       </View>
-    </View>
+
+      <AuthRequiredBottomSheet
+        visible={showAuthSheet}
+        onClose={() => setShowAuthSheet(false)}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: Colors.white,
-  },
-  tabBar: {
     height: 70,
+    backgroundColor: Colors.white,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-around",
-    backgroundColor: Colors.white,
-    borderTopWidth: 1,
-    borderTopColor: "#EEEEEE",
-    position: "relative",
-  },
-  tab: {
-    flex: 1,
-    height: 70,
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-  },
-  activeLine: {
-    position: "absolute",
-    top: 0,
-    width: 34,
-    height: 3,
-    backgroundColor: Colors.primary,
-    borderBottomLeftRadius: 3,
-    borderBottomRightRadius: 3,
-  },
-  bookingContainer: {
-    width: 80,
-    height: 100,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: -50,
-  },
-  bookingButton: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: Colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    elevation: 8,
+    elevation: 10,
+
     shadowColor: "#000",
-    shadowOpacity: 0.18,
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: -3,
+    },
+  },
+
+  tabButton: {
+    flex: 1,
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  iconContainer: {
+    height: "100%",
+    minWidth: 55,
+    alignItems: "center",
+    justifyContent: "center",
+    borderTopWidth: 3,
+    borderTopColor: "transparent",
+  },
+
+  activeIconContainer: {
+    borderTopColor: Colors.primary,
+  },
+
+  bookingButton: {
+    width: 75,
+    height: 75,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: -35,
+  },
+
+  bookingCircle: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: Colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+
+    elevation: 8,
+
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
     shadowRadius: 6,
     shadowOffset: {
       width: 0,
       height: 3,
     },
+  },
+
+  bookingCircleActive: {
+    transform: [{ scale: 1.05 }],
   },
 });

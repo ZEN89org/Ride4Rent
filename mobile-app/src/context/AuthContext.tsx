@@ -1,11 +1,11 @@
-import {
+  import {
   createContext,
   ReactNode,
   useEffect,
   useState,
 } from "react";
 
-import {
+  import {
   clearAuth,
   getToken,
   getUser,
@@ -13,131 +13,106 @@ import {
   saveUser,
 } from "@/storage/authStorage";
 
-import * as authService from "@/services/authService";
+  import * as authService from "@/services/authService";
 
-interface AuthContextType {
+  interface AuthContextType {
+    user: any;
+    token: string | null;
+    loading: boolean;
+    isAuthenticated: boolean;
+    isGuest: boolean;
+    login: (user: any, token: string) => Promise<void>;
+    logout: () => Promise<void>;
+  }
 
-  user: any;
+  export const AuthContext =
+    createContext<AuthContextType>(
+      {} as AuthContextType
+    );
 
-  token: string | null;
+  interface Props {
+    children: ReactNode;
+  }
 
-  loading: boolean;
+  export function AuthProvider({ children }: Props) {
+    const [user, setUser] = useState<any>(null);
 
-  isAuthenticated: boolean;
+    const [token, setToken] =
+      useState<string | null>(null);
 
-  isGuest: boolean;
+    const [loading, setLoading] =
+      useState(true);
 
-  login: (user: any, token: string) => Promise<void>;
+    useEffect(() => {
+      let mounted = true;
 
-  logout: () => Promise<void>;
+      const initializeAuth = async () => {
+        try {
+          const storedToken = await getToken();
+          const storedUser = await getUser();
 
-}
+          if (!mounted) {
+            return;
+          }
 
-export const AuthContext =
-  createContext<AuthContextType>(
-    {} as AuthContextType
-  );
+          setToken(storedToken);
+          setUser(storedUser);
+        } catch (error) {
+          console.error(
+            "Failed to load authentication:",
+            error
+          );
+        } finally {
+          if (mounted) {
+            setLoading(false);
+          }
+        }
+      };
 
-interface Props {
+      initializeAuth();
 
-  children: ReactNode;
+      return () => {
+        mounted = false;
+      };
+    }, []);
 
-}
+    const login = async (
+      userData: any,
+      tokenData: string
+    ) => {
+      await saveToken(tokenData);
+      await saveUser(userData);
 
-export function AuthProvider({
+      setToken(tokenData);
+      setUser(userData);
+    };
 
-  children,
+    const logout = async () => {
+      try {
+        await authService.logout();
+      } catch (error) {
+        console.log("Logout API error:", error);
+      }
 
-}: Props) {
+      await clearAuth();
 
-  const [user, setUser] = useState<any>(null);
+      setUser(null);
+      setToken(null);
+    };
 
-  const [token, setToken] =
-    useState<string | null>(null);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  useEffect(() => {
-
-    loadUser();
-
-  }, []);
-
-  const loadUser = async () => {
-
-    const storedToken = await getToken();
-
-    const storedUser = await getUser();
-
-    setToken(storedToken);
-
-    setUser(storedUser);
-
-    setLoading(false);
-
-  };
-
-  const login = async (
-
-    userData: any,
-
-    tokenData: string
-
-  ) => {
-
-    await saveToken(tokenData);
-
-    await saveUser(userData);
-
-    setToken(tokenData);
-
-    setUser(userData);
-
-  };
-
-  const logout = async () => {
-
-  try {
-
-    await authService.logout();
-
-  } catch (error) {}
-
-  await clearAuth();
-
-  setUser(null);
-
-  setToken(null);
-
-};
-
-  return (
-
-    <AuthContext.Provider
-      value={{
-
-        user,
-
-        token,
-
-        loading,
-
-        isAuthenticated: !!token,
-
-        isGuest: !token,
-
-        login,
-
-        logout,
-
-      }}
-    >
-
-      {children}
-
-    </AuthContext.Provider>
-
-  );
-
-}
+    return (
+      <AuthContext.Provider
+        value={{
+          user,
+          token,
+          loading,
+          isAuthenticated: !!token,
+          isGuest: !token,
+          login,
+          logout,
+        }}
+      >
+        {children}
+      </AuthContext.Provider>
+    );
+  }

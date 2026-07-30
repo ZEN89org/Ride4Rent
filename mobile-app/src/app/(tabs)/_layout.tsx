@@ -1,10 +1,9 @@
 import CustomTabBar from "@/components/CustomTabBar";
-import { AuthProvider } from "@/context/AuthContext";
 import { Tabs } from "expo-router";
 
 export default function TabsLayout() {
   return (
-    <AuthProvider>
+
       <Tabs
         tabBar={(props) => <CustomTabBar {...props} />}
         screenOptions={{
@@ -42,6 +41,6 @@ export default function TabsLayout() {
           }}
         />
       </Tabs>
-    </AuthProvider>
+
   );
 }
