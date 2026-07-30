@@ -1,22 +1,29 @@
+import { router } from "expo-router";
 import { useRef, useState } from "react";
 import {
   FlatList,
-  View,
   NativeScrollEvent,
   NativeSyntheticEvent,
   StyleSheet,
+  View,
 } from "react-native";
-import { router } from "expo-router";
 
-import ScreenContainer from "@/components/ScreenContainer";
-import PrimaryButton from "@/components/PrimaryButton";
-import SecondaryButton from "@/components/SecondaryButton";
-import Pagination from "@/components/Pagination";
+import {
+  requestLocationPermission,
+  requestNotificationPermission,
+} from "@/services/permissionService";
+
+
 import OnboardingSlide from "@/components/OnboardingSlide";
+import Pagination from "@/components/Pagination";
+import PrimaryButton from "@/components/PrimaryButton";
+import ScreenContainer from "@/components/ScreenContainer";
+import SecondaryButton from "@/components/SecondaryButton";
 
 import { onboardingData } from "@/constants/onboarding";
-import { setFirstLaunchComplete } from "@/storage/authStorage";
 import { Spacing } from "@/constants/theme";
+import { setFirstLaunchComplete } from "@/storage/authStorage";
+
 
 export default function Onboarding() {
 
@@ -37,23 +44,30 @@ export default function Onboarding() {
 
   };
 
-  const next = async () => {
+const next = async () => {
+  const currentSlide = onboardingData[currentIndex];
 
-    if (currentIndex < onboardingData.length - 1) {
+  if (currentSlide.permission === "notification") {
+    await requestNotificationPermission();
+  }
 
-      flatListRef.current?.scrollToIndex({
-        index: currentIndex + 1,
-      });
+  if (currentSlide.permission === "location") {
+    await requestLocationPermission();
+  }
 
-      return;
+  if (currentIndex < onboardingData.length - 1) {
+    flatListRef.current?.scrollToIndex({
+      index: currentIndex + 1,
+      animated: true,
+    });
 
-    }
+    return;
+  }
 
-    await setFirstLaunchComplete();
+  await setFirstLaunchComplete();
 
-    router.replace("/(tabs)/home");
-
-  };
+  router.replace("/(tabs)/home");
+};
 
   const skip = async () => {
 
@@ -79,10 +93,13 @@ export default function Onboarding() {
         keyExtractor={(item) => item.id}
         onMomentumScrollEnd={onScroll}
         renderItem={({ item }) => (
-          <OnboardingSlide
-            title={item.title}
-            description={item.description}
-          />
+        <OnboardingSlide
+          image={item.image}
+          imageWidth={item.imageWidth}
+          imageHeight={item.imageHeight}
+          title={item.title}
+          description={item.description}
+        />
         )}
       />
 

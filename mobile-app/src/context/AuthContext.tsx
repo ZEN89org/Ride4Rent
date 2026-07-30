@@ -1,16 +1,16 @@
 import {
   createContext,
+  ReactNode,
   useEffect,
   useState,
-  ReactNode,
 } from "react";
 
 import {
+  clearAuth,
   getToken,
   getUser,
   saveToken,
   saveUser,
-  clearAuth,
 } from "@/storage/authStorage";
 
 import * as authService from "@/services/authService";

@@ -1,10 +1,11 @@
 import {
-  View,
-  Text,
   StyleSheet,
+  Text,
+  View,
 } from "react-native";
 
 import { Colors } from "@/constants/colors";
+import { FontFamily } from "@/constants/theme";
 
 export default function Divider() {
 
@@ -48,12 +49,14 @@ const styles = StyleSheet.create({
 
   },
 
-  text: {
+text: {
 
-    marginHorizontal: 15,
+  marginHorizontal: 15,
 
-    color: Colors.secondary,
+  color: Colors.secondary,
 
-  },
+  fontFamily: FontFamily.regular,
+
+},
 
 });

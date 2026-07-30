@@ -1,25 +1,50 @@
-import { View, Text, StyleSheet, Dimensions } from "react-native";
+import {
+  Dimensions,
+  ImageSourcePropType,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 import { Colors } from "@/constants/colors";
-import { FontSize, Spacing } from "@/constants/theme";
+import {
+  FontFamily,
+  FontSize,
+  Spacing,
+} from "@/constants/theme";
+import { Image } from "expo-image";
 
 const { width } = Dimensions.get("window");
 
 interface Props {
+  image: ImageSourcePropType;
+  imageWidth: number;
+  imageHeight: number;
   title: string;
   description: string;
 }
 
 export default function OnboardingSlide({
+  image,
+  imageWidth,
+  imageHeight,
   title,
   description,
 }: Props) {
-
   return (
 
     <View style={[styles.container, { width }]}>
 
-      <View style={styles.imagePlaceholder} />
+    <Image
+      source={image}
+      contentFit="contain"
+      style={{
+        width: imageWidth,
+        height: imageHeight,
+        alignSelf: "center",
+        marginBottom: 40,
+      }}
+    />
 
       <Text style={styles.title}>
         {title}
@@ -37,6 +62,7 @@ export default function OnboardingSlide({
 
 const styles = StyleSheet.create({
 
+
   container: {
 
     flex: 1,
@@ -49,25 +75,12 @@ const styles = StyleSheet.create({
 
   },
 
-  imagePlaceholder: {
-
-    width: 220,
-
-    height: 220,
-
-    borderRadius: 110,
-
-    backgroundColor: "#ECECEC",
-
-    marginBottom: 40,
-
-  },
 
   title: {
 
-    fontSize: FontSize.heading,
+    fontFamily: FontFamily.bold,
 
-    fontWeight: "700",
+    fontSize: FontSize.heading,
 
     color: Colors.dark,
 
@@ -75,18 +88,20 @@ const styles = StyleSheet.create({
 
   },
 
-  description: {
+description: {
 
-    marginTop: 18,
+  marginTop: 5,
 
-    textAlign: "center",
+  textAlign: "center",
 
-    color: Colors.secondary,
+  color: Colors.secondary,
 
-    lineHeight: 24,
+  lineHeight: 24,
 
-    fontSize: FontSize.body,
+  fontFamily: FontFamily.regular,
 
-  },
+  fontSize: FontSize.body,
+
+},
 
 });

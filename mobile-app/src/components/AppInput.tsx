@@ -7,7 +7,9 @@ import {
 } from "react-native";
 
 import { Colors } from "@/constants/colors";
+
 import {
+  FontFamily,
   FontSize,
   Radius,
   Spacing,
@@ -88,7 +90,7 @@ const styles = StyleSheet.create({
 
     color: Colors.dark,
 
-    fontWeight: "600",
+    fontFamily: FontFamily.semiBold,
 
     fontSize: FontSize.body,
 
@@ -104,7 +106,10 @@ const styles = StyleSheet.create({
 
     paddingVertical: Spacing.md,
 
+    fontFamily: FontFamily.regular,
+
     fontSize: FontSize.body,
+
   },
 
   errorInput: {
@@ -120,6 +125,8 @@ const styles = StyleSheet.create({
     marginTop: 6,
 
     marginLeft: 12,
+
+    fontFamily: FontFamily.regular,
 
     fontSize: 12,
 

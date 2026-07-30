@@ -1,11 +1,10 @@
-import { useEffect } from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
+import { useEffect } from "react";
+import { StyleSheet, View } from "react-native";
 
 import AppLogo from "@/components/AppLogo";
 import ScreenContainer from "@/components/ScreenContainer";
 
-import { Colors } from "@/constants/colors";
 
 import { getToken, isFirstLaunch } from "@/storage/authStorage";
 

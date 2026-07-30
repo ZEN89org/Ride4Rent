@@ -265,7 +265,7 @@ footer: {
   flexDirection: "row",
   justifyContent: "center",
   alignItems: "center",
-  marginBottom: 20,
+
 
 },
 
@@ -283,7 +283,7 @@ footerLink: {
 
 copyright: {
 
-  marginTop: 70,
+  marginTop: 60,
 
   color: Colors.secondary,
 

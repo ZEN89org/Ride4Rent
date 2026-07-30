@@ -1,11 +1,13 @@
 import {
-  TouchableOpacity,
-  Text,
-  View,
   StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 import {
+  FontFamily,
+  FontSize,
   Radius,
   Spacing,
 } from "@/constants/theme";
@@ -84,11 +86,11 @@ const styles = StyleSheet.create({
 
   text: {
 
-    marginLeft: 10,
+  marginLeft: 10,
 
-    color: Colors.dark,
+  fontFamily: FontFamily.regular,
 
-    fontWeight: "600",
+  fontSize: FontSize.small,
 
   },
 

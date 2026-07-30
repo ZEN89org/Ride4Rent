@@ -1,13 +1,13 @@
-import { View, Text, StyleSheet } from "react-native";
 import { router } from "expo-router";
+import { StyleSheet, Text, View } from "react-native";
 
-import ScreenContainer from "@/components/ScreenContainer";
 import PrimaryButton from "@/components/PrimaryButton";
+import ScreenContainer from "@/components/ScreenContainer";
 
 import { useAuth } from "@/hooks/useAuth";
 
 import { Colors } from "@/constants/colors";
-import { FontSize, Spacing } from "@/constants/theme";
+import { FontFamily, FontSize, Spacing } from "@/constants/theme";
 
 export default function Home() {
 
@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
 
     fontSize: FontSize.heading,
 
-    fontWeight: "700",
+    fontFamily: FontFamily.bold,
 
     textAlign: "center",
 
@@ -91,6 +91,8 @@ const styles = StyleSheet.create({
   },
 
   subtitle: {
+
+    fontFamily: FontFamily.regular,
 
     textAlign: "center",
 

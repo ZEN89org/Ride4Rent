@@ -1,9 +1,14 @@
 import { useState } from "react";
 import {
-  View,
   Pressable,
   StyleSheet,
+  View,
 } from "react-native";
+
+import {
+  FontFamily,
+  FontSize,
+} from "@/constants/theme";
 
 import { Ionicons } from "@expo/vector-icons";
 
@@ -56,6 +61,14 @@ const styles = StyleSheet.create({
     right: 18,
 
     top: 48,
+
+  },
+
+  text: {
+
+    fontFamily: FontFamily.bold,
+
+    fontSize: FontSize.regular,
 
   },
 

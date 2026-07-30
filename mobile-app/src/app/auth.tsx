@@ -1,9 +1,9 @@
-import { View, Text, StyleSheet } from "react-native";
 import { router } from "expo-router";
+import { StyleSheet, Text, View } from "react-native";
 
-import ScreenContainer from "@/components/ScreenContainer";
 import AppLogo from "@/components/AppLogo";
 import PrimaryButton from "@/components/PrimaryButton";
+import ScreenContainer from "@/components/ScreenContainer";
 import SecondaryButton from "@/components/SecondaryButton";
 
 import { Colors } from "@/constants/colors";
@@ -79,7 +79,7 @@ const styles = StyleSheet.create({
 
   brand: {
 
-    marginTop: Spacing.lg,
+    marginTop: Spacing.md,
 
     fontSize: FontSize.heading,
 

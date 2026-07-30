@@ -26,3 +26,10 @@ export const FontSize = {
   title: 22,
   heading: 28,
 };
+
+export const FontFamily = {
+   regular: "Poppins_400Regular",
+   medium: "Poppins_500Medium",
+   semiBold: "Poppins_600SemiBold",
+   bold: "Poppins_700Bold",
+};

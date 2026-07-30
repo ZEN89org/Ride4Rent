@@ -1,17 +1,19 @@
 import {
-  TouchableOpacity,
-  Text,
   ActivityIndicator,
-  StyleSheet,
   StyleProp,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
   ViewStyle,
 } from "react-native";
 
 import { Colors } from "@/constants/colors";
+
 import {
+  FontFamily,
+  FontSize,
   Radius,
   Spacing,
-  FontSize,
 } from "@/constants/theme";
 
 interface Props {
@@ -104,7 +106,7 @@ const styles = StyleSheet.create({
 
     color: Colors.primary,
 
-    fontWeight: "700",
+    fontFamily: FontFamily.regular,
 
     fontSize: FontSize.body,
 
