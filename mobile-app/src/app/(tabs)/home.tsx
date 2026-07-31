@@ -1,19 +1,16 @@
 import { router } from "expo-router";
 import { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import AuthRequiredBottomSheet from "@/components/AuthRequiredBottomSheet";
-import PrimaryButton from "@/components/PrimaryButton";
+import AvailableVehicles from "@/components/AvailableVehicles";
+import HomeHeader from "@/components/HomeHeader";
+import HomeTipsCarousel from "@/components/HomeTipsCarousel";
 import ScreenContainer from "@/components/ScreenContainer";
+import TopRatedVehicles from "@/components/TopRatedVehicles";
+
 
 import { useAuth } from "@/hooks/useAuth";
-
-import { Colors } from "@/constants/colors";
-import {
-  FontFamily,
-  FontSize,
-  Spacing,
-} from "@/constants/theme";
 
 export default function Home() {
   const {
@@ -22,6 +19,7 @@ export default function Home() {
   } = useAuth();
 
   const [showAuthSheet, setShowAuthSheet] = useState(false);
+  const [search, setSearch] = useState("");
 
   const handleBookVehicle = () => {
     if (isGuest) {
@@ -32,32 +30,41 @@ export default function Home() {
     router.push("/(tabs)/bookings");
   };
 
+  const handleNotificationPress = () => {
+    console.log("Notifications pressed");
+  };
+
+  const handleMenuPress = () => {
+    console.log("Profile settings pressed");
+  };
+
   return (
     <ScreenContainer>
       <View style={styles.container}>
-
-        <Text style={styles.title}>
-          Welcome to Ride4Rent
-        </Text>
-
-        <Text style={styles.subtitle}>
-          {isGuest
-            ? "You are browsing as Guest"
-            : `You are browsing as ${user?.name}`}
-        </Text>
-
-        <PrimaryButton
-          title="Book a Vehicle"
-          onPress={handleBookVehicle}
+        <HomeHeader
+          user={user}
+          isGuest={isGuest}
+          search={search}
+          onSearchChange={setSearch}
+          onNotificationPress={handleNotificationPress}
+          onMenuPress={handleMenuPress}
         />
 
+        <HomeTipsCarousel />
+
+        <AvailableVehicles />
+
+        <TopRatedVehicles
+          onViewPress={(vehicle) => {
+            console.log("View vehicle:", vehicle);
+          }}
+        />
+
+        <AuthRequiredBottomSheet
+          visible={showAuthSheet}
+          onClose={() => setShowAuthSheet(false)}
+        />
       </View>
-
-      <AuthRequiredBottomSheet
-        visible={showAuthSheet}
-        onClose={() => setShowAuthSheet(false)}
-      />
-
     </ScreenContainer>
   );
 }
@@ -65,22 +72,5 @@ export default function Home() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
-    padding: Spacing.lg,
-  },
-
-  title: {
-    fontSize: FontSize.heading,
-    fontFamily: FontFamily.bold,
-    color: Colors.dark,
-    textAlign: "center",
-  },
-
-  subtitle: {
-    marginTop: 8,
-    marginBottom: Spacing.xl,
-    fontFamily: FontFamily.regular,
-    color: Colors.secondary,
-    textAlign: "center",
   },
 });

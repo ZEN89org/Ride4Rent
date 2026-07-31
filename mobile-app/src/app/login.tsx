@@ -20,6 +20,8 @@ import PrimaryButton from "@/components/PrimaryButton";
 import ScreenContainer from "@/components/ScreenContainer";
 import SocialButton from "@/components/SocialButton";
 
+import { FontFamily } from "@/constants/theme";
+
 import { Colors } from "@/constants/colors";
 import { login } from "@/services/authService";
 import { resetFirstLaunch } from "@/storage/authStorage";
@@ -279,12 +281,13 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     textAlign: "center",
     marginTop: 15,
-    fontWeight: "600",
+    fontFamily: FontFamily.regular,
   },
 
   errorText: {
     color: "#D32F2F",
     fontSize: 13,
+    fontFamily: FontFamily.regular,
     textAlign: "center",
     marginTop: -20,
     marginBottom: 10,
@@ -292,6 +295,10 @@ const styles = StyleSheet.create({
 
   devContainer: {
     marginTop: 15,
+  },
+
+  placeholderStyle: {
+    fontFamily: FontFamily.regular,
   },
 
   footer: {
@@ -302,18 +309,20 @@ const styles = StyleSheet.create({
 
   footerText: {
     color: Colors.secondary,
+    fontFamily: FontFamily.regular,
   },
 
   footerLink: {
     color: Colors.primary,
-    fontWeight: "700",
+    fontFamily: FontFamily.semiBold,
     marginLeft: 4,
   },
 
   copyright: {
-    marginTop: 50,
+    marginTop: 30,
     color: Colors.secondary,
     fontSize: 12,
+    fontFamily: FontFamily.regular,
     textAlign: "center",
   },
 

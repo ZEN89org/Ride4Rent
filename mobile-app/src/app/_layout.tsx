@@ -6,6 +6,7 @@ import {
 } from "@expo-google-fonts/poppins";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import { AuthProvider } from "../context/AuthContext";
 
 export default function RootLayout() {
@@ -22,6 +23,9 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
+            <StatusBar
+        style="dark"
+      />
       <Stack
         screenOptions={{
           headerShown: false,

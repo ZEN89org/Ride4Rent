@@ -5,11 +5,6 @@ import {
   View,
 } from "react-native";
 
-import {
-  FontFamily,
-  FontSize,
-} from "@/constants/theme";
-
 import { Ionicons } from "@expo/vector-icons";
 
 import AppInput from "./AppInput";
@@ -61,14 +56,6 @@ const styles = StyleSheet.create({
     right: 18,
 
     top: 48,
-
-  },
-
-  text: {
-
-    fontFamily: FontFamily.bold,
-
-    fontSize: FontSize.regular,
 
   },
 
