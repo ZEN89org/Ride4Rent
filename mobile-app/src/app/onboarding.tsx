@@ -61,7 +61,7 @@ import { setFirstLaunchComplete } from "@/storage/authStorage";
     const completeOnboarding = async () => {
       await setFirstLaunchComplete();
 
-      router.replace("/(tabs)/home");
+      router.replace("/current-location");
     };
 
     const handleAllow = async () => {
@@ -83,7 +83,7 @@ import { setFirstLaunchComplete } from "@/storage/authStorage";
     const handleSkip = async () => {
       await setFirstLaunchComplete();
 
-      router.replace("/(tabs)/home");
+      router.replace("/current-location");
     };
 
     return (
