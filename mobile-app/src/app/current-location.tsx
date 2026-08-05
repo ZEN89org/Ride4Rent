@@ -2,22 +2,22 @@ import * as Location from "expo-location";
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import {
-    WebView,
-    WebViewMessageEvent,
+  WebView,
+  WebViewMessageEvent,
 } from "react-native-webview";
 
 import { Colors } from "@/constants/colors";
 import {
-    FontFamily,
-    FontSize,
-    Spacing,
+  FontFamily,
+  FontSize,
+  Spacing,
 } from "@/constants/theme";
 
 type LocationData = {
@@ -395,9 +395,7 @@ body {
   padding: 2px 4px;
 }
 
-/* =========================================
-   LOCATION MARKER
-========================================= */
+
 
 .location-marker-wrapper {
   position: relative;
@@ -526,9 +524,7 @@ body {
 
 }
 
-/* =========================================
-   SMOOTH TILES
-========================================= */
+
 
 .leaflet-fade-anim .leaflet-tile {
   transition:
@@ -566,10 +562,6 @@ const initialLatitude =
 
 const initialLongitude =
   ${mapInitialRegion.longitude};
-
-/* =========================================
-   MAP
-========================================= */
 
 const map = L.map(
   "map",
@@ -630,9 +622,7 @@ const map = L.map(
 
 );
 
-/* =========================================
-   MAP TILES
-========================================= */
+
 
 L.tileLayer(
 
@@ -663,9 +653,6 @@ L.tileLayer(
 
 ).addTo(map);
 
-/* =========================================
-   LOCATION MARKER
-========================================= */
 
 const markerIcon =
   L.divIcon({
@@ -729,10 +716,6 @@ const marker =
 
   ).addTo(map);
 
-/* =========================================
-   MAP MOVEMENT
-========================================= */
-
 let lastSentLatitude =
   initialLatitude;
 
@@ -758,10 +741,6 @@ map.on(
 
   }
 );
-
-/* =========================================
-   LOCATION SELECTION
-========================================= */
 
 map.on(
   "moveend",
@@ -841,10 +820,6 @@ map.on(
   }
 );
 
-/* =========================================
-   TAP TO SELECT
-========================================= */
-
 map.on(
   "click",
   function(event) {
@@ -878,10 +853,6 @@ map.on(
 
   }
 );
-
-/* =========================================
-   CUSTOM MOUSE WHEEL ZOOM
-========================================= */
 
 let wheelTimeout = null;
 
@@ -1787,7 +1758,7 @@ const styles = StyleSheet.create({
       FontSize.body,
 
     color:
-      Colors.dark,
+      Colors.white,
   },
 
 });

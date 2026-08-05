@@ -22,4 +22,6 @@ export const Colors = {
 
   text: "#1A1A1A",
 
+  error: "#E53935",
+
 };

@@ -9,7 +9,7 @@ import HomeTipsCarousel from "@/components/HomeTipsCarousel";
 import ScreenContainer from "@/components/ScreenContainer";
 import TopRatedVehicles from "@/components/TopRatedVehicles";
 
-
+import { useSideNav } from "@/context/SideNavContext";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function Home() {
@@ -18,8 +18,19 @@ export default function Home() {
     isGuest,
   } = useAuth();
 
-  const [showAuthSheet, setShowAuthSheet] = useState(false);
-  const [search, setSearch] = useState("");
+  const {
+    openSideNav,
+  } = useSideNav();
+
+  const [
+    showAuthSheet,
+    setShowAuthSheet,
+  ] = useState(false);
+
+  const [
+    search,
+    setSearch,
+  ] = useState("");
 
   const handleBookVehicle = () => {
     if (isGuest) {
@@ -27,15 +38,19 @@ export default function Home() {
       return;
     }
 
-    router.push("/(tabs)/bookings");
+    router.push(
+      "/(tabs)/bookings"
+    );
   };
 
   const handleNotificationPress = () => {
-    console.log("Notifications pressed");
+    console.log(
+      "Notifications pressed"
+    );
   };
 
   const handleMenuPress = () => {
-    console.log("Profile settings pressed");
+    openSideNav();
   };
 
   return (
@@ -45,9 +60,15 @@ export default function Home() {
           user={user}
           isGuest={isGuest}
           search={search}
-          onSearchChange={setSearch}
-          onNotificationPress={handleNotificationPress}
-          onMenuPress={handleMenuPress}
+          onSearchChange={
+            setSearch
+          }
+          onNotificationPress={
+            handleNotificationPress
+          }
+          onMenuPress={
+            handleMenuPress
+          }
         />
 
         <HomeTipsCarousel />
@@ -56,13 +77,22 @@ export default function Home() {
 
         <TopRatedVehicles
           onViewPress={(vehicle) => {
-            console.log("View vehicle:", vehicle);
+            console.log(
+              "View vehicle:",
+              vehicle
+            );
           }}
         />
 
         <AuthRequiredBottomSheet
-          visible={showAuthSheet}
-          onClose={() => setShowAuthSheet(false)}
+          visible={
+            showAuthSheet
+          }
+          onClose={() =>
+            setShowAuthSheet(
+              false
+            )
+          }
         />
       </View>
     </ScreenContainer>
