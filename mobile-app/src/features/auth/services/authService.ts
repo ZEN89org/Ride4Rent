@@ -1,9 +1,14 @@
-import api from "./api";
+import api from "../../../services/api";
 
 export interface RegisterData {
-  name: string;
+  first_name: string;
+  middle_name?: string;
+  last_name: string;
+  suffix?: string;
+  date_of_birth: string;
+  sex: string;
   email: string;
-  phone_number?: string;
+  mobile_number: string;
   password: string;
   password_confirmation: string;
 }

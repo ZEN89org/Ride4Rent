@@ -11,22 +11,22 @@ import {
   View,
 } from "react-native";
 
-import AppInput from "@/components/AppInput";
-import AppLogo from "@/components/AppLogo";
-import AuthCard from "@/components/AuthCard";
-import Divider from "@/components/Divider";
-import PasswordInput from "@/components/PasswordInput";
-import PrimaryButton from "@/components/PrimaryButton";
-import ScreenContainer from "@/components/ScreenContainer";
-import SocialButton from "@/components/SocialButton";
+import AppInput from "@/components/common/AppInput";
+import AppLogo from "@/components/common/AppLogo";
+import Divider from "@/components/common/Divider";
+import PasswordInput from "@/components/common/PasswordInput";
+import PrimaryButton from "@/components/common/PrimaryButton";
+import ScreenContainer from "@/components/common/ScreenContainer";
+import AuthCard from "@/features/auth/components/AuthCard";
+import SocialButton from "@/features/auth/components/SocialButton";
 
 import { FontFamily } from "@/constants/theme";
 
 import { Colors } from "@/constants/colors";
-import { login } from "@/services/authService";
-import { resetFirstLaunch } from "@/storage/authStorage";
+import { login } from "@/features/auth/services/authService";
+import { resetFirstLaunch } from "@/features/auth/storage/authStorage";
 
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 
 import {
   FontAwesome,

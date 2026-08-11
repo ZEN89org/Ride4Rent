@@ -1,16 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
 import {
-    Pressable,
-    StyleSheet,
-    View,
+  Pressable,
+  StyleSheet,
+  View,
 } from "react-native";
 
 import { useState } from "react";
 
-import AuthRequiredBottomSheet from "@/components/AuthRequiredBottomSheet";
+import AuthRequiredBottomSheet from "@/features/auth/components/AuthRequiredBottomSheet";
 
 import { Colors } from "@/constants/colors";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 
 interface CustomTabBarProps {
   state: any;

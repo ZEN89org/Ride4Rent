@@ -2,11 +2,11 @@ import { router } from "expo-router";
 import { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
 
-import AppLogo from "@/components/AppLogo";
-import ScreenContainer from "@/components/ScreenContainer";
+import AppLogo from "@/components/common/AppLogo";
+import ScreenContainer from "@/components/common/ScreenContainer";
 
 
-import { getToken, isFirstLaunch } from "@/storage/authStorage";
+import { getToken, isFirstLaunch } from "@/features/auth/storage/authStorage";
 
 export default function SplashScreen() {
 

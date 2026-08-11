@@ -1,10 +1,10 @@
 import { router } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 
-import PrimaryButton from "@/components/PrimaryButton";
-import ScreenContainer from "@/components/ScreenContainer";
+import PrimaryButton from "@/components/common/PrimaryButton";
+import ScreenContainer from "@/components/common/ScreenContainer";
 
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 
 import { Colors } from "@/constants/colors";
 import {

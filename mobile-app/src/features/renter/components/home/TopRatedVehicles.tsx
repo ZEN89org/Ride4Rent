@@ -1,20 +1,20 @@
 import {
-    FlatList,
-    StyleSheet,
-    Text,
-    View,
-    useWindowDimensions,
+  FlatList,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
 } from "react-native";
 
 import TopRatedVehicleCard, {
-    TopRatedVehicle,
-} from "@/components/TopRatedVehicleCard";
+  TopRatedVehicle,
+} from "@/features/renter/components/home/TopRatedVehicleCard";
 
 import { Colors } from "@/constants/colors";
 import {
-    FontFamily,
-    FontSize,
-    Spacing,
+  FontFamily,
+  FontSize,
+  Spacing,
 } from "@/constants/theme";
 
 interface Props {
@@ -28,21 +28,21 @@ const defaultVehicles: TopRatedVehicle[] = [
     name: "Ford Mustang GT",
     price: 8947,
     rating: 5.0,
-    image: require("../../assets/img/car4.png"),
+    image: require("../../../../../assets/img/car4.png"),
   },
   {
     id: "2",
     name: "Toyota Vios",
     price: 1800,
     rating: 4.9,
-    image: require("../../assets/img/car5.png"),
+    image: require("../../../../../assets/img/car5.png"),
   },
   {
     id: "3",
     name: "Honda City",
     price: 2000,
     rating: 4.8,
-    image: require("../../assets/img/car6.png"),
+    image: require("../../../../../assets/img/car6.png"),
   },
 ];
 

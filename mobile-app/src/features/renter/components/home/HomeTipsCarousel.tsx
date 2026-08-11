@@ -1,21 +1,21 @@
 import { Image } from "expo-image";
 import { useEffect, useRef, useState } from "react";
 import {
-    Dimensions,
-    FlatList,
-    StyleSheet,
-    View
+  Dimensions,
+  FlatList,
+  StyleSheet,
+  View
 } from "react-native";
 
 const { width } = Dimensions.get("window");
 
 const tips = [
   {
-    image: require("../../assets/img/tip1.1.png"),
+    image: require("../../../../../assets/img/tip1.1.png"),
     width: width * 0.9,
   },
   {
-    image: require("../../assets/img/tip1.png"),
+    image: require("../../../../../assets/img/tip1.png"),
     width: width * 0.9,
   },
 ];

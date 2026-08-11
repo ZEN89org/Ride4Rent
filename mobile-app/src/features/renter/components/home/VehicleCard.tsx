@@ -1,20 +1,20 @@
 import {
-    Ionicons,
-    MaterialCommunityIcons,
+  Ionicons,
+  MaterialCommunityIcons,
 } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import {
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 import { Colors } from "@/constants/colors";
 import {
-    FontFamily,
-    FontSize,
-    Spacing,
+  FontFamily,
+  FontSize,
+  Spacing,
 } from "@/constants/theme";
 
 interface Vehicle {

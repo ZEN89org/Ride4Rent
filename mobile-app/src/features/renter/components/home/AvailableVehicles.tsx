@@ -1,30 +1,30 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useState } from "react";
 import {
-    FlatList,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  FlatList,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
-import AuthRequiredBottomSheet from "@/components/AuthRequiredBottomSheet";
-import VehicleCard from "@/components/VehicleCard";
+import AuthRequiredBottomSheet from "@/features/auth/components/AuthRequiredBottomSheet";
+import VehicleCard from "@/features/renter/components/home/VehicleCard";
 
 import { Colors } from "@/constants/colors";
 import {
-    FontFamily,
-    FontSize,
-    Spacing,
+  FontFamily,
+  FontSize,
+  Spacing,
 } from "@/constants/theme";
 
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 
 const vehicles = [
   {
     id: "1",
     name: "Toyota Vios",
-    image: require("../../assets/img/car1.png"),
+    image: require("../../../../../assets/img/car1.png"),
     pricePerDay: 1500,
     rating: 4.8,
     ratingCount: 27,
@@ -32,7 +32,7 @@ const vehicles = [
   {
     id: "2",
     name: "Honda City",
-    image: require("../../assets/img/car2.png"),
+    image: require("../../../../../assets/img/car2.png"),
     pricePerDay: 1800,
     rating: 4.7,
     ratingCount: 20,
@@ -40,7 +40,7 @@ const vehicles = [
   {
     id: "3",
     name: "Mitsubishi Xpander",
-    image: require("../../assets/img/car3.png"),
+    image: require("../../../../../assets/img/car3.png"),
     pricePerDay: 2500,
     rating: 4.9,
     ratingCount: 15,

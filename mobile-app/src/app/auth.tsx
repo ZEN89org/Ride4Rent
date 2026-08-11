@@ -1,10 +1,10 @@
 import { router } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 
-import AppLogo from "@/components/AppLogo";
-import PrimaryButton from "@/components/PrimaryButton";
-import ScreenContainer from "@/components/ScreenContainer";
-import SecondaryButton from "@/components/SecondaryButton";
+import AppLogo from "@/components/common/AppLogo";
+import PrimaryButton from "@/components/common/PrimaryButton";
+import ScreenContainer from "@/components/common/ScreenContainer";
+import SecondaryButton from "@/components/common/SecondaryButton";
 
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";

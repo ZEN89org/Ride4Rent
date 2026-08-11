@@ -1,24 +1,24 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import {
-    Animated,
-    Pressable,
-    StyleSheet,
-    Text,
-    View,
+  Animated,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 
 import { Colors } from "@/constants/colors";
 import {
-    FontFamily,
-    FontSize,
-    Spacing,
+  FontFamily,
+  FontSize,
+  Spacing,
 } from "@/constants/theme";
 import {
-    SIDE_NAV_WIDTH,
-    useSideNav,
+  SIDE_NAV_WIDTH,
+  useSideNav,
 } from "@/context/SideNavContext";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 
 type SideNavProps = {
   user?: any;

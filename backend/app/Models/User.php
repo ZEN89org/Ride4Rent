@@ -11,12 +11,18 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
 #[Fillable([
-    'name',
+    'first_name',
+    'middle_name',
+    'last_name',
+    'suffix',
+    'date_of_birth',
+    'sex',
+    'mobile_number',
     'email',
-    'phone_number',
-    'profile_photo',
     'password',
     'role',
+    'account_status',
+    'last_login',
 ])]
 #[Hidden([
     'password',
@@ -29,7 +35,9 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
+            'date_of_birth' => 'date',
             'email_verified_at' => 'datetime',
+            'last_login' => 'datetime',
             'password' => 'hashed',
         ];
     }

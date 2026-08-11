@@ -11,11 +11,43 @@ class RegisterRequest extends FormRequest
         return true;
     }
 
- 
     public function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'max:255'],
+            'first_name' => [
+                'required',
+                'string',
+                'max:100',
+            ],
+
+            'middle_name' => [
+                'nullable',
+                'string',
+                'max:100',
+            ],
+
+            'last_name' => [
+                'required',
+                'string',
+                'max:100',
+            ],
+
+            'suffix' => [
+                'nullable',
+                'string',
+                'max:20',
+            ],
+
+            'date_of_birth' => [
+                'required',
+                'date',
+            ],
+
+            'sex' => [
+                'required',
+                'string',
+                'in:Male,Female',
+            ],
 
             'email' => [
                 'required',
@@ -23,8 +55,8 @@ class RegisterRequest extends FormRequest
                 'unique:users,email',
             ],
 
-            'phone_number' => [
-                'nullable',
+            'mobile_number' => [
+                'required',
                 'string',
                 'max:20',
             ],

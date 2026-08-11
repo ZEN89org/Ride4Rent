@@ -2,15 +2,15 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-import AuthRequiredBottomSheet from "@/components/AuthRequiredBottomSheet";
-import AvailableVehicles from "@/components/AvailableVehicles";
-import HomeHeader from "@/components/HomeHeader";
-import HomeTipsCarousel from "@/components/HomeTipsCarousel";
-import ScreenContainer from "@/components/ScreenContainer";
-import TopRatedVehicles from "@/components/TopRatedVehicles";
+import ScreenContainer from "@/components/common/ScreenContainer";
+import AuthRequiredBottomSheet from "@/features/auth/components/AuthRequiredBottomSheet";
+import AvailableVehicles from "@/features/renter/components/home/AvailableVehicles";
+import HomeHeader from "@/features/renter/components/home/HomeHeader";
+import HomeTipsCarousel from "@/features/renter/components/home/HomeTipsCarousel";
+import TopRatedVehicles from "@/features/renter/components/home/TopRatedVehicles";
 
 import { useSideNav } from "@/context/SideNavContext";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 
 export default function Home() {
   const {

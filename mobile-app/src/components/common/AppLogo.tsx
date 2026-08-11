@@ -11,7 +11,7 @@ export default function AppLogo({
   return (
 
     <Image
-      source={require("../../assets/img/ride4rent.png")}
+      source={require("../../../assets/img/ride4rent.png")}
       style={[
         styles.logo,
         {

@@ -1,13 +1,13 @@
 import { router } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 
-import PrimaryButton from "@/components/PrimaryButton";
-import ScreenContainer from "@/components/ScreenContainer";
-import SecondaryButton from "@/components/SecondaryButton";
+import PrimaryButton from "@/components/common/PrimaryButton";
+import ScreenContainer from "@/components/common/ScreenContainer";
+import SecondaryButton from "@/components/common/SecondaryButton";
 
 import { Colors } from "@/constants/colors";
 import { FontSize, Spacing } from "@/constants/theme";
-import { resetFirstLaunch } from "@/storage/authStorage";
+import { resetFirstLaunch } from "@/features/auth/storage/authStorage";
 
 export default function Landing() {
 

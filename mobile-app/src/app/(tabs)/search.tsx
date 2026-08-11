@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from "react-native";
 
-import ScreenContainer from "@/components/ScreenContainer";
+import ScreenContainer from "@/components/common/ScreenContainer";
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize } from "@/constants/theme";
 

@@ -2,9 +2,9 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { Colors } from "@/constants/colors";
 import {
-    FontFamily,
-    FontSize,
-    Spacing,
+  FontFamily,
+  FontSize,
+  Spacing,
 } from "@/constants/theme";
 
 export default function About() {

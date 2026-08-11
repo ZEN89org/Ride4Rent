@@ -11,9 +11,9 @@
   getUser,
   saveToken,
   saveUser,
-} from "@/storage/authStorage";
+} from "@/features/auth/storage/authStorage";
 
-  import * as authService from "@/services/authService";
+  import * as authService from "@/features/auth/services/authService";
 
   interface AuthContextType {
     user: any;

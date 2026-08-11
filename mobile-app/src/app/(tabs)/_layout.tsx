@@ -1,11 +1,11 @@
-import CustomTabBar from "@/components/CustomTabBar";
-import SideNav from "@/components/SideNav";
+import CustomTabBar from "@/components/navigation/CustomTabBar";
+import SideNav from "@/components/navigation/SideNav";
 import {
   SIDE_NAV_WIDTH,
   SideNavProvider,
   useSideNav,
 } from "@/context/SideNavContext";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 import { Tabs } from "expo-router";
 import {
   Animated,

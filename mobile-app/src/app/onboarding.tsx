@@ -13,15 +13,15 @@ import {
   requestNotificationPermission,
 } from "@/services/permissionService";
 
-  import OnboardingSlide from "@/components/OnboardingSlide";
-import Pagination from "@/components/Pagination";
-import PrimaryButton from "@/components/PrimaryButton";
-import ScreenContainer from "@/components/ScreenContainer";
-import SecondaryButton from "@/components/SecondaryButton";
+  import Pagination from "@/components/common/Pagination";
+import PrimaryButton from "@/components/common/PrimaryButton";
+import ScreenContainer from "@/components/common/ScreenContainer";
+import SecondaryButton from "@/components/common/SecondaryButton";
+import OnboardingSlide from "@/components/onboarding/OnboardingSlide";
 
   import { onboardingData } from "@/constants/onboarding";
 import { Spacing } from "@/constants/theme";
-import { setFirstLaunchComplete } from "@/storage/authStorage";
+import { setFirstLaunchComplete } from "@/features/auth/storage/authStorage";
 
   export default function Onboarding() {
     const flatListRef = useRef<FlatList>(null);
