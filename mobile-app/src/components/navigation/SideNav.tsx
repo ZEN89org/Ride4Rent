@@ -19,6 +19,7 @@ import {
   useSideNav,
 } from "@/context/SideNavContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import { useState } from "react";
 
 type SideNavProps = {
   user?: any;
@@ -36,6 +37,7 @@ export default function SideNav({
   } = useSideNav();
 
   const { logout } = useAuth();
+  const [loggingOut, setLoggingOut] = useState(false);
 
   if (!isVisible) {
     return null;
@@ -116,39 +118,48 @@ export default function SideNav({
     router.push("/about");
   };
 
-  const handleLogoutPress = async () => {
-    closeSideNav();
+    const handleAccountAction = async () => {
+      if (loggingOut) {
+        return;
+      }
 
-    try {
-      await logout();
-    } catch (error) {
-      console.log(
-        "LOGOUT ERROR:",
-        error
-      );
-    }
-  };
+      closeSideNav();
+
+      if (isGuest) {
+        router.replace("/auth");
+        return;
+      }
+
+      try {
+        setLoggingOut(true);
+
+        await logout();
+
+        router.replace("/");
+      } catch (error) {
+        console.log("LOGOUT ERROR:", error);
+        setLoggingOut(false);
+      }
+    };
 
   return (
     <View
       pointerEvents="box-none"
       style={styles.container}
     >
-      <Pressable
-        style={styles.outsideArea}
-        onPress={closeSideNav}
-      >
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.overlay,
-            {
-              opacity:
-                overlayOpacity,
-            },
-          ]}
-        />
-      </Pressable>
+  <Animated.View
+    style={[
+      styles.outsideArea,
+      {
+        opacity: overlayOpacity,
+      },
+    ]}
+  >
+    <Pressable
+      style={StyleSheet.absoluteFill}
+      onPress={closeSideNav}
+    />
+  </Animated.View>
 
       <Animated.View
         style={[
@@ -312,25 +323,26 @@ export default function SideNav({
           </View>
 
           <Pressable
-            style={
-              styles.logoutButton
-            }
-            onPress={
-              handleLogoutPress
-            }
+            style={styles.logoutButton}
+            onPress={handleAccountAction}
+            disabled={loggingOut}
           >
             <Ionicons
-              name="log-out-outline"
+              name={
+                isGuest
+                  ? "log-in-outline"
+                  : "log-out-outline"
+              }
               size={21}
               color={Colors.white}
             />
 
-            <Text
-              style={
-                styles.logoutText
-              }
-            >
-              Logout
+            <Text style={styles.logoutText}>
+              {loggingOut
+                ? "Logging out..."
+                : isGuest
+                ? "Log In"
+                : "Logout"}
             </Text>
           </Pressable>
 
@@ -465,33 +477,20 @@ const styles = StyleSheet.create({
 
   outsideArea: {
     position: "absolute",
-
     top: 0,
     bottom: 0,
     left: 0,
-
     right: SIDE_NAV_WIDTH,
-  },
-
-  overlay: {
-    ...StyleSheet.absoluteFill,
-
-    backgroundColor:
-      Colors.dark,
+    backgroundColor: Colors.dark,
   },
 
   drawer: {
     position: "absolute",
-
     top: 0,
     right: 0,
     bottom: 0,
-
-    backgroundColor:
-      Colors.white,
-
+    backgroundColor: Colors.white,
     elevation: 20,
-
     overflow: "visible",
   },
 

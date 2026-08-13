@@ -1,5 +1,13 @@
 import { ReactNode } from "react";
-import { SafeAreaView, StyleSheet } from "react-native";
+import {
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  StyleSheet,
+  TouchableWithoutFeedback,
+  View,
+} from "react-native";
 
 import { Colors } from "@/constants/colors";
 
@@ -11,15 +19,36 @@ export default function ScreenContainer({
   children,
 }: ScreenContainerProps) {
   return (
-    <SafeAreaView style={styles.container}>
-      {children}
+    <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
+      >
+        <TouchableWithoutFeedback
+          onPress={Keyboard.dismiss}
+          accessible={false}
+        >
+          <View style={styles.content}>
+            {children}
+          </View>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: Colors.white,
+  },
+
+  keyboardView: {
+    flex: 1,
+  },
+
+  content: {
+    flex: 1,
   },
 });

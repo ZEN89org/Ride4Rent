@@ -11,8 +11,8 @@ import {
   View,
 } from "react-native";
 
+import AppFooter from "@/components/common/AppFooter";
 import AppInput from "@/components/common/AppInput";
-import AppLogo from "@/components/common/AppLogo";
 import Divider from "@/components/common/Divider";
 import PasswordInput from "@/components/common/PasswordInput";
 import PrimaryButton from "@/components/common/PrimaryButton";
@@ -29,8 +29,7 @@ import { resetFirstLaunch } from "@/features/auth/storage/authStorage";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 
 import {
-  FontAwesome,
-  MaterialCommunityIcons,
+  MaterialCommunityIcons
 } from "@expo/vector-icons";
 
 export default function Login() {
@@ -129,14 +128,6 @@ export default function Login() {
           <View style={styles.container}>
             <AuthCard>
 
-              <View style={styles.logoContainer}>
-                <View style={styles.logoCircle}>
-                  <AppLogo size={60} />
-                </View>
-              </View>
-
-              <View style={styles.logoSpacer} />
-
               <AppInput
                 label="Email Address"
                 placeholder="johndoe@example.com"
@@ -189,24 +180,15 @@ export default function Login() {
                 title="Continue with Google"
                 icon={
                   <MaterialCommunityIcons
-                    name="google"
-                    size={22}
-                    color="#DB4437"
+                    name="gmail"
+                    size={25}
+                    color="#EA4335"
                   />
                 }
-                onPress={() => {}}
-              />
-
-              <SocialButton
-                title="Continue with Facebook"
-                icon={
-                  <FontAwesome
-                    name="facebook"
-                    size={22}
-                    color="#1877F2"
-                  />
-                }
-                onPress={() => {}}
+                onPress={async () => {
+                  await resetFirstLaunch();
+                  router.replace("/");
+                }}
               />
 
               <View style={styles.footer}>
@@ -225,22 +207,11 @@ export default function Login() {
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.copyright}>
-                ©2026 Ride4Rent
-              </Text>
-
-              {__DEV__ && (
-                <View style={styles.devContainer}>
-                  <PrimaryButton
-                    title="Reset First Launch"
-                    onPress={handleReset}
-                  />
-                </View>
-              )}
 
             </AuthCard>
           </View>
         </ScrollView>
+        <AppFooter />
       </KeyboardAvoidingView>
     </ScreenContainer>
   );
@@ -293,9 +264,18 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
-  devContainer: {
-    marginTop: 15,
-  },
+googleIcon: {
+  width: 22,
+  height: 22,
+  alignItems: "center",
+  justifyContent: "center",
+},
+
+googleG: {
+  fontSize: 20,
+  fontWeight: "700",
+  color: "#4285F4",
+},
 
   placeholderStyle: {
     fontFamily: FontFamily.regular,
@@ -318,15 +298,6 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
 
-  copyright: {
-    marginTop: 30,
-    color: Colors.secondary,
-    fontSize: 12,
-    fontFamily: FontFamily.regular,
-    textAlign: "center",
-  },
 
-  logoSpacer: {
-    height: 40,
-  },
+
 });

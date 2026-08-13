@@ -46,7 +46,7 @@ class RegisterRequest extends FormRequest
             'sex' => [
                 'required',
                 'string',
-                'in:Male,Female',
+                'in:Male,Female,Prefer not to say',
             ],
 
             'email' => [

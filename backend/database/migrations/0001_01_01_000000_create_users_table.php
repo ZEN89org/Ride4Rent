@@ -11,18 +11,45 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('users', function (Blueprint $table) {
-            $table->id();
-            $table->string('name');
-            $table->string('email')->unique();
-            $table->string('phone_number')->nullable();
-            $table->string('profile_photo')->nullable();
-            $table->string('role')->default('user');
-            $table->timestamp('email_verified_at')->nullable();
-            $table->string('password');
-            $table->rememberToken();
-            $table->timestamps();
-        });
+            Schema::create('users', function (Blueprint $table) {
+        $table->id();
+
+        // Personal Information
+        $table->string('first_name');
+        $table->string('middle_name')->nullable();
+        $table->string('last_name');
+        $table->string('suffix')->nullable();
+        $table->date('date_of_birth');
+        $table->string('sex');
+
+        // Contact Information
+        $table->string('email')->unique();
+        $table->string('mobile_number')->nullable();
+
+        // Authentication
+        $table->string('password');
+
+        // Account Information
+        $table->enum('role', [
+            'customer',
+            'operator',
+            'admin',
+        ])->default('customer');
+
+        $table->enum('account_status', [
+            'active',
+            'inactive',
+            'suspended',
+        ])->default('active');
+
+        $table->timestamp('last_login_at')->nullable();
+
+        // Email Verification
+        $table->timestamp('email_verified_at')->nullable();
+
+        $table->rememberToken();
+        $table->timestamps();
+    });
 
         Schema::create('password_reset_tokens', function (Blueprint $table) {
             $table->string('email')->primary();
