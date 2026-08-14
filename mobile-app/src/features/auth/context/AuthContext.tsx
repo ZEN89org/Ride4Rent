@@ -8,9 +8,8 @@ import {
 import {
   clearAuth,
   getToken,
-  getUser,
   saveToken,
-  saveUser,
+  saveUser
 } from "@/features/auth/storage/authStorage";
 
 import * as authService from "@/features/auth/services/authService";
@@ -51,28 +50,67 @@ export function AuthProvider({ children }: Props) {
   useEffect(() => {
     let mounted = true;
 
-    const initializeAuth = async () => {
-      try {
-        const storedToken = await getToken();
-        const storedUser = await getUser();
+const initializeAuth = async () => {
+  try {
+    const storedToken = await getToken();
 
-        if (!mounted) {
-          return;
-        }
-
-        setToken(storedToken);
-        setUser(storedUser);
-      } catch (error) {
-        console.error(
-          "Failed to load authentication:",
-          error
-        );
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
+    if (!storedToken) {
+      if (mounted) {
+        setToken(null);
+        setUser(null);
       }
-    };
+
+      return;
+    }
+
+    setToken(storedToken);
+
+    try {
+      const response =
+        await authService.getCurrentUser();
+
+      const currentUser =
+        response?.data ?? response?.user;
+
+      if (!currentUser) {
+        throw new Error(
+          "Invalid user response."
+        );
+      }
+
+      await saveUser(currentUser);
+
+      if (mounted) {
+        setUser(currentUser);
+      }
+    } catch (error) {
+      console.log(
+        "Stored authentication is invalid. Clearing session."
+      );
+
+      await clearAuth();
+
+      if (mounted) {
+        setToken(null);
+        setUser(null);
+      }
+    }
+  } catch (error) {
+    console.error(
+      "Failed to load authentication:",
+      error
+    );
+
+    if (mounted) {
+      setToken(null);
+      setUser(null);
+    }
+  } finally {
+    if (mounted) {
+      setLoading(false);
+    }
+  }
+};
 
     initializeAuth();
 

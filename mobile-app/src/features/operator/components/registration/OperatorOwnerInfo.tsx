@@ -1,26 +1,31 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
+
 import {
-    Modal,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  Alert,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 
 import PrimaryButton from "@/components/common/PrimaryButton";
 import { Colors } from "@/constants/colors";
 import {
-    FontFamily,
-    FontSize,
-    Radius,
-    Spacing,
+  FontFamily,
+  FontSize,
+  Radius,
+  Spacing,
 } from "@/constants/theme";
 import RegistrationHeader from "./RegistrationHeader";
 
 type OperatorOwnerInfoProps = {
+  initialData?: OwnerInfoData | null;
   onBack: () => void;
   onCancel: () => void;
   onContinue: (data: OwnerInfoData) => void;
@@ -42,20 +47,42 @@ const genders = [
 ];
 
 export default function OperatorOwnerInfo({
+  initialData,
   onBack,
   onCancel,
   onContinue,
 }: OperatorOwnerInfoProps) {
-  const [firstName, setFirstName] = useState("");
-  const [middleName, setMiddleName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [suffix, setSuffix] = useState("");
+  const [firstName, setFirstName] = useState(
+    initialData?.firstName ?? ""
+  );
 
-  const [dateMonth, setDateMonth] = useState("");
-  const [dateDay, setDateDay] = useState("");
-  const [dateYear, setDateYear] = useState("");
+  const [middleName, setMiddleName] = useState(
+    initialData?.middleName ?? ""
+  );
 
-  const [gender, setGender] = useState("");
+  const [lastName, setLastName] = useState(
+    initialData?.lastName ?? ""
+  );
+
+  const [suffix, setSuffix] = useState(
+    initialData?.suffix ?? ""
+  );
+
+  const [dateMonth, setDateMonth] = useState(
+    initialData?.dateOfBirth?.split("-")[1] ?? ""
+  );
+
+  const [dateDay, setDateDay] = useState(
+    initialData?.dateOfBirth?.split("-")[2] ?? ""
+  );
+
+  const [dateYear, setDateYear] = useState(
+    initialData?.dateOfBirth?.split("-")[0] ?? ""
+  );
+
+  const [gender, setGender] = useState(
+    initialData?.gender ?? ""
+  );
 
   const [showDatePicker, setShowDatePicker] =
     useState(false);
@@ -82,8 +109,10 @@ export default function OperatorOwnerInfo({
     );
 
     return (
-      date.getFullYear() === Number(dateYear) &&
-      date.getMonth() === Number(dateMonth) - 1 &&
+      date.getFullYear() ===
+        Number(dateYear) &&
+      date.getMonth() ===
+        Number(dateMonth) - 1 &&
       date.getDate() === Number(dateDay)
     );
   };
@@ -115,6 +144,24 @@ export default function OperatorOwnerInfo({
   };
 
   const handleContinue = () => {
+    const hasAnyData =
+      lastName.trim() ||
+      firstName.trim() ||
+      middleName.trim() ||
+      suffix.trim() ||
+      dateMonth ||
+      dateDay ||
+      dateYear ||
+      gender;
+
+    if (!hasAnyData) {
+      Alert.alert(
+        "Information Required",
+        "Please fill in your information before continuing."
+      );
+      return;
+    }
+
     const validationErrors: typeof errors = {};
 
     if (!lastName.trim()) {
@@ -140,7 +187,9 @@ export default function OperatorOwnerInfo({
         "Gender is required.";
     }
 
-    if (Object.keys(validationErrors).length > 0) {
+    if (
+      Object.keys(validationErrors).length > 0
+    ) {
       setErrors(validationErrors);
       return;
     }
@@ -166,104 +215,119 @@ export default function OperatorOwnerInfo({
         onCancel={onCancel}
       />
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
+      <KeyboardAvoidingView
+        style={styles.keyboardContainer}
+        behavior={
+          Platform.OS === "ios"
+            ? "padding"
+            : "height"
+        }
       >
-        <Text style={styles.title}>
-          Owner Information
-        </Text>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={styles.title}>
+            Owner Information
+          </Text>
 
-        <Text style={styles.subtitle}>
-          Let’s begin with the business owner’s personal
-          information.
-        </Text>
+          <Text style={styles.subtitle}>
+            Let’s begin with the business owner’s
+            personal information.
+          </Text>
 
-        <View style={styles.row}>
-          <FormField
-            label="Last Name"
-            placeholder="e.g. Dela Cruz"
-            value={lastName}
-            onChangeText={(value) => {
-              setLastName(value);
-              clearError("lastName");
-            }}
-            error={errors.lastName}
+          <View style={styles.row}>
+            <FormField
+              label="Last Name"
+              placeholder="e.g. Dela Cruz"
+              value={lastName}
+              onChangeText={(value) => {
+                setLastName(value);
+                clearError("lastName");
+              }}
+              error={errors.lastName}
+            />
+
+            <FormField
+              label="First Name"
+              placeholder="e.g. Juan"
+              value={firstName}
+              onChangeText={(value) => {
+                setFirstName(value);
+                clearError("firstName");
+              }}
+              error={errors.firstName}
+            />
+          </View>
+
+          <View style={styles.row}>
+            <FormField
+              label="Middle Name (Optional)"
+              placeholder="e.g. Santos"
+              value={middleName}
+              onChangeText={setMiddleName}
+            />
+
+            <FormField
+              label="Suffix (Optional)"
+              placeholder="Jr., Sr., III"
+              value={suffix}
+              onChangeText={setSuffix}
+            />
+          </View>
+
+          <View style={styles.row}>
+            <DropdownField
+              label="Date of Birth"
+              value={
+                formatDate() ||
+                "Select your birth date"
+              }
+              onPress={() => {
+                clearError("dateOfBirth");
+                setShowDatePicker(true);
+              }}
+              error={errors.dateOfBirth}
+            />
+
+            <DropdownField
+              label="Gender"
+              value={
+                gender || "Select your gender"
+              }
+              onPress={() => {
+                clearError("gender");
+                setShowGenderPicker(true);
+              }}
+              error={errors.gender}
+            />
+          </View>
+
+          <PrimaryButton
+            style={styles.continueButton}
+            title="Continue"
+            onPress={handleContinue}
           />
 
-          <FormField
-            label="First Name"
-            placeholder="e.g. Juan"
-            value={firstName}
-            onChangeText={(value) => {
-              setFirstName(value);
-              clearError("firstName");
-            }}
-            error={errors.firstName}
-          />
-        </View>
-
-        <View style={styles.row}>
-          <FormField
-            label="Middle Name (Optional)"
-            placeholder="e.g. Santos"
-            value={middleName}
-            onChangeText={setMiddleName}
-          />
-
-          <FormField
-            label="Suffix (Optional)"
-            placeholder="Jr., Sr., III"
-            value={suffix}
-            onChangeText={setSuffix}
-          />
-        </View>
-
-        <View style={styles.row}>
-          <DropdownField
-            label="Date of Birth"
-            value={
-              formatDate() ||
-              "Select your birth date"
-            }
-            onPress={() => {
-              clearError("dateOfBirth");
-              setShowDatePicker(true);
-            }}
-            error={errors.dateOfBirth}
-          />
-
-          <DropdownField
-            label="Gender"
-            value={
-              gender || "Select your gender"
-            }
-            onPress={() => {
-              clearError("gender");
-              setShowGenderPicker(true);
-            }}
-            error={errors.gender}
-          />
-        </View>
-
-        <PrimaryButton
-          style={styles.continueButton}
-          title="Continue"
-          onPress={handleContinue}
-        />
-
-        <View style={styles.bottomSpacing} />
-      </ScrollView>
+          <View style={styles.bottomSpacing} />
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <DatePickerModal
         visible={showDatePicker}
         month={dateMonth}
         day={dateDay}
         year={dateYear}
-        onClose={() => setShowDatePicker(false)}
-        onConfirm={(month, day, year) => {
+        onClose={() =>
+          setShowDatePicker(false)
+        }
+        onConfirm={(
+          month,
+          day,
+          year
+        ) => {
           setDateMonth(month);
           setDateDay(day);
           setDateYear(year);
@@ -275,7 +339,9 @@ export default function OperatorOwnerInfo({
       <GenderPickerModal
         visible={showGenderPicker}
         value={gender}
-        onClose={() => setShowGenderPicker(false)}
+        onClose={() =>
+          setShowGenderPicker(false)
+        }
         onSelect={(value) => {
           setGender(value);
           setShowGenderPicker(false);
@@ -419,12 +485,29 @@ function DatePickerModal({
       String(index + 1).padStart(2, "0")
   );
 
-  const currentYear = new Date().getFullYear();
+  const currentYear =
+    new Date().getFullYear();
+
+  const minimumAge = 18;
+  const oldestAge = 100;
+
+  const maximumBirthYear =
+    currentYear - minimumAge;
+
+  const minimumBirthYear =
+    currentYear - oldestAge;
 
   const years = Array.from(
-    { length: 100 },
+    {
+      length:
+        maximumBirthYear -
+        minimumBirthYear +
+        1,
+    },
     (_, index) =>
-      String(currentYear - index)
+      String(
+        maximumBirthYear - index
+      )
   );
 
   const [selectedMonth, setSelectedMonth] =
@@ -435,7 +518,8 @@ function DatePickerModal({
 
   const [selectedYear, setSelectedYear] =
     useState(
-      year || String(currentYear - 18)
+      year ||
+        String(currentYear - 18)
     );
 
   return (
@@ -498,7 +582,11 @@ function DatePickerModal({
             style={styles.modalCancel}
             onPress={onClose}
           >
-            <Text style={styles.modalCancelText}>
+            <Text
+              style={
+                styles.modalCancelText
+              }
+            >
               Cancel
             </Text>
           </Pressable>
@@ -539,7 +627,9 @@ function PickerColumn({
               item === value &&
                 styles.pickerItemActive,
             ]}
-            onPress={() => onSelect(item)}
+            onPress={() =>
+              onSelect(item)
+            }
           >
             <Text
               style={[
@@ -589,7 +679,8 @@ function GenderPickerModal({
           </Text>
 
           <Text style={styles.pickerSubtitle}>
-            Choose the option that best describes you.
+            Choose the option that best
+            describes you.
           </Text>
 
           {genders.map((item) => (
@@ -600,7 +691,9 @@ function GenderPickerModal({
                 item === value &&
                   styles.genderOptionActive,
               ]}
-              onPress={() => onSelect(item)}
+              onPress={() =>
+                onSelect(item)
+              }
             >
               <Text
                 style={[
@@ -626,7 +719,11 @@ function GenderPickerModal({
             style={styles.modalCancel}
             onPress={onClose}
           >
-            <Text style={styles.modalCancelText}>
+            <Text
+              style={
+                styles.modalCancelText
+              }
+            >
               Cancel
             </Text>
           </Pressable>
@@ -643,13 +740,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
   },
 
+  keyboardContainer: {
+    flex: 1,
+  },
+
   scroll: {
     flex: 1,
   },
 
   scrollContent: {
     paddingTop: Spacing.md,
-    paddingBottom: Spacing.lg,
+    paddingBottom: 140,
   },
 
   title: {
@@ -743,7 +844,8 @@ const styles = StyleSheet.create({
 
   modalBackdrop: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: "rgba(0, 0, 0, 0.45)",
+    backgroundColor:
+      "rgba(0, 0, 0, 0.45)",
   },
 
   pickerCard: {

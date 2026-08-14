@@ -14,13 +14,20 @@ use Illuminate\Database\Eloquent\Model;
     'street_address',
     'barangay',
     'municipality',
-    'government_id',
-    'business_permit',
+
+    'government_id_front',
+    'government_id_back',
+
+    'business_permit_front',
+    'business_permit_back',
+
     'dti_sec_registration',
+
     'accepted_payment_methods',
     'account_name',
     'account_number',
     'qr_code',
+
     'rejection_reason',
     'reviewed_at',
 ])]

@@ -13,7 +13,7 @@ import OperatorOwnerInfo, {
 } from "@/features/operator/components/registration/OperatorOwnerInfo";
 import OperatorRegistrationIntro from "@/features/operator/components/registration/OperatorRegistrationIntro";
 import {
-  OperatorRegistrationData,
+  OperatorRegisterData,
 } from "@/features/operator/types/operatorService";
 
 import {
@@ -76,7 +76,7 @@ export default function OperatorRegistration() {
     setIsSubmitting(true);
 
     try {
-      const registrationData: OperatorRegistrationData = {
+      const registrationData: OperatorRegisterData = {
         first_name: ownerInfo.firstName,
         middle_name:
           ownerInfo.middleName || undefined,
@@ -108,11 +108,17 @@ export default function OperatorRegistration() {
         municipality:
           businessInfo.municipality,
 
-        government_id:
+        government_id_front:
           verification.governmentIdFront,
 
-        business_permit:
+        government_id_back:
+          verification.governmentIdBack,
+
+        business_permit_front:
           verification.businessPermitFront,
+
+        business_permit_back:
+          verification.businessPermitBack,
 
         dti_sec_registration:
           undefined,
@@ -155,21 +161,23 @@ export default function OperatorRegistration() {
 
   if (step === 2) {
     return (
-      <OperatorOwnerInfo
-        onContinue={handleOwnerContinue}
-        onBack={handleBack}
-        onCancel={handleCancel}
-      />
+    <OperatorOwnerInfo
+      initialData={ownerInfo}
+      onContinue={handleOwnerContinue}
+      onBack={handleBack}
+      onCancel={handleCancel}
+    />
     );
   }
 
   if (step === 3) {
     return (
-      <OperatorBusinessInfo
-        onContinue={handleBusinessContinue}
-        onBack={handleBack}
-        onCancel={handleCancel}
-      />
+    <OperatorBusinessInfo
+      initialData={businessInfo}
+      onContinue={handleBusinessContinue}
+      onBack={handleBack}
+      onCancel={handleCancel}
+    />
     );
   }
 
