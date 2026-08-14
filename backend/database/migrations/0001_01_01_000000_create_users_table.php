@@ -37,9 +37,9 @@ return new class extends Migration
         ])->default('customer');
 
         $table->enum('account_status', [
+            'pending',
             'active',
-            'inactive',
-            'suspended',
+            'rejected',
         ])->default('active');
 
         $table->timestamp('last_login_at')->nullable();

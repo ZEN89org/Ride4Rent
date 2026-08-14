@@ -18,6 +18,7 @@ import PasswordInput from "@/components/common/PasswordInput";
 import PrimaryButton from "@/components/common/PrimaryButton";
 import ScreenContainer from "@/components/common/ScreenContainer";
 import AuthCard from "@/features/auth/components/AuthCard";
+import RegistrationRoleBottomSheet from "@/features/auth/components/RegistrationRoleBottomSheet";
 import SocialButton from "@/features/auth/components/SocialButton";
 
 import { FontFamily } from "@/constants/theme";
@@ -32,7 +33,13 @@ import {
   MaterialCommunityIcons
 } from "@expo/vector-icons";
 
+
+
 export default function Login() {
+
+  const [showRegistrationSheet, setShowRegistrationSheet] =
+  useState(false);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -84,18 +91,41 @@ export default function Login() {
         password,
       });
 
-      await signIn(
-        response.data.user,
-        response.data.token
-      );
+      const loggedInUser = response.data.user;
+      const loggedInToken = response.data.token;
+
+      if (
+        loggedInUser.role === "operator" &&
+        loggedInUser.account_status === "pending"
+      ) {
+        await signIn(loggedInUser, loggedInToken);
+        router.replace("/operator-pending");
+        return;
+      }
+
+      await signIn(loggedInUser, loggedInToken);
+
+      if (loggedInUser.role === "operator") {
+        router.replace("/operator");
+        return;
+      }
 
       router.replace("/(tabs)/home");
     } catch (error: any) {
-      const message =
-        error?.response?.data?.message ??
-        "Invalid email or password.";
+      const backendErrors =
+        error?.response?.data?.errors;
 
-      setLoginError(message);
+      if (backendErrors?.email) {
+        setEmailError(
+          backendErrors.email[0]
+        );
+      } else {
+        const message =
+          error?.response?.data?.message ??
+          "Invalid email or password.";
+
+        setLoginError(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -197,9 +227,7 @@ export default function Login() {
                 </Text>
 
                 <TouchableOpacity
-                  onPress={() =>
-                    router.push("/register")
-                  }
+                  onPress={() => setShowRegistrationSheet(true)}
                 >
                   <Text style={styles.footerLink}>
                     Sign Up
@@ -212,6 +240,18 @@ export default function Login() {
           </View>
         </ScrollView>
         <AppFooter />
+        <RegistrationRoleBottomSheet
+          visible={showRegistrationSheet}
+          onClose={() => setShowRegistrationSheet(false)}
+          onSelectRenter={() => {
+            setShowRegistrationSheet(false);
+            router.push("/register");
+          }}
+          onSelectOperator={() => {
+            setShowRegistrationSheet(false);
+            router.push("/operator");
+          }}
+        />
       </KeyboardAvoidingView>
     </ScreenContainer>
   );

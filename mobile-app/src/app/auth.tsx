@@ -7,8 +7,8 @@ import AppLogo from "@/components/common/AppLogo";
 import PrimaryButton from "@/components/common/PrimaryButton";
 import ScreenContainer from "@/components/common/ScreenContainer";
 import SecondaryButton from "@/components/common/SecondaryButton";
+import RegistrationRoleBottomSheet from "@/features/auth/components/RegistrationRoleBottomSheet";
 
-  import RegistrationRoleBottomSheet from "@/features/auth/components/RegistrationRoleBottomSheet";
 
   import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";
@@ -24,6 +24,7 @@ import { FontFamily, FontSize, Spacing } from "@/constants/theme";
 
     const handleOperatorRegistration = () => {
       setShowRegistrationSheet(false);
+      router.push("/operator");
     };
 
     return (

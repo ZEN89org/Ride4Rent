@@ -30,6 +30,46 @@ class AuthController extends Controller
         ], 201);
     }
 
+    public function registerOperator(Request $request)
+    {
+    $validated = $request->validate([
+        'first_name' => ['required', 'string', 'max:100'],
+        'middle_name' => ['nullable', 'string', 'max:100'],
+        'last_name' => ['required', 'string', 'max:100'],
+        'suffix' => ['nullable', 'string', 'max:20'],
+        'email' => 'required|email|unique:users,email',
+        'date_of_birth' => ['required', 'date'],
+        'sex' => ['required', 'string', 'max:30'],
+
+        'business_name' => ['required', 'string', 'max:255'],
+        'business_email' => 'required|email',
+        'business_contact_number' => ['required', 'string', 'max:20'],
+        'street_address' => ['required', 'string', 'max:255'],
+        'barangay' => ['nullable', 'string', 'max:100'],
+        'municipality' => ['required', 'string', 'max:100'],
+
+        'government_id' => ['nullable', 'string'],
+        'business_permit' => ['nullable', 'string'],
+        'dti_sec_registration' => ['nullable', 'string'],
+
+        'accepted_payment_methods' => ['nullable', 'array'],
+        'accepted_payment_methods.*' => 'string',
+        'account_name' => ['nullable', 'string', 'max:255'],
+        'account_number' => ['nullable', 'string', 'max:100'],
+        'qr_code' => ['nullable', 'string'],
+
+        'password' => ['required', 'string', 'min:8', 'confirmed'],
+    ]);
+
+    $result = $this->authService->registerOperator($validated);
+
+    return response()->json([
+        'message' => 'Operator registration submitted successfully. Your account is pending administrator review.',
+        'user' => $result['user'],
+        'operator_profile' => $result['operator_profile'],
+    ], 201);
+    }
+
     public function login(LoginRequest $request): JsonResponse
     {
         $result = $this->authService->login($request->validated());
