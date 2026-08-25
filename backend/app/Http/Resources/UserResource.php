@@ -18,12 +18,10 @@ class UserResource extends JsonResource
             'suffix' => $this->suffix,
 
             'email' => $this->email,
-            'phone_number' => $this->phone_number,
+            'mobile_number' => $this->mobile_number,
 
             'date_of_birth' => $this->date_of_birth,
             'sex' => $this->sex,
-
-            'profile_photo' => $this->profile_photo,
 
             'role' => $this->role,
             'account_status' => $this->account_status,
@@ -31,7 +29,7 @@ class UserResource extends JsonResource
             'email_verified_at' => $this->email_verified_at,
 
             'registration_date' => $this->created_at,
-            'last_login' => $this->last_login,
+            'last_login_at' => $this->last_login_at,
 
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,

@@ -1,8 +1,10 @@
 import { getToken } from "@/features/auth/storage/authStorage";
 import axios from "axios";
 
+export const API_BASE_URL = "http://10.0.2.2:8000/api/v1";
+
 const api = axios.create({
-  baseURL: "http://10.0.2.2:8000/api/v1",
+  baseURL: API_BASE_URL,
   headers: {
     Accept: "application/json",
   },

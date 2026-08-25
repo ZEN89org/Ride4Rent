@@ -6,7 +6,11 @@ import AppLogo from "@/components/common/AppLogo";
 import ScreenContainer from "@/components/common/ScreenContainer";
 
 
-import { getToken, isFirstLaunch } from "@/features/auth/storage/authStorage";
+import {
+    getToken,
+    getUser,
+    isFirstLaunch,
+} from "@/features/auth/storage/authStorage";
 
 export default function SplashScreen() {
 
@@ -27,8 +31,19 @@ export default function SplashScreen() {
       }
 
       const token = await getToken();
+      const user = await getUser();
 
       if (token) {
+        if (user?.role === "operator") {
+          if (user.account_status === "pending") {
+            router.replace("/operator-pending");
+          } else if (user.account_status === "rejected") {
+            router.replace("/operator-rejected");
+          } else {
+            router.replace("/operator-home");
+          }
+          return;
+        }
 
         router.replace("/(tabs)/home");
 

@@ -55,7 +55,7 @@ class AuthController extends Controller
             'business_email' => ['required', 'email'],
             'business_contact_number' => ['required', 'string', 'max:20'],
             'street_address' => ['required', 'string', 'max:255'],
-            'barangay' => ['nullable', 'string', 'max:100'],
+            'barangay' => ['required', 'string', 'max:100'],
             'municipality' => ['required', 'string', 'max:100'],
 
             'government_id_front' => [

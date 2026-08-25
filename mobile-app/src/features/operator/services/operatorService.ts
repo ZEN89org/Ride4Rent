@@ -1,12 +1,12 @@
 import api from "@/services/api";
 
 import {
-  OperatorRegistrationData,
+  OperatorRegisterData,
   OperatorStatus,
 } from "@/features/operator/types/operatorService";
 
 export const registerOperator = async (
-  data: OperatorRegistrationData
+  data: OperatorRegisterData
 ) => {
   const formData = new FormData();
 

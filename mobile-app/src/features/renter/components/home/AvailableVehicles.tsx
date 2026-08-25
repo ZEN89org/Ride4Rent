@@ -1,11 +1,12 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useState } from "react";
+import * as Location from "expo-location";
+import { useEffect, useState } from "react";
 import {
-  FlatList,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    FlatList,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 import AuthRequiredBottomSheet from "@/features/auth/components/AuthRequiredBottomSheet";
@@ -13,14 +14,19 @@ import VehicleCard from "@/features/renter/components/home/VehicleCard";
 
 import { Colors } from "@/constants/colors";
 import {
-  FontFamily,
-  FontSize,
-  Spacing,
+    FontFamily,
+    FontSize,
+    Spacing,
 } from "@/constants/theme";
 
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import {
+    getAvailableVehicles,
+    getNearbyVehicles,
+} from "@/features/operator/services/vehicleService";
+import { Vehicle as ApiVehicle } from "@/features/operator/types/vehicle";
 
-const vehicles = [
+const fallbackVehicles = [
   {
     id: "1",
     name: "Toyota Vios",
@@ -52,6 +58,53 @@ export default function AvailableVehicles() {
 
   const [showAuthSheet, setShowAuthSheet] = useState(false);
   const [favorites, setFavorites] = useState<string[]>([]);
+  const [vehicles, setVehicles] = useState<any[]>(fallbackVehicles);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadVehicles = async () => {
+      let availableVehicles: ApiVehicle[] = [];
+
+      try {
+        const permission = await Location.requestForegroundPermissionsAsync();
+        if (permission.granted) {
+          const location = await Location.getCurrentPositionAsync({});
+          availableVehicles = await getNearbyVehicles(
+            location.coords.latitude,
+            location.coords.longitude,
+          );
+        } else {
+          availableVehicles = await getAvailableVehicles();
+        }
+      } catch {
+        availableVehicles = await getAvailableVehicles();
+      }
+
+      return availableVehicles;
+    };
+
+    loadVehicles()
+      .then((apiVehicles: ApiVehicle[]) => {
+        if (!mounted || apiVehicles.length === 0) {
+          return;
+        }
+
+        setVehicles(apiVehicles.map((vehicle) => ({
+          id: String(vehicle.id),
+          name: vehicle.name,
+          image: vehicle.image_url ? { uri: vehicle.image_url } : require("../../../../../assets/img/car1.png"),
+          pricePerDay: vehicle.price_per_day,
+          rating: 0,
+          ratingCount: 0,
+        })));
+      })
+      .catch(() => undefined);
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const handleViewMore = () => {
     // Future vehicle listing screen

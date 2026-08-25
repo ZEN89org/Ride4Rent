@@ -1,22 +1,22 @@
 import {
-    Ionicons,
-    MaterialCommunityIcons,
+  Ionicons,
+  MaterialCommunityIcons,
 } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import {
-    Dimensions,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Dimensions,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 import { Colors } from "@/constants/colors";
 import {
-    FontFamily,
-    FontSize,
-    Spacing,
+  FontFamily,
+  FontSize,
+  Spacing,
 } from "@/constants/theme";
 
 const { height } = Dimensions.get("window");
@@ -139,7 +139,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     borderRadius: 20,
     paddingHorizontal: Spacing.lg,
-    marginTop: 30,
     paddingBottom: 30,
   },
 

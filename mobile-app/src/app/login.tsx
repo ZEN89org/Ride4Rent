@@ -105,8 +105,19 @@ export default function Login() {
 
       await signIn(loggedInUser, loggedInToken);
 
-      if (loggedInUser.role === "operator") {
-        router.replace("/operator");
+      if (
+        loggedInUser.role === "operator" &&
+        loggedInUser.account_status === "rejected"
+      ) {
+        router.replace("/operator-rejected");
+        return;
+      }
+
+      if (
+        loggedInUser.role === "operator" &&
+        loggedInUser.account_status === "active"
+      ) {
+        router.replace("/operator-home");
         return;
       }
 
@@ -156,6 +167,19 @@ export default function Login() {
           automaticallyAdjustKeyboardInsets
         >
           <View style={styles.container}>
+            <View pointerEvents="none" style={styles.welcomeShape}>
+              <View style={styles.welcomeCircle}>
+                <View style={styles.welcomeText}>
+                  <Text style={styles.welcomeTitle}>
+                    Welcome{`\n`}Back
+                  </Text>
+                  <Text style={styles.welcomeSubtitle}>
+                    Please sign in to continue
+                  </Text>
+                </View>
+              </View>
+            </View>
+
             <AuthCard>
 
               <AppInput
@@ -269,23 +293,52 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: "flex-end",
+    paddingTop: 150,
   },
 
-  logoContainer: {
+
+
+  welcomeShape: {
     position: "absolute",
-    top: -35,
-    left: 30,
-    zIndex: 100,
+    top: -28,
+    left: 0,
+    height: 255,
+    width: "100%",
+    overflow: "hidden",
+    zIndex: 2,
   },
 
-  logoCircle: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor: Colors.logoBackground,
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 8,
+  welcomeCircle: {
+    position: "absolute",
+    top: 0,
+    left: "-80%",
+    width: "200%",
+    height: 245,
+    borderBottomLeftRadius: 260,
+    borderBottomRightRadius: 260,
+    backgroundColor: Colors.primary,
+  },
+
+  welcomeText: {
+    position: "absolute",
+    top: 110,
+    left: "44%",
+    width: 180,
+  },
+
+  welcomeTitle: {
+    color: Colors.white,
+    fontFamily: FontFamily.bold,
+    fontSize: 35,
+    lineHeight: 30,
+  },
+
+  welcomeSubtitle: {
+    color: Colors.white,
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 8,
   },
 
   forgot: {

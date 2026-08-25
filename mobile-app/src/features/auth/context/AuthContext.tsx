@@ -148,7 +148,7 @@ const initializeAuth = async () => {
 
   const isRenter =
     isAuthenticated &&
-    user?.role === "user";
+    user?.role === "customer";
 
   const isOperator =
     isAuthenticated &&

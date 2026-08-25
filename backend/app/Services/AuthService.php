@@ -23,7 +23,7 @@ class AuthService
             'email' => $data['email'],
             'mobile_number' => $data['mobile_number'],
             'password' => Hash::make($data['password']),
-            'role' => 'user',
+            'role' => 'customer',
             'account_status' => 'active',
         ]);
 

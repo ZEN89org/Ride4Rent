@@ -8,9 +8,9 @@ import { useAuth } from "@/features/auth/hooks/useAuth";
 
 import { Colors } from "@/constants/colors";
 import {
-  FontFamily,
-  FontSize,
-  Spacing,
+    FontFamily,
+    FontSize,
+    Spacing,
 } from "@/constants/theme";
 
 export default function Bookings() {
@@ -54,7 +54,9 @@ export default function Bookings() {
           </Text>
 
           <Text style={styles.info}>
-            {auth.user.name}
+            {[auth.user.first_name, auth.user.last_name]
+              .filter(Boolean)
+              .join(" ") || "No name provided"}
           </Text>
 
           <Text style={styles.info}>
@@ -62,7 +64,7 @@ export default function Bookings() {
           </Text>
 
           <Text style={styles.info}>
-            {auth.user.phone_number || "No phone number"}
+            {auth.user.mobile_number || "No phone number"}
           </Text>
 
           <Text style={styles.info}>
