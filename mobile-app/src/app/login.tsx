@@ -1,6 +1,9 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  Animated,
+  Dimensions,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -10,36 +13,29 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppFooter from "@/components/common/AppFooter";
 import AppInput from "@/components/common/AppInput";
 import Divider from "@/components/common/Divider";
 import PasswordInput from "@/components/common/PasswordInput";
 import PrimaryButton from "@/components/common/PrimaryButton";
-import ScreenContainer from "@/components/common/ScreenContainer";
-import AuthCard from "@/features/auth/components/AuthCard";
+import ForgotPasswordModal from "@/features/auth/components/ForgotPasswordModal";
 import RegistrationRoleBottomSheet from "@/features/auth/components/RegistrationRoleBottomSheet";
 import SocialButton from "@/features/auth/components/SocialButton";
 
-import { FontFamily } from "@/constants/theme";
-
 import { Colors } from "@/constants/colors";
+import { FontFamily, FontSize, Radius, Spacing } from "@/constants/theme";
+import { useAppToast } from "@/context/ToastContext";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 import { login } from "@/features/auth/services/authService";
 import { resetFirstLaunch } from "@/features/auth/storage/authStorage";
 
-import { useAuth } from "@/features/auth/hooks/useAuth";
-
-import {
-  MaterialCommunityIcons
-} from "@expo/vector-icons";
-
-
+const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 export default function Login() {
-
-  const [showRegistrationSheet, setShowRegistrationSheet] =
-  useState(false);
-
+  const [showRegistrationSheet, setShowRegistrationSheet] = useState(false);
+  const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -49,6 +45,34 @@ export default function Login() {
   const [loginError, setLoginError] = useState("");
 
   const { login: signIn } = useAuth();
+  const { showSuccess, showError } = useAppToast();
+
+  // Animation values for smooth entrance slide
+  const sheetTranslateY = useRef(new Animated.Value(SCREEN_HEIGHT * 0.7)).current;
+  const headerOpacity = useRef(new Animated.Value(0)).current;
+  const headerTranslateY = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    // 1st flow: Header appears & sheet slides up from bottom
+    Animated.parallel([
+      Animated.timing(headerOpacity, {
+        toValue: 1,
+        duration: 350,
+        useNativeDriver: true,
+      }),
+      Animated.timing(headerTranslateY, {
+        toValue: 0,
+        duration: 350,
+        useNativeDriver: true,
+      }),
+      Animated.spring(sheetTranslateY, {
+        toValue: 0,
+        tension: 65,
+        friction: 11,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
   const handleEmailChange = (value: string) => {
     setEmail(value);
@@ -94,16 +118,17 @@ export default function Login() {
       const loggedInUser = response.data.user;
       const loggedInToken = response.data.token;
 
+      showSuccess("Welcome Back", `Signed in as ${loggedInUser.first_name || "User"}`);
+
+      await signIn(loggedInUser, loggedInToken);
+
       if (
         loggedInUser.role === "operator" &&
         loggedInUser.account_status === "pending"
       ) {
-        await signIn(loggedInUser, loggedInToken);
         router.replace("/operator-pending");
         return;
       }
-
-      await signIn(loggedInUser, loggedInToken);
 
       if (
         loggedInUser.role === "operator" &&
@@ -123,64 +148,62 @@ export default function Login() {
 
       router.replace("/(tabs)/home");
     } catch (error: any) {
-      const backendErrors =
-        error?.response?.data?.errors;
+      const backendErrors = error?.response?.data?.errors;
 
       if (backendErrors?.email) {
-        setEmailError(
-          backendErrors.email[0]
-        );
+        setEmailError(backendErrors.email[0]);
       } else {
         const message =
-          error?.response?.data?.message ??
-          "Invalid email or password.";
-
+          error?.response?.data?.message ?? "Invalid email or password.";
         setLoginError(message);
+        showError("Sign In Failed", message);
       }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleReset = async () => {
-    await resetFirstLaunch();
-    router.replace("/");
-  };
-
   return (
-    <ScreenContainer>
-      <KeyboardAvoidingView
-        style={styles.keyboardContainer}
-        behavior={
-          Platform.OS === "ios"
-            ? "padding"
-            : "height"
-        }
-        keyboardVerticalOffset={
-          Platform.OS === "ios" ? 20 : 0
-        }
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          automaticallyAdjustKeyboardInsets
+    <View style={styles.root}>
+      <SafeAreaView edges={["top"]} style={styles.safeTop}>
+        <KeyboardAvoidingView
+          style={styles.keyboardAvoid}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-          <View style={styles.container}>
-            <View pointerEvents="none" style={styles.welcomeShape}>
-              <View style={styles.welcomeCircle}>
-                <View style={styles.welcomeText}>
-                  <Text style={styles.welcomeTitle}>
-                    Welcome{`\n`}Back
-                  </Text>
-                  <Text style={styles.welcomeSubtitle}>
-                    Please sign in to continue
-                  </Text>
-                </View>
-              </View>
-            </View>
+          {/* Top Primary Background Section with Welcome Animation */}
+          <Animated.View
+            style={[
+              styles.topBanner,
+              {
+                opacity: headerOpacity,
+                transform: [{ translateY: headerTranslateY }],
+              },
+            ]}
+          >
+            <Text style={styles.welcomeTitle}>
+              Welcome{`\n`}Back
+            </Text>
+            <Text style={styles.welcomeSubtitle}>
+              Please sign in to continue
+            </Text>
+          </Animated.View>
 
-            <AuthCard>
+          {/* Bottom Sheet Card sliding up from bottom with integrated footer */}
+          <Animated.View
+            style={[
+              styles.bottomSheetContainer,
+              {
+                transform: [{ translateY: sheetTranslateY }],
+              },
+            ]}
+          >
+            <ScrollView
+              contentContainerStyle={styles.sheetScrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+            >
+              <View style={styles.sheetHandle} />
 
               <AppInput
                 label="Email Address"
@@ -192,9 +215,7 @@ export default function Login() {
               />
 
               {emailError ? (
-                <Text style={styles.errorText}>
-                  {emailError}
-                </Text>
+                <Text style={styles.errorText}>{emailError}</Text>
               ) : null}
 
               <PasswordInput
@@ -205,15 +226,11 @@ export default function Login() {
               />
 
               {passwordError ? (
-                <Text style={styles.errorText}>
-                  {passwordError}
-                </Text>
+                <Text style={styles.errorText}>{passwordError}</Text>
               ) : null}
 
               {loginError ? (
-                <Text style={styles.errorText}>
-                  {loginError}
-                </Text>
+                <Text style={styles.errorText}>{loginError}</Text>
               ) : null}
 
               <PrimaryButton
@@ -222,10 +239,11 @@ export default function Login() {
                 onPress={handleLogin}
               />
 
-              <Pressable>
-                <Text style={styles.forgot}>
-                  Forgot Password?
-                </Text>
+              <Pressable
+                onPress={() => setShowForgotPasswordModal(true)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={styles.forgot}>Forgot Password?</Text>
               </Pressable>
 
               <Divider />
@@ -235,7 +253,7 @@ export default function Login() {
                 icon={
                   <MaterialCommunityIcons
                     name="gmail"
-                    size={25}
+                    size={22}
                     color="#EA4335"
                   />
                 }
@@ -245,107 +263,124 @@ export default function Login() {
                 }}
               />
 
-              <View style={styles.footer}>
-                <Text style={styles.footerText}>
-                  Don’t have an account?
-                </Text>
-
+              <View style={styles.footerRow}>
+                <Text style={styles.footerText}>Don’t have an account?</Text>
                 <TouchableOpacity
                   onPress={() => setShowRegistrationSheet(true)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Text style={styles.footerLink}>
-                    Sign Up
-                  </Text>
+                  <Text style={styles.footerLink}>Sign Up</Text>
                 </TouchableOpacity>
               </View>
 
+              {/* Seamless Bottom-Pinned App Footer inside the Card */}
+              <View style={styles.appFooterWrap}>
+                <AppFooter />
+              </View>
+            </ScrollView>
+          </Animated.View>
 
-            </AuthCard>
-          </View>
-        </ScrollView>
-        <AppFooter />
-        <RegistrationRoleBottomSheet
-          visible={showRegistrationSheet}
-          onClose={() => setShowRegistrationSheet(false)}
-          onSelectRenter={() => {
-            setShowRegistrationSheet(false);
-            router.push("/register");
-          }}
-          onSelectOperator={() => {
-            setShowRegistrationSheet(false);
-            router.push("/operator");
-          }}
-        />
-      </KeyboardAvoidingView>
-    </ScreenContainer>
+          <ForgotPasswordModal
+            visible={showForgotPasswordModal}
+            onClose={() => setShowForgotPasswordModal(false)}
+            onSuccess={() => {
+              setShowForgotPasswordModal(false);
+              showSuccess("Password Updated", "You can now log in with your new password.");
+            }}
+          />
+
+          <RegistrationRoleBottomSheet
+            visible={showRegistrationSheet}
+            onClose={() => setShowRegistrationSheet(false)}
+            onSelectRenter={() => {
+              setShowRegistrationSheet(false);
+              router.push("/register");
+            }}
+            onSelectOperator={() => {
+              setShowRegistrationSheet(false);
+              router.push("/operator");
+            }}
+          />
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  keyboardContainer: {
+  root: {
     flex: 1,
-  },
-
-  scrollContent: {
-    flexGrow: 1,
-  },
-
-  container: {
-    flex: 1,
-    justifyContent: "flex-end",
-    paddingTop: 150,
-  },
-
-
-
-  welcomeShape: {
-    position: "absolute",
-    top: -28,
-    left: 0,
-    height: 255,
-    width: "100%",
-    overflow: "hidden",
-    zIndex: 2,
-  },
-
-  welcomeCircle: {
-    position: "absolute",
-    top: 0,
-    left: "-80%",
-    width: "200%",
-    height: 245,
-    borderBottomLeftRadius: 260,
-    borderBottomRightRadius: 260,
     backgroundColor: Colors.primary,
   },
 
-  welcomeText: {
-    position: "absolute",
-    top: 110,
-    left: "44%",
-    width: 180,
+  safeTop: {
+    flex: 1,
+    backgroundColor: Colors.primary,
+  },
+
+  keyboardAvoid: {
+    flex: 1,
+  },
+
+  topBanner: {
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Platform.OS === "ios" ? 15 : 20,
+    paddingBottom: 25,
   },
 
   welcomeTitle: {
     color: Colors.white,
     fontFamily: FontFamily.bold,
-    fontSize: 35,
-    lineHeight: 30,
+    fontSize: 34,
+    lineHeight: 38,
   },
 
   welcomeSubtitle: {
     color: Colors.white,
     fontFamily: FontFamily.medium,
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 8,
+    fontSize: FontSize.small,
+    lineHeight: 18,
+    marginTop: 6,
+    opacity: 0.95,
+  },
+
+  bottomSheetContainer: {
+    flex: 1,
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: -4 },
+    elevation: 12,
+    overflow: "hidden",
+  },
+
+  sheetScrollContent: {
+    paddingHorizontal: Spacing.xl,
+    paddingTop: 16,
+    paddingBottom: Platform.OS === "ios" ? 24 : 16,
+    flexGrow: 1,
+    justifyContent: "space-between",
+  },
+
+  sheetHandle: {
+    width: 44,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#E2E8F0",
+    alignSelf: "center",
+    marginBottom: 20,
   },
 
   forgot: {
     color: Colors.primary,
     textAlign: "center",
-    marginTop: 15,
-    fontFamily: FontFamily.regular,
+    marginTop: 14,
+    marginBottom: 4,
+    fontFamily: FontFamily.medium,
+    fontSize: FontSize.small,
   },
 
   errorText: {
@@ -353,44 +388,34 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: FontFamily.regular,
     textAlign: "center",
-    marginTop: -20,
-    marginBottom: 10,
+    marginTop: -8,
+    marginBottom: 8,
   },
 
-googleIcon: {
-  width: 22,
-  height: 22,
-  alignItems: "center",
-  justifyContent: "center",
-},
-
-googleG: {
-  fontSize: 20,
-  fontWeight: "700",
-  color: "#4285F4",
-},
-
-  placeholderStyle: {
-    fontFamily: FontFamily.regular,
-  },
-
-  footer: {
+  footerRow: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
+    marginTop: 16,
+    marginBottom: 10,
   },
 
   footerText: {
     color: Colors.secondary,
     fontFamily: FontFamily.regular,
+    fontSize: FontSize.small,
   },
 
   footerLink: {
     color: Colors.primary,
     fontFamily: FontFamily.semiBold,
-    marginLeft: 4,
+    fontSize: FontSize.small,
+    marginLeft: 5,
   },
 
-
-
+  appFooterWrap: {
+    marginTop: 14,
+    paddingBottom: Platform.OS === "ios" ? 10 : 8,
+    alignItems: "center",
+  },
 });

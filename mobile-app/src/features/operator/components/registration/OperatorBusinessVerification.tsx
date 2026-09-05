@@ -2,7 +2,6 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
 import {
-    Alert,
     Image,
     Pressable,
     ScrollView,
@@ -10,6 +9,7 @@ import {
     Text,
     View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import PrimaryButton from "@/components/common/PrimaryButton";
 import { Colors } from "@/constants/colors";
@@ -19,6 +19,7 @@ import {
     Radius,
     Spacing,
 } from "@/constants/theme";
+import { useAppToast } from "@/context/ToastContext";
 import RegistrationHeader from "./RegistrationHeader";
 
 type OperatorBusinessVerificationProps = {
@@ -49,13 +50,13 @@ export default function OperatorBusinessVerification({
   onSubmit,
   isSubmitting = false,
 }: OperatorBusinessVerificationProps) {
-  const [documents, setDocuments] =
-    useState<Documents>({
-      governmentIdFront: "",
-      governmentIdBack: "",
-      businessPermitFront: "",
-      businessPermitBack: "",
-    });
+  const { showModal } = useAppToast();
+  const [documents, setDocuments] = useState<Documents>({
+    governmentIdFront: "",
+    governmentIdBack: "",
+    businessPermitFront: "",
+    businessPermitBack: "",
+  });
 
   const [agreed, setAgreed] = useState(false);
 
@@ -72,9 +73,11 @@ export default function OperatorBusinessVerification({
       await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
-      Alert.alert(
+      showModal(
         "Permission Required",
-        "Please allow photo library access to upload your documents."
+        "Please allow photo library access to upload your documents.",
+        [{ text: "OK" }],
+        "warning"
       );
       return;
     }
@@ -178,7 +181,7 @@ export default function OperatorBusinessVerification({
     };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
       <RegistrationHeader
         currentStep={4}
         totalSteps={4}
@@ -300,7 +303,7 @@ export default function OperatorBusinessVerification({
 
         <View style={styles.bottomSpacing} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -439,6 +442,11 @@ function DocumentUpload({
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: Colors.white,
+  },
+
   container: {
     flex: 1,
     backgroundColor: Colors.white,
@@ -450,7 +458,8 @@ const styles = StyleSheet.create({
   },
 
   scrollContent: {
-    paddingTop: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.xs,
     paddingBottom: Spacing.lg,
   },
 

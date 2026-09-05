@@ -14,12 +14,38 @@ export interface RegisterData {
   mobile_number: string;
   password: string;
   password_confirmation: string;
+  otp?: string;
 }
 
 export interface LoginData {
   email: string;
   password: string;
 }
+
+export const sendVerificationOtp = async (email: string): Promise<{ success: boolean; message: string; dev_otp?: string }> => {
+  const response = await api.post("/auth/send-otp", { email });
+  return response.data;
+};
+
+export const forgotPassword = async (email: string): Promise<{ success: boolean; message: string; dev_otp?: string }> => {
+  const response = await api.post("/auth/forgot-password", { email });
+  return response.data;
+};
+
+export const resetPassword = async (data: {
+  email: string;
+  otp: string;
+  password: string;
+  password_confirmation: string;
+}): Promise<{ success: boolean; message: string }> => {
+  const response = await api.post("/auth/reset-password", data);
+  return response.data;
+};
+
+export const verifyOtp = async (email: string, otp: string): Promise<{ success: boolean; message: string }> => {
+  const response = await api.post("/auth/verify-otp", { email, otp });
+  return response.data;
+};
 
 export const register = async (
   data: RegisterData

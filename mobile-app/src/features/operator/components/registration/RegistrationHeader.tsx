@@ -4,7 +4,8 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Colors } from "@/constants/colors";
 import {
     FontFamily,
-    FontSize
+    FontSize,
+    Spacing,
 } from "@/constants/theme";
 
 type RegistrationHeaderProps = {
@@ -53,10 +54,11 @@ export default function RegistrationHeader({
 
 const styles = StyleSheet.create({
   header: {
-    height: 90,
+    height: 52,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    paddingHorizontal: Spacing.lg,
   },
 
   actionButton: {

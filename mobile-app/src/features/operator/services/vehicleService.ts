@@ -25,13 +25,21 @@ export const createVehicle = async (data: VehicleFormData): Promise<Vehicle> => 
 
   formData.append("name", data.name.trim());
   Object.entries(data).forEach(([key, value]) => {
-    if (key !== "imageUri" && value.trim()) {
+    if (key !== "imageUri" && key !== "imageUris" && typeof value === "string" && value.trim()) {
       formData.append(key, value.trim());
     }
   });
 
-  if (data.imageUri) {
-    formData.append("image", {
+  if (data.imageUris && data.imageUris.length > 0) {
+    data.imageUris.forEach((uri, index) => {
+      formData.append("images[]", {
+        uri,
+        name: `vehicle_${index}.jpg`,
+        type: "image/jpeg",
+      } as any);
+    });
+  } else if (data.imageUri) {
+    formData.append("cover_photo", {
       uri: data.imageUri,
       name: "vehicle.jpg",
       type: "image/jpeg",
@@ -59,4 +67,19 @@ export const getNearbyVehicles = async (
     params: { latitude, longitude, radius },
   });
   return response.data.data;
+};
+
+export const getVehicleById = async (id: string | number): Promise<Vehicle> => {
+  const response = await api.get(`/vehicles/${id}`);
+  return response.data.data;
+};
+
+export const getOperatorFleet = async (
+  operatorId: string | number
+): Promise<{ operator: any; vehicles: Vehicle[] }> => {
+  const response = await api.get(`/operator/${operatorId}/vehicles`);
+  return {
+    operator: response.data.operator,
+    vehicles: response.data.data,
+  };
 };

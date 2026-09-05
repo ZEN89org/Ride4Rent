@@ -75,41 +75,27 @@ export default function SideNav({
       return;
     }
 
-    console.log(
-      "Driver license pressed"
-    );
+    router.push("/driver-license" as any);
   };
 
   const handleFaqPress = () => {
     closeSideNav();
-
-    console.log(
-      "FAQ pressed"
-    );
+    router.push("/faq" as any);
   };
 
   const handleTermsPress = () => {
     closeSideNav();
-
-    console.log(
-      "Terms and Conditions pressed"
-    );
+    router.push("/terms" as any);
   };
 
   const handleContactPress = () => {
     closeSideNav();
-
-    console.log(
-      "Contact Support pressed"
-    );
+    router.push("/support" as any);
   };
 
   const handleSettingsPress = () => {
     closeSideNav();
-
-    console.log(
-      "Settings pressed"
-    );
+    router.push("/settings" as any);
   };
 
   const handleAboutPress = () => {
@@ -147,19 +133,10 @@ export default function SideNav({
       pointerEvents="box-none"
       style={styles.container}
     >
-  <Animated.View
-    style={[
-      styles.outsideArea,
-      {
-        opacity: overlayOpacity,
-      },
-    ]}
-  >
-    <Pressable
-      style={StyleSheet.absoluteFill}
-      onPress={closeSideNav}
-    />
-  </Animated.View>
+      <Pressable
+        style={styles.backdrop}
+        onPress={closeSideNav}
+      />
 
       <Animated.View
         style={[
@@ -198,8 +175,9 @@ export default function SideNav({
               >
                 {isGuest
                   ? "Welcome to Ride4Rent"
-                  : user?.name ||
-                    "Ride4Rent User"}
+                  : user?.first_name
+                    ? `Hi, ${user.first_name}!`
+                    : user?.name || "Ride4Rent User"}
               </Text>
             </View>
 
@@ -475,13 +453,13 @@ const styles = StyleSheet.create({
     zIndex: 1000,
   },
 
-  outsideArea: {
+  backdrop: {
     position: "absolute",
     top: 0,
     bottom: 0,
     left: 0,
-    right: SIDE_NAV_WIDTH,
-    backgroundColor: Colors.dark,
+    right: 0,
+    backgroundColor: "rgba(0,0,0,0.3)",
   },
 
   drawer: {

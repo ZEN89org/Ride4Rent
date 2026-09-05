@@ -625,32 +625,17 @@ const map = L.map(
 
 
 L.tileLayer(
-
-  "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-
+  "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
   {
-
-    maxZoom: 20,
-
+    maxZoom: 19,
     minZoom: 3,
-
     tileSize: 256,
-
-    attribution:
-      '&copy; OpenStreetMap &copy; CARTO',
-
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     keepBuffer: 6,
-
     updateWhenZooming: false,
-
     updateWhenIdle: true,
-
     updateInterval: 150,
-
-    detectRetina: true
-
   }
-
 ).addTo(map);
 
 

@@ -1,3 +1,4 @@
+import React, { useEffect, useState } from "react";
 import {
   FlatList,
   StyleSheet,
@@ -16,102 +17,90 @@ import {
   FontSize,
   Spacing,
 } from "@/constants/theme";
+import api from "@/services/api";
 
 interface Props {
-  vehicles?: TopRatedVehicle[];
   onViewPress?: (vehicle: TopRatedVehicle) => void;
 }
 
-const defaultVehicles: TopRatedVehicle[] = [
-  {
-    id: "1",
-    name: "Ford Mustang GT",
-    price: 8947,
-    rating: 5.0,
-    image: require("../../../../../assets/img/car4.png"),
-  },
-  {
-    id: "2",
-    name: "Toyota Vios",
-    price: 1800,
-    rating: 4.9,
-    image: require("../../../../../assets/img/car5.png"),
-  },
-  {
-    id: "3",
-    name: "Honda City",
-    price: 2000,
-    rating: 4.8,
-    image: require("../../../../../assets/img/car6.png"),
-  },
-];
-
 export default function TopRatedVehicles({
-  vehicles = defaultVehicles,
   onViewPress,
 }: Props) {
   const { width } = useWindowDimensions();
+  const [vehicles, setVehicles] = useState<TopRatedVehicle[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    api.get("/vehicles?sort=top_rated")
+      .then((res) => {
+        if (!mounted) return;
+        const apiVehicles = res.data.data || [];
+        setVehicles(
+          apiVehicles.slice(0, 6).map((v: any) => ({
+            id: String(v.id),
+            name: v.name,
+            price: Number(v.price_per_day),
+            rating: Number(v.rating || 5.0),
+            image: v.image_url
+              ? { uri: v.image_url }
+              : { uri: "https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=800&auto=format&fit=crop&q=60" },
+          }))
+        );
+      })
+      .catch(() => {});
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const cardWidth = width - Spacing.lg * 2;
 
+  if (vehicles.length === 0) {
+    return null;
+  }
+
   return (
     <View style={styles.container}>
-      <View style={styles.titleRow}>
-        <Text style={styles.title}>
-          Top rated
-        </Text>
-
-        <View style={styles.line} />
+      <View style={styles.sectionHeader}>
+        <Text style={styles.title}>Top Rated Vehicles</Text>
       </View>
 
-<FlatList
-  data={vehicles}
-  horizontal
-  showsHorizontalScrollIndicator={false}
-  keyExtractor={(item) => item.id}
-  contentContainerStyle={styles.list}
-  snapToAlignment="center"
-  snapToInterval={cardWidth + Spacing.md}
-  decelerationRate="fast"
-  disableIntervalMomentum
-  renderItem={({ item }) => (
-    <TopRatedVehicleCard
-      vehicle={item}
-      onViewPress={onViewPress}
-    />
-  )}
-/>
+      <FlatList
+        data={vehicles}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        snapToInterval={cardWidth + Spacing.md}
+        decelerationRate="fast"
+        contentContainerStyle={styles.listContent}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <TopRatedVehicleCard
+            vehicle={item}
+            onViewPress={() => onViewPress?.(item)}
+          />
+        )}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: Spacing.xs,
-    marginBottom: Spacing.xs,
-    paddingHorizontal: Spacing.lg,
+    marginTop: Spacing.md,
   },
-
-  titleRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  sectionHeader: {
+    paddingHorizontal: Spacing.lg,
     marginBottom: Spacing.sm,
   },
-
   title: {
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.body,
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.title,
     color: Colors.dark,
   },
-
-  line: {
-    flex: 1,
-    height: 2,
-    backgroundColor: Colors.primary,
-    marginLeft: Spacing.md,
-  },
-
-  list: {
-    gap: Spacing.xl,
+  listContent: {
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.md,
   },
 });

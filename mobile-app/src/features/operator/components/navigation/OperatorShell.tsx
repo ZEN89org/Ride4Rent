@@ -1,35 +1,33 @@
-import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import { ReactNode, useEffect, useState } from "react";
 import {
-    Animated,
-    Modal,
-    Pressable,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Ionicons,
+  MaterialCommunityIcons,
+} from "@expo/vector-icons";
+import { router } from "expo-router";
+import React, { ReactNode, useEffect, useState } from "react";
+import {
+  Animated,
+  Dimensions,
+  Pressable,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Image } from "expo-image";
 
 import { Colors } from "@/constants/colors";
-import { FontFamily, FontSize, Spacing } from "@/constants/theme";
+import {
+  FontFamily,
+  FontSize,
+  Spacing,
+} from "@/constants/theme";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 
-type ActiveRoute = "dashboard" | "vehicles" | "bookings" | "chats" | "profile";
-type Tab = {
-  key: ActiveRoute;
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  route: string;
-};
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const DRAWER_WIDTH = SCREEN_WIDTH * 0.78;
 
-const tabs: Tab[] = [
-  { key: "dashboard", label: "Home", icon: "home-outline", route: "/operator-home" },
-  { key: "vehicles", label: "Vehicles", icon: "car-outline", route: "/operator-vehicles" },
-  { key: "bookings", label: "Bookings", icon: "calendar-outline", route: "/operator-bookings" },
-  { key: "chats", label: "Chats", icon: "chatbubble-outline", route: "/operator-chats" },
-];
+type ActiveRoute = "dashboard" | "vehicles" | "bookings" | "chats" | "profile";
 
 export default function OperatorShell({
   children,
@@ -42,6 +40,7 @@ export default function OperatorShell({
   const [drawerAnimation] = useState(() => new Animated.Value(0));
   const { user, logout, loading, isOperatorActive } = useAuth();
   const profile = user?.operatorProfile ?? user?.operator_profile;
+  const profilePhoto = user?.profile_photo;
 
   useEffect(() => {
     if (!loading && !isOperatorActive) {
@@ -62,7 +61,7 @@ export default function OperatorShell({
     setMenuVisible(true);
     Animated.timing(drawerAnimation, {
       toValue: 1,
-      duration: 280,
+      duration: 250,
       useNativeDriver: true,
     }).start();
   };
@@ -70,7 +69,7 @@ export default function OperatorShell({
   const closeMenu = () => {
     Animated.timing(drawerAnimation, {
       toValue: 0,
-      duration: 280,
+      duration: 250,
       useNativeDriver: true,
     }).start(({ finished }) => {
       if (finished) setMenuVisible(false);
@@ -79,341 +78,404 @@ export default function OperatorShell({
 
   const drawerTranslateX = drawerAnimation.interpolate({
     inputRange: [0, 1],
-    outputRange: [340, 0],
-  });
-  const contentTranslateX = drawerAnimation.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -32],
-  });
-  const backdropOpacity = drawerAnimation.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 0.42],
+    outputRange: [DRAWER_WIDTH, 0],
   });
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
       <View style={styles.container}>
-        <View style={styles.header}>
-          <View style={styles.greeting}>
-            <Text style={styles.greetingName}>
-              Hello, {user?.first_name ?? "Operator"}
-            </Text>
-            <Text style={styles.greetingMessage}>
-              Manage your rental business.
-            </Text>
-          </View>
-
-          <View style={styles.actions}>
-            <TouchableOpacity
-              accessibilityLabel="View notifications"
-              onPress={() => undefined}
-              style={styles.actionButton}
-            >
-              <Ionicons
-                name="notifications-outline"
-                size={21}
-                color={Colors.dark}
-              />
-            </TouchableOpacity>
-            <TouchableOpacity
-              accessibilityLabel="Open operator menu"
-              onPress={openMenu}
-              style={styles.actionButton}
-            >
-              <Ionicons name="menu-outline" size={25} color={Colors.dark} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <Animated.View style={[styles.content, { transform: [{ translateX: contentTranslateX }] }]}>{children}</Animated.View>
-
-        <View style={styles.bottomBar}>
-          {tabs.map((tab) => {
-            const isFocused = activeRoute === tab.key;
-
-            return (
-              <TouchableOpacity
-                key={tab.key}
-                accessibilityLabel={tab.label}
-                onPress={() => router.push(tab.route)}
-                style={styles.tabButton}
-              >
-                <View
-                  style={[
-                    styles.iconContainer,
-                    isFocused && styles.activeIconContainer,
-                  ]}
-                >
-                  <Ionicons
-                    name={tab.icon}
-                    size={25}
-                    color={isFocused ? Colors.primary : Colors.secondary}
-                  />
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </View>
-
-      <Modal
-        visible={menuVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setMenuVisible(false)}
-      >
-        <View style={styles.modal}>
-          <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
-            <Pressable style={StyleSheet.absoluteFill} onPress={closeMenu} />
-          </Animated.View>
-          <Animated.View style={[styles.drawer, { transform: [{ translateX: drawerTranslateX }] }]}>
-          <SafeAreaView edges={["top", "bottom"]} style={styles.drawerSafeArea}>
-            <View style={styles.drawerHeader}>
-              <View style={styles.avatar}>
-                <Ionicons
-                  name="business-outline"
-                  size={25}
-                  color={Colors.dark}
-                />
-              </View>
-              <View style={styles.identity}>
-                <Text style={styles.drawerName}>
-                  {profile?.business_name ?? "Your business"}
-                </Text>
-                <Text style={styles.drawerEmail}>{user?.email}</Text>
-              </View>
-              <TouchableOpacity
-                accessibilityLabel="Close operator menu"
-                onPress={closeMenu}
-              >
-                <Ionicons name="close" size={24} color={Colors.dark} />
-              </TouchableOpacity>
+        {/* Top Header matching renter aesthetic with Notification icon */}
+        <View style={styles.topHeader}>
+          <View style={styles.userRow}>
+            <View style={styles.avatarCircle}>
+              {profilePhoto ? (
+                <Image source={{ uri: profilePhoto }} style={styles.avatarImg} />
+              ) : (
+                <Ionicons name="business" size={24} color={Colors.dark} />
+              )}
             </View>
 
-            <View style={styles.divider} />
-            <Text style={styles.section}>Manage</Text>
-            <DrawerItem
-              icon="home-outline"
-              label="Dashboard"
-              route="/operator-home"
-              close={closeMenu}
-            />
-            <DrawerItem
-              icon="car-outline"
-              label="My vehicles"
-              route="/operator-vehicles"
-              close={closeMenu}
-            />
-            <DrawerItem
-              icon="calendar-outline"
-              label="Bookings"
-              route="/operator-bookings"
-              close={closeMenu}
-            />
+            <View style={styles.userInfo}>
+              <Text style={styles.username} numberOfLines={1}>
+                {profile?.business_name || user?.first_name || "Host Workspace"}
+              </Text>
+              <Text style={styles.subtitle}>Operator & Host Fleet Manager</Text>
+            </View>
 
-            <TouchableOpacity style={styles.logout} onPress={signOut}>
-              <Ionicons
-                name="log-out-outline"
-                size={21}
-                color={Colors.white}
-              />
-              <Text style={styles.logoutText}>Sign out</Text>
-            </TouchableOpacity>
-          </SafeAreaView>
-          </Animated.View>
+            <View style={styles.actions}>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => router.push("/notifications" as any)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="notifications-outline" size={21} color={Colors.dark} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={openMenu}
+                activeOpacity={0.8}
+              >
+                <MaterialCommunityIcons name="menu" size={23} color={Colors.dark} />
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
-      </Modal>
-    </SafeAreaView>
-  );
-}
 
-function DrawerItem({
-  icon,
-  label,
-  route,
-  close,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  route: string;
-  close: () => void;
-}) {
-  return (
-    <TouchableOpacity
-      style={styles.drawerItem}
-      onPress={() => {
-        close();
-        router.push(route);
-      }}
-    >
-      <Ionicons name={icon} size={21} color={Colors.dark} />
-      <Text style={styles.drawerItemText}>{label}</Text>
-      <Ionicons name="chevron-forward" size={17} color={Colors.secondary} />
-    </TouchableOpacity>
+        {/* Content Area */}
+        <View style={styles.content}>{children}</View>
+
+        {/* Bottom Tab Bar at the very bottom */}
+        <View style={styles.bottomBar}>
+          <TouchableOpacity
+            style={styles.tabButton}
+            onPress={() => router.push("/operator-home" as any)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.iconContainer, activeRoute === "dashboard" && styles.activeIconContainer]}>
+              <Ionicons
+                name="home-outline"
+                size={22}
+                color={activeRoute === "dashboard" ? Colors.primary : Colors.secondary}
+              />
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.tabButton}
+            onPress={() => router.push("/operator-vehicles" as any)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.iconContainer, activeRoute === "vehicles" && styles.activeIconContainer]}>
+              <Ionicons
+                name="car-outline"
+                size={22}
+                color={activeRoute === "vehicles" ? Colors.primary : Colors.secondary}
+              />
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.tabButton}
+            onPress={() => router.push("/operator-bookings" as any)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.iconContainer, activeRoute === "bookings" && styles.activeIconContainer]}>
+              <Ionicons
+                name="calendar-outline"
+                size={22}
+                color={activeRoute === "bookings" ? Colors.primary : Colors.secondary}
+              />
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.tabButton}
+            onPress={() => router.push("/operator-chats" as any)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.iconContainer, activeRoute === "chats" && styles.activeIconContainer]}>
+              <Ionicons
+                name="chatbubble-ellipses-outline"
+                size={22}
+                color={activeRoute === "chats" ? Colors.primary : Colors.secondary}
+              />
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.tabButton}
+            onPress={() => router.push("/operator-profile" as any)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.iconContainer, activeRoute === "profile" && styles.activeIconContainer]}>
+              <Ionicons
+                name="person-outline"
+                size={22}
+                color={activeRoute === "profile" ? Colors.primary : Colors.secondary}
+              />
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* SideNav matching renter design */}
+        {menuVisible && (
+          <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+            <Pressable style={styles.backdrop} onPress={closeMenu} />
+            <Animated.View
+              style={[
+                styles.drawer,
+                {
+                  width: DRAWER_WIDTH,
+                  transform: [{ translateX: drawerTranslateX }],
+                },
+              ]}
+            >
+              <View style={styles.drawerHeader}>
+                <View>
+                  <Text style={styles.drawerTitle}>Ride4Rent Host</Text>
+                  <Text style={styles.drawerSubtitle}>
+                    {profile?.business_name || user?.first_name || "Operator"}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={closeMenu} style={styles.closeBtn}>
+                  <Ionicons name="close" size={22} color={Colors.dark} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.divider} />
+
+              <View style={styles.menuSection}>
+                <Text style={styles.sectionTitle}>Fleet Operations</Text>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => {
+                    closeMenu();
+                    router.push("/operator-vehicle-upload" as any);
+                  }}
+                >
+                  <Ionicons name="add-circle-outline" size={20} color={Colors.dark} />
+                  <Text style={styles.menuItemText}>List New Vehicle</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => {
+                    closeMenu();
+                    router.push("/operator-vehicles" as any);
+                  }}
+                >
+                  <Ionicons name="car-outline" size={20} color={Colors.dark} />
+                  <Text style={styles.menuItemText}>Manage Fleet Vehicles</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => {
+                    closeMenu();
+                    router.push("/operator-bookings" as any);
+                  }}
+                >
+                  <Ionicons name="clipboard-outline" size={20} color={Colors.dark} />
+                  <Text style={styles.menuItemText}>Rental Reservations</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.menuSection}>
+                <Text style={styles.sectionTitle}>Account & Settings</Text>
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => {
+                    closeMenu();
+                    router.push("/operator-profile" as any);
+                  }}
+                >
+                  <Ionicons name="person-outline" size={20} color={Colors.dark} />
+                  <Text style={styles.menuItemText}>Business Profile</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => {
+                    closeMenu();
+                    router.push("/settings" as any);
+                  }}
+                >
+                  <Ionicons name="settings-outline" size={20} color={Colors.dark} />
+                  <Text style={styles.menuItemText}>App Preferences</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => {
+                    closeMenu();
+                    router.push("/faq" as any);
+                  }}
+                >
+                  <Ionicons name="help-circle-outline" size={20} color={Colors.dark} />
+                  <Text style={styles.menuItemText}>FAQ & Support</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={{ flex: 1 }} />
+
+              <TouchableOpacity style={styles.logoutBtn} onPress={signOut} activeOpacity={0.8}>
+                <Ionicons name="log-out-outline" size={20} color={Colors.error} />
+                <Text style={styles.logoutText}>Sign Out</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          </View>
+        )}
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
-    backgroundColor: Colors.white,
     flex: 1,
+    backgroundColor: Colors.white,
   },
   container: {
     flex: 1,
   },
-  header: {
-    alignItems: "center",
-    borderBottomColor: Colors.border,
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
+  topHeader: {
+    backgroundColor: Colors.white,
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
   },
-  greeting: {
+  userRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  avatarCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: Colors.white,
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  avatarImg: {
+    width: "100%",
+    height: "100%",
+  },
+  userInfo: {
     flex: 1,
   },
-  greetingName: {
-    color: Colors.dark,
+  username: {
     fontFamily: FontFamily.bold,
-    fontSize: FontSize.title,
+    fontSize: 16,
+    color: Colors.dark,
   },
-  greetingMessage: {
-    color: Colors.secondary,
+  subtitle: {
     fontFamily: FontFamily.regular,
-    fontSize: 10,
-    marginTop: 2,
+    fontSize: 12,
+    color: Colors.secondary,
+    marginTop: 1,
   },
   actions: {
-    alignItems: "center",
     flexDirection: "row",
-    gap: Spacing.sm,
+    gap: 8,
   },
   actionButton: {
-    alignItems: "center",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: Colors.inputBackground,
-    borderRadius: 21,
-    height: 42,
     justifyContent: "center",
-    width: 42,
+    alignItems: "center",
   },
   content: {
     flex: 1,
   },
   bottomBar: {
-    alignItems: "center",
+    height: 60,
     backgroundColor: Colors.white,
-    borderTopColor: Colors.border,
-    borderTopWidth: 1,
-    elevation: 10,
     flexDirection: "row",
-    justifyContent: "space-around",
-    shadowColor: Colors.shadow,
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: -3 },
+    borderTopWidth: 1,
+    borderTopColor: Colors.divider,
+    paddingBottom: 2,
   },
   tabButton: {
-    alignItems: "center",
     flex: 1,
-    height: 70,
     justifyContent: "center",
+    alignItems: "center",
   },
   iconContainer: {
-    alignItems: "center",
-    borderTopColor: "transparent",
-    borderTopWidth: 3,
-    height: "100%",
+    width: 40,
+    height: 40,
     justifyContent: "center",
-    minWidth: 55,
+    alignItems: "center",
   },
   activeIconContainer: {
-    borderTopColor: Colors.primary,
-  },
-  modal: {
-    flex: 1,
+    transform: [{ scale: 1.1 }],
   },
   backdrop: {
-    backgroundColor: "rgba(0,0,0,0.42)",
-    flex: 1,
-  },
-  drawer: {
-    backgroundColor: Colors.white,
-    bottom: 0,
-    left: 0,
-    paddingHorizontal: Spacing.lg,
     position: "absolute",
     top: 0,
-    width: "82%",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "rgba(0,0,0,0.4)",
   },
-  drawerSafeArea: {
-    flex: 1,
+  drawer: {
+    position: "absolute",
+    right: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: Colors.white,
+    padding: Spacing.lg,
+    shadowColor: "#000",
+    shadowOffset: { width: -2, height: 0 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 10,
   },
   drawerHeader: {
-    alignItems: "center",
     flexDirection: "row",
-    paddingTop: Spacing.lg,
-  },
-  avatar: {
+    justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: Colors.logoBackground,
-    borderRadius: 25,
-    height: 50,
-    justifyContent: "center",
-    width: 50,
+    marginTop: Spacing.sm,
   },
-  identity: {
-    flex: 1,
-    marginLeft: Spacing.md,
-  },
-  drawerName: {
+  drawerTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 18,
     color: Colors.dark,
-    fontFamily: FontFamily.semiBold,
-    fontSize: FontSize.body,
   },
-  drawerEmail: {
-    color: Colors.secondary,
+  drawerSubtitle: {
     fontFamily: FontFamily.regular,
     fontSize: 12,
-    marginTop: 3,
+    color: Colors.secondary,
+    marginTop: 2,
+  },
+  closeBtn: {
+    padding: 4,
   },
   divider: {
-    backgroundColor: Colors.border,
     height: 1,
-    marginVertical: Spacing.lg,
+    backgroundColor: Colors.divider,
+    marginVertical: Spacing.md,
   },
-  section: {
+  menuSection: {
+    marginBottom: Spacing.lg,
+  },
+  sectionTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 11,
     color: Colors.secondary,
-    fontFamily: FontFamily.semiBold,
-    fontSize: 12,
-    marginBottom: Spacing.sm,
-    marginTop: Spacing.md,
     textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 8,
   },
-  drawerItem: {
-    alignItems: "center",
+  menuItem: {
     flexDirection: "row",
-    paddingVertical: Spacing.md,
+    alignItems: "center",
+    paddingVertical: 10,
+    gap: 12,
   },
-  drawerItemText: {
-    color: Colors.dark,
-    flex: 1,
+  menuItemText: {
     fontFamily: FontFamily.medium,
-    fontSize: FontSize.body,
-    marginLeft: Spacing.md,
+    fontSize: 14,
+    color: Colors.dark,
   },
-  logout: {
-    alignItems: "center",
-    backgroundColor: Colors.dark,
-    borderRadius: 12,
+  logoutBtn: {
     flexDirection: "row",
-    justifyContent: "center",
-    marginTop: "auto",
-    padding: Spacing.md,
+    alignItems: "center",
+    paddingVertical: 12,
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: Colors.divider,
   },
   logoutText: {
-    color: Colors.white,
-    fontFamily: FontFamily.semiBold,
-    marginLeft: Spacing.sm,
+    fontFamily: FontFamily.bold,
+    fontSize: 14,
+    color: Colors.error,
   },
 });

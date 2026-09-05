@@ -2,7 +2,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 
 import {
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -13,6 +12,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import PrimaryButton from "@/components/common/PrimaryButton";
 import { Colors } from "@/constants/colors";
@@ -22,6 +22,7 @@ import {
   Radius,
   Spacing,
 } from "@/constants/theme";
+import { useAppToast } from "@/context/ToastContext";
 import RegistrationHeader from "./RegistrationHeader";
 
 type OperatorOwnerInfoProps = {
@@ -52,6 +53,7 @@ export default function OperatorOwnerInfo({
   onCancel,
   onContinue,
 }: OperatorOwnerInfoProps) {
+  const { showModal } = useAppToast();
   const [firstName, setFirstName] = useState(
     initialData?.firstName ?? ""
   );
@@ -155,9 +157,11 @@ export default function OperatorOwnerInfo({
       gender;
 
     if (!hasAnyData) {
-      Alert.alert(
+      showModal(
         "Information Required",
-        "Please fill in your information before continuing."
+        "Please fill in your information before continuing.",
+        [{ text: "OK" }],
+        "warning"
       );
       return;
     }
@@ -207,7 +211,7 @@ export default function OperatorOwnerInfo({
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
       <RegistrationHeader
         currentStep={2}
         totalSteps={4}
@@ -348,7 +352,7 @@ export default function OperatorOwnerInfo({
           clearError("gender");
         }}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -734,6 +738,11 @@ function GenderPickerModal({
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: Colors.white,
+  },
+
   container: {
     flex: 1,
     backgroundColor: Colors.white,
@@ -749,7 +758,8 @@ const styles = StyleSheet.create({
   },
 
   scrollContent: {
-    paddingTop: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.xs,
     paddingBottom: 140,
   },
 

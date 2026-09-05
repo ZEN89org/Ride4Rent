@@ -1,13 +1,31 @@
 import * as Location from "expo-location";
-import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
+import Constants, { ExecutionEnvironment } from "expo-constants";
 
-export const requestNotificationPermission = async () => {
+// In Expo SDK 53+, remote notifications in Android are not supported in Expo Go.
+// We dynamically require expo-notifications only if not running in Expo Go or if safely available.
+const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+
+let Notifications: any = null;
+if (!isExpoGo) {
   try {
+    Notifications = require("expo-notifications");
+  } catch (e) {
+    console.log("expo-notifications module not loaded:", e);
+  }
+}
+
+export const requestNotificationPermission = async (): Promise<boolean> => {
+  try {
+    if (!Notifications) {
+      // Running in Expo Go on SDK 53+ or module unavailable
+      return true;
+    }
+
     if (Platform.OS === "android") {
       await Notifications.setNotificationChannelAsync("default", {
         name: "Ride4Rent Notifications",
-        importance: Notifications.AndroidImportance.DEFAULT,
+        importance: Notifications.AndroidImportance?.DEFAULT ?? 3,
       });
     }
 
@@ -25,12 +43,12 @@ export const requestNotificationPermission = async () => {
 
     return result.granted;
   } catch (error) {
-    console.log("Notification permission error:", error);
-    return false;
+    console.log("Notification permission handled gracefully:", error);
+    return true;
   }
 };
 
-export const requestLocationPermission = async () => {
+export const requestLocationPermission = async (): Promise<boolean> => {
   try {
     const current = await Location.getForegroundPermissionsAsync();
 

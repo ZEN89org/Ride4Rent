@@ -1,15 +1,43 @@
+export interface VehicleImageItem {
+  id: number;
+  image_url: string;
+  is_cover: boolean;
+  sort_order: number;
+}
+
 export interface Vehicle {
   id: number;
   name: string;
+  model?: string;
+  year_model?: number | string;
+  plate_number?: string;
+  brand?: string;
   vehicle_type: string;
+  body_type?: string;
   transmission: string | null;
+  fuel_type?: string;
   seats: number | null;
+  number_of_doors?: number | null;
+  mileage?: number | null;
+  interior_color?: string | null;
+  exterior_color?: string | null;
   price_per_day: number;
-  location: string;
+  reservation_fee?: number;
+  rating?: number;
+  rating_count?: number;
+  distance_km?: number;
+  quantity?: number;
+  available_units?: number;
+  pickup_address?: string;
+  location?: string;
   description: string | null;
   image_url: string | null;
+  images?: VehicleImageItem[];
   is_available: boolean;
+  availability_status?: string;
   operator?: {
+    id?: number;
+    name?: string;
     business_name: string | null;
   };
 }
@@ -21,6 +49,7 @@ export interface VehicleFormData {
   plate_number: string;
   vehicle_type_id: string;
   brand_id: string;
+  custom_brand?: string;
   body_type_id: string;
   transmission_type_id: string;
   fuel_type_id: string;
@@ -45,5 +74,6 @@ export interface VehicleFormData {
   pickup_latitude: string;
   pickup_longitude: string;
   description: string;
-  imageUri: string;
+  imageUri?: string;
+  imageUris?: string[];
 }

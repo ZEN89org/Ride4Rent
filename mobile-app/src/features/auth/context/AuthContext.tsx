@@ -27,6 +27,7 @@ interface AuthContextType {
   isOperatorRejected: boolean;
   login: (user: any, token: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateUser: (user: any) => Promise<void>;
 }
 
 export const AuthContext =
@@ -143,6 +144,12 @@ const initializeAuth = async () => {
     setToken(null);
   };
 
+  const updateUser = async (updatedUserData: any) => {
+    const mergedUser = { ...user, ...updatedUserData };
+    await saveUser(mergedUser);
+    setUser(mergedUser);
+  };
+
   const isAuthenticated = !!token;
   const isGuest = !token;
 
@@ -181,6 +188,7 @@ const initializeAuth = async () => {
         isOperatorRejected,
         login,
         logout,
+        updateUser,
       }}
     >
       {children}

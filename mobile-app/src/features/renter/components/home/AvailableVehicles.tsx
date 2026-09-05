@@ -26,45 +26,32 @@ import {
 } from "@/features/operator/services/vehicleService";
 import { Vehicle as ApiVehicle } from "@/features/operator/types/vehicle";
 
-const fallbackVehicles = [
-  {
-    id: "1",
-    name: "Toyota Vios",
-    image: require("../../../../../assets/img/car1.png"),
-    pricePerDay: 1500,
-    rating: 4.8,
-    ratingCount: 27,
-  },
-  {
-    id: "2",
-    name: "Honda City",
-    image: require("../../../../../assets/img/car2.png"),
-    pricePerDay: 1800,
-    rating: 4.7,
-    ratingCount: 20,
-  },
-  {
-    id: "3",
-    name: "Mitsubishi Xpander",
-    image: require("../../../../../assets/img/car3.png"),
-    pricePerDay: 2500,
-    rating: 4.9,
-    ratingCount: 15,
-  },
-];
+import { router } from "expo-router";
+import { useFavorites } from "@/context/FavoritesContext";
 
-export default function AvailableVehicles() {
+import { VehicleCardSkeleton } from "@/components/common/Skeleton";
+
+interface AvailableVehiclesProps {
+  searchQuery?: string;
+}
+
+export default function AvailableVehicles({ searchQuery = "" }: AvailableVehiclesProps) {
   const { isGuest } = useAuth();
+  const { isFavorite, toggleFavorite } = useFavorites();
 
   const [showAuthSheet, setShowAuthSheet] = useState(false);
-  const [favorites, setFavorites] = useState<string[]>([]);
-  const [vehicles, setVehicles] = useState<any[]>(fallbackVehicles);
+  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [isShowingFallbackAll, setIsShowingFallbackAll] = useState(false);
 
   useEffect(() => {
     let mounted = true;
+    setLoading(true);
 
     const loadVehicles = async () => {
       let availableVehicles: ApiVehicle[] = [];
+      let usedFallback = false;
 
       try {
         const permission = await Location.requestForegroundPermissionsAsync();
@@ -73,12 +60,25 @@ export default function AvailableVehicles() {
           availableVehicles = await getNearbyVehicles(
             location.coords.latitude,
             location.coords.longitude,
+            25
           );
+
+          // If no vehicles found strictly nearby, smoothly fallback to all available vehicles
+          if (availableVehicles.length === 0) {
+            availableVehicles = await getAvailableVehicles();
+            usedFallback = true;
+          }
         } else {
           availableVehicles = await getAvailableVehicles();
+          usedFallback = true;
         }
       } catch {
         availableVehicles = await getAvailableVehicles();
+        usedFallback = true;
+      }
+
+      if (mounted) {
+        setIsShowingFallbackAll(usedFallback && availableVehicles.length > 0);
       }
 
       return availableVehicles;
@@ -86,20 +86,29 @@ export default function AvailableVehicles() {
 
     loadVehicles()
       .then((apiVehicles: ApiVehicle[]) => {
-        if (!mounted || apiVehicles.length === 0) {
+        if (!mounted) {
           return;
         }
 
         setVehicles(apiVehicles.map((vehicle) => ({
           id: String(vehicle.id),
           name: vehicle.name,
-          image: vehicle.image_url ? { uri: vehicle.image_url } : require("../../../../../assets/img/car1.png"),
-          pricePerDay: vehicle.price_per_day,
-          rating: 0,
-          ratingCount: 0,
+          image: vehicle.image_url
+            ? { uri: vehicle.image_url }
+            : { uri: "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=60" },
+          pricePerDay: Number(vehicle.price_per_day),
+          rating: Number(vehicle.rating || 5.0),
+          ratingCount: Number(vehicle.rating_count || 0),
+          distance_km: vehicle.distance_km,
+          seats: vehicle.seats,
+          transmission: vehicle.transmission,
+          available_units: vehicle.available_units,
         })));
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
 
     return () => {
       mounted = false;
@@ -107,11 +116,11 @@ export default function AvailableVehicles() {
   }, []);
 
   const handleViewMore = () => {
-    // Future vehicle listing screen
+    router.push("/(tabs)/search");
   };
 
   const handleViewVehicle = (vehicle: any) => {
-    // Future vehicle details screen
+    router.push(`/vehicles/${vehicle.id}` as any);
   };
 
   const handleFavoriteVehicle = (vehicle: any) => {
@@ -120,19 +129,14 @@ export default function AvailableVehicles() {
       return;
     }
 
-    setFavorites((currentFavorites) => {
-      if (currentFavorites.includes(vehicle.id)) {
-        return currentFavorites.filter(
-          (id) => id !== vehicle.id
-        );
-      }
-
-      return [
-        ...currentFavorites,
-        vehicle.id,
-      ];
-    });
+    toggleFavorite(vehicle.id);
   };
+
+  const displayedVehicles = searchQuery.trim()
+    ? vehicles.filter((v) =>
+        v.name.toLowerCase().includes(searchQuery.trim().toLowerCase())
+      )
+    : vehicles;
 
   return (
     <>
@@ -140,9 +144,20 @@ export default function AvailableVehicles() {
 
         <View style={styles.sectionHeader}>
 
-          <Text style={styles.title}>
-            Available Vehicles Near You
-          </Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>
+              {searchQuery.trim()
+                ? `Search Results (${displayedVehicles.length})`
+                : isShowingFallbackAll
+                ? "Available Vehicles in Region"
+                : "Available Vehicles Near You"}
+            </Text>
+            {isShowingFallbackAll && !searchQuery.trim() ? (
+              <Text style={styles.subtitleHint}>
+                No vehicles within 25km of your exact spot — showing top listings across Oriental Mindoro
+              </Text>
+            ) : null}
+          </View>
 
           <TouchableOpacity
             style={styles.viewMoreButton}
@@ -166,25 +181,43 @@ export default function AvailableVehicles() {
 
           <View style={styles.topShadow} />
 
-          <FlatList
-            data={vehicles}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.list}
-            snapToAlignment="center"
-            snapToInterval={300 + Spacing.md}
-            decelerationRate="fast"
-            disableIntervalMomentum
-            renderItem={({ item }) => (
-              <VehicleCard
-                vehicle={item}
-                isFavorite={favorites.includes(item.id)}
-                onViewPress={handleViewVehicle}
-                onFavoritePress={handleFavoriteVehicle}
-              />
-            )}
-          />
+          {loading ? (
+            <View style={{ flexDirection: "row", paddingHorizontal: Spacing.lg, gap: Spacing.md }}>
+              <VehicleCardSkeleton width={270} height={190} />
+              <VehicleCardSkeleton width={270} height={190} />
+            </View>
+          ) : displayedVehicles.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <MaterialCommunityIcons name="car-off" size={32} color={Colors.secondary} />
+              <Text style={styles.emptyTitle}>No Vehicles Available Currently</Text>
+              <Text style={styles.emptyText}>
+                Check back soon or explore different search filters.
+              </Text>
+              <TouchableOpacity style={styles.exploreBtn} onPress={handleViewMore}>
+                <Text style={styles.exploreBtnText}>Browse Full Catalog</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <FlatList
+              data={displayedVehicles}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.list}
+              snapToAlignment="center"
+              snapToInterval={270 + Spacing.md}
+              decelerationRate="fast"
+              disableIntervalMomentum
+              renderItem={({ item }) => (
+                <VehicleCard
+                  vehicle={item}
+                  isFavorite={isFavorite(item.id)}
+                  onViewPress={handleViewVehicle}
+                  onFavoritePress={handleFavoriteVehicle}
+                />
+              )}
+            />
+          )}
 
           <View style={styles.bottomShadow} />
 
@@ -282,4 +315,49 @@ const styles = StyleSheet.create({
 
     elevation: 4,
   },
+
+  subtitleHint: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11,
+    color: Colors.secondary,
+    marginTop: 2,
+    lineHeight: 15,
+  },
+
+  emptyContainer: {
+    paddingVertical: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+
+  emptyTitle: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: FontSize.body,
+    color: Colors.dark,
+    marginTop: Spacing.xs,
+  },
+
+  emptyText: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.small,
+    color: Colors.secondary,
+    textAlign: "center",
+  },
+
+  exploreBtn: {
+    marginTop: Spacing.sm,
+    backgroundColor: Colors.logoBackground,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+
+  exploreBtnText: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 12,
+    color: Colors.primary,
+  },
 });
+

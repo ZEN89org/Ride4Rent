@@ -32,6 +32,8 @@ export interface OperatorRegisterData {
   account_number?: string;
   qr_code?: string;
 
+  otp?: string;
+
   password: string;
   password_confirmation: string;
 }

@@ -19,12 +19,23 @@ class UserResource extends JsonResource
 
             'email' => $this->email,
             'mobile_number' => $this->mobile_number,
+            'profile_photo' => $this->profile_photo
+                ? $request->getSchemeAndHttpHost().'/storage/'.$this->profile_photo
+                : null,
+            'drivers_license_front' => $this->drivers_license_front
+                ? $request->getSchemeAndHttpHost().'/storage/'.$this->drivers_license_front
+                : null,
+            'drivers_license_back' => $this->drivers_license_back
+                ? $request->getSchemeAndHttpHost().'/storage/'.$this->drivers_license_back
+                : null,
+            'is_drivers_license_verified' => (bool) $this->is_drivers_license_verified,
 
             'date_of_birth' => $this->date_of_birth,
             'sex' => $this->sex,
 
             'role' => $this->role,
             'account_status' => $this->account_status,
+            'operator_profile' => $this->operatorProfile,
 
             'email_verified_at' => $this->email_verified_at,
 

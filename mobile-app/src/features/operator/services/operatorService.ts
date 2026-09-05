@@ -23,6 +23,9 @@ export const registerOperator = async (
     "password_confirmation",
     data.password_confirmation
   );
+  if (data.otp) {
+    formData.append("otp", data.otp);
+  }
 
   formData.append("business_name", data.business_name);
   formData.append("business_email", data.business_email);

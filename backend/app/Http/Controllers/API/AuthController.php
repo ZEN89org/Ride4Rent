@@ -6,9 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Http\Resources\UserResource;
+use App\Mail\PasswordResetOtpMail;
+use App\Mail\VerificationOtpMail;
+use App\Models\EmailVerificationOtp;
+use App\Models\User;
 use App\Services\AuthService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class AuthController extends Controller
 {
@@ -16,9 +23,196 @@ class AuthController extends Controller
         private AuthService $authService
     ) {}
 
+    public function sendOtp(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => ['required', 'email'],
+        ]);
+
+        $email = strtolower(trim($validated['email']));
+
+        // Check if email already registered
+        if (User::where('email', $email)->exists()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This email is already registered. Please sign in instead.',
+            ], 422);
+        }
+
+        // Generate secure 6-digit numeric OTP
+        $otp = (string) random_int(100000, 999999);
+
+        // Invalidate old unexpired OTPs for this email
+        EmailVerificationOtp::where('email', $email)->delete();
+
+        // Store OTP with 10-minute expiry
+        EmailVerificationOtp::create([
+            'email' => $email,
+            'otp' => $otp,
+            'expires_at' => now()->addMinutes(10),
+            'is_used' => false,
+        ]);
+
+        // Dispatch Email
+        try {
+            Mail::to($email)->send(new VerificationOtpMail($otp));
+        } catch (\Exception $e) {
+            Log::error("Failed to send OTP mail to {$email}: " . $e->getMessage());
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "A 6-digit verification code has been sent to {$email}.",
+            // For convenience in local testing if mail driver is log
+            'dev_otp' => app()->environment('local') ? $otp : null,
+        ]);
+    }
+
+    public function forgotPassword(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => ['required', 'email'],
+        ]);
+
+        $email = strtolower(trim($validated['email']));
+        $user = User::where('email', $email)->first();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'We could not find an account registered with that email address.',
+            ], 404);
+        }
+
+        // Generate secure 6-digit numeric OTP
+        $otp = (string) random_int(100000, 999999);
+
+        // Invalidate old unexpired OTPs for this email
+        EmailVerificationOtp::where('email', $email)->delete();
+
+        // Store OTP with 10-minute expiry
+        EmailVerificationOtp::create([
+            'email' => $email,
+            'otp' => $otp,
+            'expires_at' => now()->addMinutes(10),
+            'is_used' => false,
+        ]);
+
+        // Dispatch Password Reset Email
+        try {
+            Mail::to($email)->send(new PasswordResetOtpMail($otp));
+        } catch (\Exception $e) {
+            Log::error("Failed to send password reset OTP to {$email}: " . $e->getMessage());
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "A 6-digit password reset code has been sent to {$email}.",
+            'dev_otp' => app()->environment('local') ? $otp : null,
+        ]);
+    }
+
+    public function resetPassword(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => ['required', 'email'],
+            'otp' => ['required', 'string', 'size:6'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $email = strtolower(trim($validated['email']));
+        $otp = trim($validated['otp']);
+
+        $record = EmailVerificationOtp::where('email', $email)
+            ->where('otp', $otp)
+            ->where('is_used', false)
+            ->where('expires_at', '>', now())
+            ->latest()
+            ->first();
+
+        if (!$record) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid or expired reset code. Please check your Gmail or request a new code.',
+            ], 422);
+        }
+
+        $user = User::where('email', $email)->first();
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User account not found.',
+            ], 404);
+        }
+
+        // Update password
+        $user->password = Hash::make($validated['password']);
+        $user->save();
+
+        // Mark OTP as used
+        $record->update(['is_used' => true]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Password reset successfully. You can now log in with your new password.',
+        ]);
+    }
+
+    public function verifyOtp(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => ['required', 'email'],
+            'otp' => ['required', 'string', 'size:6'],
+        ]);
+
+        $email = strtolower(trim($validated['email']));
+        $otp = trim($validated['otp']);
+
+        $record = EmailVerificationOtp::where('email', $email)
+            ->where('otp', $otp)
+            ->where('is_used', false)
+            ->where('expires_at', '>', now())
+            ->latest()
+            ->first();
+
+        if (!$record) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid or expired confirmation code. Please check your Gmail or request a new code.',
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Gmail verified successfully.',
+        ]);
+    }
+
     public function register(RegisterRequest $request): JsonResponse
     {
-        $result = $this->authService->register($request->validated());
+        $validated = $request->validated();
+        $email = strtolower(trim($validated['email']));
+        $otp = $request->input('otp');
+
+        if ($otp) {
+            $record = EmailVerificationOtp::where('email', $email)
+                ->where('otp', $otp)
+                ->where('is_used', false)
+                ->where('expires_at', '>', now())
+                ->latest()
+                ->first();
+
+            if (!$record) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid or expired verification code.',
+                ], 422);
+            }
+
+            $record->update(['is_used' => true]);
+        }
+
+        $result = $this->authService->register($validated);
 
         return response()->json([
             'success' => true,
@@ -32,7 +226,6 @@ class AuthController extends Controller
 
     public function registerOperator(Request $request): JsonResponse
     {
-
         if ($request->has('accepted_payment_methods')) {
             $request->merge([
                 'accepted_payment_methods' => json_decode(
@@ -85,17 +278,25 @@ class AuthController extends Controller
                 'mimes:jpg,jpeg,png',
                 'max:5120',
             ],
-            'dti_sec_registration' => ['nullable', 'string'],
 
+            'dti_sec_registration' => ['nullable', 'string', 'max:100'],
             'accepted_payment_methods' => ['nullable', 'array'],
-            'accepted_payment_methods.*' => ['string'],
-
-            'account_name' => ['nullable', 'string', 'max:255'],
-            'account_number' => ['nullable', 'string', 'max:100'],
-            'qr_code' => ['nullable', 'string'],
-
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
+
+        $otp = $request->input('otp');
+        if ($otp) {
+            $record = EmailVerificationOtp::where('email', strtolower(trim($validated['email'])))
+                ->where('otp', $otp)
+                ->where('is_used', false)
+                ->where('expires_at', '>', now())
+                ->latest()
+                ->first();
+
+            if ($record) {
+                $record->update(['is_used' => true]);
+            }
+        }
 
         $result = $this->authService->registerOperator($validated);
 

@@ -5,11 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\BodyType;
 use App\Models\FuelType;
 use App\Models\TransmissionType;
 use App\Models\VehicleBrand;
+use App\Models\VehicleImage;
 use App\Models\VehicleType;
 
 #[Fillable([
@@ -24,6 +26,8 @@ use App\Models\VehicleType;
     'transmission_type_id',
     'fuel_type_id',
     'seating_capacity',
+    'quantity',
+    'available_units',
     'number_of_doors',
     'mileage',
     'interior_color',
@@ -33,6 +37,8 @@ use App\Models\VehicleType;
     'available_until',
     'daily_rate',
     'reservation_fee',
+    'rating',
+    'rating_count',
     'description',
     'cover_photo',
     'min_driver_age',
@@ -72,4 +78,9 @@ class Vehicle extends Model
     public function bodyType(): BelongsTo { return $this->belongsTo(BodyType::class); }
     public function transmissionType(): BelongsTo { return $this->belongsTo(TransmissionType::class); }
     public function fuelType(): BelongsTo { return $this->belongsTo(FuelType::class); }
+
+    public function images(): HasMany
+    {
+        return $this->hasMany(VehicleImage::class)->orderBy('sort_order');
+    }
 }

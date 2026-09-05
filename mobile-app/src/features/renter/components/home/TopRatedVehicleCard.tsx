@@ -1,19 +1,18 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import {
-    ImageSourcePropType,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-    useWindowDimensions,
+  ImageSourcePropType,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 import { Colors } from "@/constants/colors";
 import {
-    FontFamily,
-    FontSize,
-    Spacing,
+  FontFamily,
+  FontSize,
+  Spacing,
 } from "@/constants/theme";
 
 export interface TopRatedVehicle {
@@ -33,18 +32,11 @@ export default function TopRatedVehicleCard({
   vehicle,
   onViewPress,
 }: Props) {
-  const { width } = useWindowDimensions();
-
-  const cardWidth = width - Spacing.lg * 2;
-
   return (
-    <View
-      style={[
-        styles.card,
-        {
-          width: cardWidth,
-        },
-      ]}
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => onViewPress?.(vehicle)}
+      activeOpacity={0.88}
     >
       <View style={styles.imageContainer}>
         <Image
@@ -52,124 +44,106 @@ export default function TopRatedVehicleCard({
           contentFit="cover"
           style={styles.image}
         />
+        <View style={styles.ratingBadge}>
+          <Ionicons name="star" size={11} color={Colors.primary} />
+          <Text style={styles.ratingText}>{vehicle.rating.toFixed(1)}</Text>
+        </View>
       </View>
 
       <View style={styles.details}>
-        <Text style={styles.price}>
-          PHP {vehicle.price.toLocaleString()} | day
-        </Text>
-
-        <Text
-          style={styles.name}
-          numberOfLines={1}
-        >
+        <Text style={styles.name} numberOfLines={1}>
           {vehicle.name}
         </Text>
 
-        <View style={styles.ratingRow}>
-          <Ionicons
-            name="star"
-            size={15}
-            color={Colors.primary}
-          />
-
-          <Text style={styles.rating}>
-            {vehicle.rating.toFixed(1)}
+        <View style={styles.bottomRow}>
+          <Text style={styles.price}>
+            ₱{vehicle.price.toLocaleString()}
+            <Text style={styles.period}>/day</Text>
           </Text>
 
-          <Text style={styles.ratingCount}>
-            (27)
-          </Text>
+          <View style={styles.viewPill}>
+            <Text style={styles.viewText}>View</Text>
+            <Ionicons name="chevron-forward" size={12} color={Colors.dark} />
+          </View>
         </View>
-
-        <TouchableOpacity
-          style={styles.viewButton}
-          activeOpacity={0.8}
-          onPress={() => onViewPress?.(vehicle)}
-        >
-          <Text style={styles.viewButtonText}>
-            View
-          </Text>
-        </TouchableOpacity>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    aspectRatio: 2 / 1,
-    flexDirection: "row",
-    overflow: "hidden",
+    width: 220,
     backgroundColor: Colors.white,
-    marginTop: -5,
-  },
-
-  imageContainer: {
-    width: "55%",
-    height: "80%",
-    borderRadius: 20,
+    borderRadius: 16,
     overflow: "hidden",
-    marginTop: 15,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: Spacing.xs,
   },
-
+  imageContainer: {
+    width: "100%",
+    height: 110,
+    backgroundColor: Colors.inputBackground,
+    position: "relative",
+  },
   image: {
     width: "100%",
     height: "100%",
   },
-
-  details: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "flex-end",
-    paddingHorizontal: Spacing.md,
-  },
-
-  price: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.body,
-    color: Colors.dark,
-  },
-
-  name: {
-    marginTop: 2,
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.body,
-    color: Colors.dark,
-  },
-
-  ratingRow: {
+  ratingBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 3,
+    gap: 3,
+    backgroundColor: "rgba(26,26,26,0.7)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
   },
-
-  rating: {
-    marginLeft: 4,
+  ratingText: {
     fontFamily: FontFamily.semiBold,
+    fontSize: 10,
+    color: Colors.white,
+  },
+  details: {
+    padding: 10,
+  },
+  name: {
+    fontFamily: FontFamily.bold,
+    fontSize: 14,
+    color: Colors.dark,
+  },
+  bottomRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 6,
+  },
+  price: {
+    fontFamily: FontFamily.bold,
     fontSize: 13,
     color: Colors.dark,
   },
-
-  ratingCount: {
-    marginLeft: 3,
+  period: {
     fontFamily: FontFamily.regular,
-    fontSize: 12,
-    color: Colors.dark,
+    fontSize: 10,
+    color: Colors.secondary,
   },
-
-  viewButton: {
-    marginTop: 5,
-    paddingVertical: 4,
-    paddingHorizontal: 17,
-    borderRadius: 30,
-    borderWidth: 1.5,
-    borderColor: Colors.dark,
+  viewPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.inputBackground,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    gap: 2,
   },
-
-  viewButtonText: {
-    fontFamily: FontFamily.regular,
-    fontSize: 12,
+  viewText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 11,
     color: Colors.dark,
   },
 });

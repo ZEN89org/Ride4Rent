@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 import {
-    Alert,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -12,9 +11,11 @@ import {
     TextInput,
     View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppFooter from "@/components/common/AppFooter";
 import PrimaryButton from "@/components/common/PrimaryButton";
+import { useAppToast } from "@/context/ToastContext";
 import { Colors } from "@/constants/colors";
 import {
     FontFamily,
@@ -22,7 +23,8 @@ import {
     Radius,
     Spacing,
 } from "@/constants/theme";
-import { register } from "@/features/auth/services/authService";
+import { register, sendVerificationOtp } from "@/features/auth/services/authService";
+import OtpVerificationModal from "@/features/auth/components/OtpVerificationModal";
 import RegistrationHeader from "./RegistrationHeader";
 
 type RenterRegistrationFormProps = {
@@ -54,6 +56,7 @@ export default function RenterRegistrationForm({
   onCancel,
   onSuccess,
 }: RenterRegistrationFormProps) {
+  const { showModal } = useAppToast();
   const [firstName, setFirstName] = useState("");
   const [middleName, setMiddleName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -76,6 +79,7 @@ export default function RenterRegistrationForm({
 
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showOtpModal, setShowOtpModal] = useState(false);
 
   const [dateMonth, setDateMonth] = useState("");
   const [dateDay, setDateDay] = useState("");
@@ -150,7 +154,7 @@ export default function RenterRegistrationForm({
     if (requiredFieldsAreEmpty) {
       setErrors({});
 
-      Alert.alert(
+      showModal(
         "Incomplete Information",
         "Please complete all required fields.",
         [
@@ -158,7 +162,8 @@ export default function RenterRegistrationForm({
             text: "OK",
             style: "default",
           },
-        ]
+        ],
+        "warning"
       );
 
       return;
@@ -233,61 +238,66 @@ export default function RenterRegistrationForm({
 
     try {
       setLoading(true);
+      await sendVerificationOtp(email.trim().toLowerCase());
+      setShowOtpModal(true);
+    } catch (error: any) {
+      console.log("Send OTP Error:", error.message, error.response?.data);
+      const backendErrors = error.response?.data?.errors;
+      if (backendErrors?.email) {
+        setErrors({ email: backendErrors.email[0] });
+      } else if (error.response?.data?.message) {
+        showModal("Notice", error.response.data.message, [{ text: "OK" }], "error");
+      } else if (error.message === "Network Error") {
+        showModal(
+          "Connection Error",
+          "Could not reach backend server. Please verify php artisan serve --host=0.0.0.0 is running.",
+          [{ text: "OK" }],
+          "error"
+        );
+      } else {
+        showModal("Notice", error.message || "Unable to send verification code to this Gmail address.", [{ text: "OK" }], "error");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  const handleVerifiedOtp = async (otpCode: string) => {
+    setShowOtpModal(false);
+    try {
+      setLoading(true);
       await register({
         first_name: firstName.trim(),
-        middle_name: middleName.trim(),
+        middle_name: middleName.trim() || undefined,
         last_name: lastName.trim(),
-        suffix: suffix.trim(),
-        date_of_birth: formatDate(),
+        suffix: suffix.trim() || undefined,
+        date_of_birth: `${dateYear}-${dateMonth}-${dateDay}`,
         sex: gender,
         email: email.trim().toLowerCase(),
         mobile_number: mobileNumber.trim(),
         password,
         password_confirmation: confirmPassword,
+        otp: otpCode,
       });
 
       onSuccess();
     } catch (error: any) {
-      const backendErrors =
-        error.response?.data?.errors;
+      console.log("Registration Error:", error.message, error.response?.data);
+      const backendErrors = error.response?.data?.errors;
 
       if (backendErrors) {
         const mappedErrors: FormErrors = {};
 
-        if (backendErrors.last_name) {
-          mappedErrors.lastName =
-            backendErrors.last_name[0];
-        }
-
-        if (backendErrors.first_name) {
-          mappedErrors.firstName =
-            backendErrors.first_name[0];
-        }
-
-        if (backendErrors.date_of_birth) {
-          mappedErrors.dateOfBirth =
-            backendErrors.date_of_birth[0];
-        }
-
-        if (backendErrors.sex) {
-          mappedErrors.gender =
-            backendErrors.sex[0];
-        }
-
         if (backendErrors.email) {
-          mappedErrors.email =
-            backendErrors.email[0];
+          mappedErrors.email = backendErrors.email[0];
         }
 
         if (backendErrors.mobile_number) {
-          mappedErrors.mobileNumber =
-            backendErrors.mobile_number[0];
+          mappedErrors.mobileNumber = backendErrors.mobile_number[0];
         }
 
         if (backendErrors.password) {
-          mappedErrors.password =
-            backendErrors.password[0];
+          mappedErrors.password = backendErrors.password[0];
         }
 
         if (backendErrors.password_confirmation) {
@@ -297,14 +307,18 @@ export default function RenterRegistrationForm({
 
         setErrors(mappedErrors);
       } else if (error.response?.data?.message) {
-        Alert.alert(
+        showModal(
           "Registration Failed",
-          error.response.data.message
+          error.response.data.message,
+          [{ text: "OK" }],
+          "error"
         );
       } else {
-        Alert.alert(
+        showModal(
           "Registration Failed",
-          "Registration failed. Please try again."
+          "Registration failed. Please try again.",
+          [{ text: "OK" }],
+          "error"
         );
       }
     } finally {
@@ -313,21 +327,22 @@ export default function RenterRegistrationForm({
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.keyboardContainer}
-      behavior={
-        Platform.OS === "ios"
-          ? "padding"
-          : "height"
-      }
-    >
-      <View style={styles.container}>
-        <RegistrationHeader
-          currentStep={2}
-          totalSteps={2}
-          onBack={onBack}
-          onCancel={onCancel}
-        />
+    <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
+      <KeyboardAvoidingView
+        style={styles.keyboardContainer}
+        behavior={
+          Platform.OS === "ios"
+            ? "padding"
+            : "height"
+        }
+      >
+        <View style={styles.container}>
+          <RegistrationHeader
+            currentStep={2}
+            totalSteps={2}
+            onBack={onBack}
+            onCancel={onCancel}
+          />
 
         <ScrollView
           style={styles.scroll}
@@ -603,7 +618,15 @@ export default function RenterRegistrationForm({
           clearError("gender");
         }}
       />
+
+      <OtpVerificationModal
+        visible={showOtpModal}
+        email={email.trim().toLowerCase()}
+        onClose={() => setShowOtpModal(false)}
+        onVerified={handleVerifiedOtp}
+      />
     </KeyboardAvoidingView>
+  </SafeAreaView>
   );
 }
 
@@ -971,6 +994,11 @@ function GenderPickerModal({
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: Colors.white,
+  },
+
   keyboardContainer: {
     flex: 1,
     backgroundColor: Colors.white,

@@ -13,6 +13,9 @@ import {
   View,
 } from "react-native";
 
+import { useEffect } from "react";
+import { router } from "expo-router";
+
 function TabsContent() {
   const {
     isVisible,
@@ -22,7 +25,24 @@ function TabsContent() {
   const {
     user,
     isGuest,
+    loading,
   } = useAuth();
+
+  useEffect(() => {
+    if (!loading && user?.role === "operator") {
+      if (user.account_status === "pending") {
+        router.replace("/operator-pending");
+      } else if (user.account_status === "rejected") {
+        router.replace("/operator-rejected");
+      } else {
+        router.replace("/operator-home");
+      }
+    }
+  }, [user, loading]);
+
+  if (!loading && user?.role === "operator") {
+    return null;
+  }
 
   const appTranslateX =
     animation.interpolate({

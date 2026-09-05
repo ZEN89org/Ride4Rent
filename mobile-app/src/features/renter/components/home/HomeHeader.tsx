@@ -26,6 +26,7 @@ interface Props {
   isGuest: boolean;
   search: string;
   onSearchChange: (value: string) => void;
+  onSearchSubmit?: () => void;
   onNotificationPress: () => void;
   onMenuPress: () => void;
 }
@@ -35,6 +36,7 @@ export default function HomeHeader({
   isGuest,
   search,
   onSearchChange,
+  onSearchSubmit,
   onNotificationPress,
   onMenuPress,
 }: Props) {
@@ -54,13 +56,10 @@ export default function HomeHeader({
             />
           ) : (
             <View style={styles.defaultProfile}>
-              <MaterialCommunityIcons
-                name="account"
-                size={60}
-                color={Colors.white}
-                style={{
-                  transform: [{ translateY: 10 }],
-                }}
+              <Ionicons
+                name="person"
+                size={24}
+                color={Colors.dark}
               />
             </View>
           )}
@@ -71,7 +70,7 @@ export default function HomeHeader({
             style={styles.username}
             numberOfLines={1}
           >
-            {isGuest ? "Guest" : user?.name || "User"}
+            {isGuest ? "Guest" : user?.first_name || user?.name || "User"}
           </Text>
 
           <Text style={styles.subtitle}>
@@ -80,7 +79,6 @@ export default function HomeHeader({
         </View>
 
         <View style={styles.actions}>
-
           <TouchableOpacity
             style={styles.actionButton}
             onPress={onNotificationPress}
@@ -104,13 +102,10 @@ export default function HomeHeader({
               color={Colors.dark}
             />
           </TouchableOpacity>
-
         </View>
-
       </View>
 
       <View style={styles.searchContainer}>
-
         <Ionicons
           name="search"
           size={21}
@@ -120,13 +115,20 @@ export default function HomeHeader({
         <TextInput
           value={search}
           onChangeText={onSearchChange}
-          placeholder="Search vehicle, operator, or location..."
-          placeholderTextColor={Colors.dark}
+          onSubmitEditing={onSearchSubmit}
+          placeholder="Search vehicle, brand, or type..."
+          placeholderTextColor={Colors.secondary}
           style={styles.searchInput}
           autoCapitalize="none"
           autoCorrect={false}
+          returnKeyType="search"
         />
 
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => onSearchChange("")} activeOpacity={0.7}>
+            <Ionicons name="close-circle" size={18} color={Colors.secondary} />
+          </TouchableOpacity>
+        )}
       </View>
 
     </View>
@@ -148,26 +150,26 @@ const styles = StyleSheet.create({
   },
 
   profileContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 50,
-    overflow: "hidden",
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Colors.white,
     justifyContent: "center",
     alignItems: "center",
-
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
-
   profileImage: {
     width: "100%",
     height: "100%",
-    borderRadius: 30,
   },
-
   defaultProfile: {
     width: "100%",
     height: "100%",
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: Colors.inputBackground,
   },
 
   userInfo: {

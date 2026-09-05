@@ -24,6 +24,12 @@ interface Vehicle {
   pricePerDay: number;
   rating: number;
   ratingCount: number;
+  transmission?: string;
+  seats?: number;
+  fuel_type?: string;
+  brand?: string;
+  quantity?: number;
+  available_units?: number;
 }
 
 interface Props {
@@ -39,190 +45,239 @@ export default function VehicleCard({
   onViewPress,
   onFavoritePress,
 }: Props) {
+  const unitsLeft = vehicle.available_units ?? 1;
+
   return (
-    <View style={styles.card}>
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => onViewPress(vehicle)}
+      activeOpacity={0.9}
+    >
+      {/* Top Media Showcase */}
+      <View style={styles.imageContainer}>
+        <Image
+          source={vehicle.image}
+          contentFit="cover"
+          style={styles.vehicleImage}
+        />
 
-      <Image
-        source={vehicle.image}
-        contentFit="cover"
-        style={styles.vehicleImage}
-      />
-
-      <View style={styles.favoriteContainer}>
+        {/* Favorite Button */}
         <TouchableOpacity
           style={styles.favoriteButton}
           onPress={() => onFavoritePress(vehicle)}
           activeOpacity={0.8}
         >
           <Ionicons
-            name={
-              isFavorite
-                ? "heart"
-                : "heart-outline"
-            }
-            size={22}
-            color={
-              isFavorite
-                ? Colors.primary
-                : Colors.dark
-            }
+            name={isFavorite ? "heart" : "heart-outline"}
+            size={18}
+            color={isFavorite ? Colors.primary : Colors.dark}
           />
         </TouchableOpacity>
+
+        {/* Rating Floating Pill */}
+        <View style={styles.ratingBadge}>
+          <Ionicons name="star" size={12} color={Colors.primary} />
+          <Text style={styles.ratingText}>
+            {Number(vehicle.rating || 5.0).toFixed(1)}
+          </Text>
+        </View>
       </View>
 
-      <View style={styles.bottomOverlay}>
-
-        <View style={styles.vehicleInfo}>
-
-          <Text
-            style={styles.vehicleName}
-            numberOfLines={1}
-          >
+      {/* Card Info Area */}
+      <View style={styles.content}>
+        <View style={styles.nameRow}>
+          <Text style={styles.vehicleName} numberOfLines={1}>
             {vehicle.name}
           </Text>
-
-          <Text style={styles.price}>
-            ₱{vehicle.pricePerDay.toLocaleString()} / day
-          </Text>
-
-          <View style={styles.ratingRow}>
-
-            <Ionicons
-              name="star"
-              size={15}
-              color={Colors.primary}
-            />
-
-            <Text style={styles.rating}>
-              {vehicle.rating.toFixed(1)}
-            </Text>
-
-            <Text style={styles.ratingCount}>
-              ({vehicle.ratingCount})
-            </Text>
-
-          </View>
-
         </View>
 
-        <TouchableOpacity
-          style={styles.viewButton}
-          onPress={() => onViewPress(vehicle)}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.viewText}>
-            View
-          </Text>
+        <Text style={styles.brandSubtitle} numberOfLines={1}>
+          {vehicle.brand || "Sedan"} • {vehicle.transmission || "Automatic"}
+        </Text>
 
-          <MaterialCommunityIcons
-            name="arrow-right"
-            size={17}
-            color={Colors.dark}
-          />
-        </TouchableOpacity>
+        {/* Specs Highlights */}
+        <View style={styles.specsRow}>
+          <View style={styles.specPill}>
+            <MaterialCommunityIcons name="car-seat" size={13} color={Colors.dark} />
+            <Text style={styles.specText}>{vehicle.seats || 5} Seats</Text>
+          </View>
 
+          <View style={styles.specPill}>
+            <MaterialCommunityIcons name="gas-station-outline" size={13} color={Colors.dark} />
+            <Text style={styles.specText}>{vehicle.fuel_type || "Gasoline"}</Text>
+          </View>
+
+          {unitsLeft > 1 && (
+            <View style={styles.unitsPill}>
+              <Text style={styles.unitsText}>{unitsLeft} units left</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Bottom Price & Booking CTA */}
+        <View style={styles.footer}>
+          <View style={styles.priceContainer}>
+            <Text style={styles.priceAmount}>
+              ₱{vehicle.pricePerDay.toLocaleString()}
+            </Text>
+            <Text style={styles.pricePeriod}> / day</Text>
+          </View>
+
+          <View style={styles.bookButton}>
+            <Text style={styles.bookButtonText}>View Details</Text>
+          </View>
+        </View>
       </View>
-
-    </View>
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
-
   card: {
-    width: 300,
-    height: 230,
-    borderRadius: 24,
+    width: 270,
+    backgroundColor: Colors.white,
+    borderRadius: 22,
+    marginRight: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    shadowColor: Colors.dark,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 3,
     overflow: "hidden",
-    backgroundColor: Colors.secondary,
-    marginBottom: Spacing.md,
   },
-
+  imageContainer: {
+    width: "100%",
+    height: 140,
+    backgroundColor: Colors.inputBackground,
+    position: "relative",
+  },
   vehicleImage: {
     width: "100%",
     height: "100%",
   },
-
-  favoriteContainer: {
-    position: "absolute",
-    top: Spacing.md,
-    right: Spacing.md,
-  },
-
   favoriteButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: Colors.white,
+    position: "absolute",
+    top: 12,
+    right: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
     justifyContent: "center",
     alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
-
-  bottomOverlay: {
+  ratingBadge: {
     position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
+    bottom: 10,
+    left: 12,
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  ratingText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 11,
+    color: Colors.dark,
+  },
+  content: {
+    padding: Spacing.md,
+  },
+  nameRow: {
+    flexDirection: "row",
     justifyContent: "space-between",
-    backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center",
   },
-
-  vehicleInfo: {
-    flex: 1,
-    marginRight: Spacing.sm,
-  },
-
   vehicleName: {
     fontFamily: FontFamily.bold,
-    fontSize: FontSize.title,
-    color: Colors.white,
+    fontSize: 16,
+    color: Colors.dark,
+    flex: 1,
   },
-
-  price: {
-    marginTop: 3,
-    fontFamily: FontFamily.medium,
-    fontSize: FontSize.body,
-    color: Colors.white,
-  },
-
-  ratingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 4,
-  },
-
-  rating: {
-    marginLeft: 4,
-    fontFamily: FontFamily.medium,
-    fontSize: 13,
-    color: Colors.white,
-  },
-
-  ratingCount: {
-    marginLeft: 3,
+  brandSubtitle: {
     fontFamily: FontFamily.regular,
     fontSize: 12,
-    color: Colors.white,
+    color: Colors.secondary,
+    marginTop: 2,
   },
-
-  viewButton: {
+  specsRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Colors.white,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 9,
-    borderRadius: 28,
+    gap: 6,
+    marginTop: 10,
   },
-
-  viewText: {
-    fontFamily: FontFamily.bold,
-    fontSize: 13,
+  specPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: Colors.inputBackground,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  specText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 11,
     color: Colors.dark,
-    marginRight: 4,
   },
-
+  unitsPill: {
+    backgroundColor: "#EFF6FF",
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  unitsText: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 10,
+    color: "#2563EB",
+  },
+  footer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 14,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: Colors.divider,
+  },
+  priceContainer: {
+    flexDirection: "row",
+    alignItems: "baseline",
+  },
+  priceAmount: {
+    fontFamily: FontFamily.bold,
+    fontSize: 16,
+    color: Colors.dark,
+  },
+  pricePeriod: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11,
+    color: Colors.secondary,
+  },
+  bookButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 12,
+  },
+  bookButtonText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 12,
+    color: Colors.dark,
+  },
 });
