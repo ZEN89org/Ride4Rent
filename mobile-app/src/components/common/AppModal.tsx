@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import {
   Modal,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -36,20 +37,47 @@ export function AppModal({
 }: AppModalProps) {
   if (!visible) return null;
 
-  const getIcon = () => {
+  const getTypeConfig = () => {
     switch (type) {
       case "success":
-        return <Ionicons name="checkmark-circle" size={44} color="#10B981" />;
+        return {
+          icon: <Ionicons name="checkmark-circle" size={28} color="#10B981" />,
+          glowBg: "#ECFDF5",
+          borderColor: "#A7F3D0",
+          accentColor: "#10B981",
+        };
       case "error":
-        return <Ionicons name="close-circle" size={44} color={Colors.error} />;
+        return {
+          icon: <Ionicons name="close-circle" size={28} color="#EF4444" />,
+          glowBg: "#FEF2F2",
+          borderColor: "#FECACA",
+          accentColor: "#EF4444",
+        };
       case "warning":
-        return <Ionicons name="alert-circle" size={44} color="#F59E0B" />;
+        return {
+          icon: <Ionicons name="warning" size={26} color="#F59E0B" />,
+          glowBg: "#FFFBEB",
+          borderColor: "#FDE68A",
+          accentColor: "#F59E0B",
+        };
       case "confirm":
-        return <Ionicons name="help-circle" size={44} color={Colors.primary} />;
+        return {
+          icon: <Ionicons name="shield-checkmark" size={26} color="#1E293B" />,
+          glowBg: "#F8FAFC",
+          borderColor: "#E2E8F0",
+          accentColor: Colors.dark,
+        };
       default:
-        return <Ionicons name="information-circle" size={44} color={Colors.primary} />;
+        return {
+          icon: <Ionicons name="information-circle" size={28} color="#3B82F6" />,
+          glowBg: "#EFF6FF",
+          borderColor: "#BFDBFE",
+          accentColor: "#3B82F6",
+        };
     }
   };
+
+  const cfg = getTypeConfig();
 
   const handleButtonPress = (btn: ModalButton) => {
     onClose();
@@ -62,14 +90,23 @@ export function AppModal({
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
+      animationType="slide"
+      statusBarTranslucent={true}
+      navigationBarTranslucent={true}
       onRequestClose={onClose}
     >
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={styles.backdrop}>
           <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
-            <View style={styles.card}>
-              <View style={styles.iconContainer}>{getIcon()}</View>
+            <View style={styles.sheetCard}>
+              {/* Bottom Sheet Top Pill Handle */}
+              <View style={styles.sheetHandle} />
+
+              {/* Minimal Accent Glow Header */}
+              <View style={[styles.iconContainer, { backgroundColor: cfg.glowBg, borderColor: cfg.borderColor }]}>
+                {cfg.icon}
+              </View>
+
               <Text style={styles.title}>{title}</Text>
               {message ? <Text style={styles.message}>{message}</Text> : null}
 
@@ -81,7 +118,7 @@ export function AppModal({
                   return (
                     <TouchableOpacity
                       key={index}
-                      activeOpacity={0.8}
+                      activeOpacity={0.85}
                       onPress={() => handleButtonPress(btn)}
                       style={[
                         styles.button,
@@ -115,73 +152,91 @@ export function AppModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: Spacing.lg,
+    backgroundColor: "rgba(15, 23, 42, 0.65)",
+    justifyContent: "flex-end",
   },
-  card: {
+  sheetCard: {
     width: "100%",
-    maxWidth: 340,
     backgroundColor: Colors.white,
-    borderRadius: Radius.lg,
-    padding: Spacing.lg,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === "ios" ? 38 : 28,
     alignItems: "center",
-    elevation: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
+    elevation: 24,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.16,
+    shadowRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(0, 0, 0, 0.04)",
+  },
+  sheetHandle: {
+    width: 44,
+    height: 4.5,
+    borderRadius: 3,
+    backgroundColor: "#CBD5E1",
+    marginBottom: 20,
   },
   iconContainer: {
-    marginBottom: Spacing.sm,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
   },
   title: {
     fontFamily: FontFamily.bold,
-    fontSize: FontSize.title,
-    color: Colors.dark,
+    fontSize: 18.5,
+    color: "#0F172A",
     textAlign: "center",
-    marginBottom: Spacing.xs,
+    letterSpacing: -0.3,
+    marginBottom: 6,
   },
   message: {
     fontFamily: FontFamily.regular,
-    fontSize: FontSize.small,
-    color: Colors.secondary,
+    fontSize: 13.5,
+    color: "#64748B",
     textAlign: "center",
     lineHeight: 20,
-    marginBottom: Spacing.lg,
+    marginBottom: 22,
+    paddingHorizontal: 8,
   },
   buttonRow: {
     flexDirection: "row",
-    gap: Spacing.sm,
+    gap: 10,
     width: "100%",
     justifyContent: "center",
   },
   button: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: Radius.md,
+    height: 48,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
   buttonDefault: {
-    backgroundColor: Colors.primary,
+    backgroundColor: "#0F172A",
   },
   buttonCancel: {
-    backgroundColor: Colors.inputBackground,
+    backgroundColor: "#F1F5F9",
   },
   buttonDestructive: {
-    backgroundColor: Colors.error,
+    backgroundColor: "#EF4444",
   },
   buttonText: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: FontSize.small,
+    fontFamily: FontFamily.bold,
+    fontSize: 14,
+    letterSpacing: -0.2,
   },
   buttonDefaultText: {
     color: Colors.white,
   },
   buttonCancelText: {
-    color: Colors.secondary,
+    color: "#64748B",
   },
   buttonDestructiveText: {
     color: Colors.white,

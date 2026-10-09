@@ -2,8 +2,9 @@ import {
   Ionicons,
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { router } from "expo-router";
-import React, { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import {
   Animated,
   Dimensions,
@@ -14,7 +15,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Image } from "expo-image";
 
 import { Colors } from "@/constants/colors";
 import {
@@ -22,6 +22,8 @@ import {
   FontSize,
   Spacing,
 } from "@/constants/theme";
+import { useNotificationCount } from "@/context/NotificationContext";
+import { useAppToast } from "@/context/ToastContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -38,17 +40,25 @@ export default function OperatorShell({
 }) {
   const [menuVisible, setMenuVisible] = useState(false);
   const [drawerAnimation] = useState(() => new Animated.Value(0));
-  const { user, logout, loading, isOperatorActive } = useAuth();
+  const { user, logout, loading, isOperatorActive, isOperatorPending } = useAuth();
+  const { showWarning } = useAppToast();
+  const { unreadCount } = useNotificationCount();
   const profile = user?.operatorProfile ?? user?.operator_profile;
   const profilePhoto = user?.profile_photo;
 
-  useEffect(() => {
-    if (!loading && !isOperatorActive) {
-      router.replace("/login");
-    }
-  }, [loading, isOperatorActive]);
+  const isOperatorAllowed = isOperatorActive || isOperatorPending;
 
-  if (loading || !isOperatorActive) {
+  useEffect(() => {
+    if (!loading && !isOperatorAllowed) {
+      if (user?.account_status === "rejected") {
+        router.replace("/operator-rejected");
+      } else {
+        router.replace("/login");
+      }
+    }
+  }, [loading, isOperatorAllowed]);
+
+  if (loading || !isOperatorAllowed) {
     return null;
   }
 
@@ -76,6 +86,11 @@ export default function OperatorShell({
     });
   };
 
+  const appTranslateX = drawerAnimation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -DRAWER_WIDTH],
+  });
+
   const drawerTranslateX = drawerAnimation.interpolate({
     inputRange: [0, 1],
     outputRange: [DRAWER_WIDTH, 0],
@@ -84,123 +99,179 @@ export default function OperatorShell({
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Top Header matching renter aesthetic with Notification icon */}
-        <View style={styles.topHeader}>
-          <View style={styles.userRow}>
-            <View style={styles.avatarCircle}>
-              {profilePhoto ? (
-                <Image source={{ uri: profilePhoto }} style={styles.avatarImg} />
-              ) : (
-                <Ionicons name="business" size={24} color={Colors.dark} />
-              )}
-            </View>
+        <Animated.View
+          style={[
+            styles.mainAppContainer,
+            {
+              transform: [{ translateX: appTranslateX }],
+            },
+          ]}
+        >
+          {/* Top Header matching signature Ride4Rent aesthetic: Only on Home / Dashboard */}
+          {activeRoute === "dashboard" && (
+            <View style={styles.topHeader}>
+              <View style={styles.userRow}>
+                <TouchableOpacity
+                  style={styles.profileContainer}
+                  onPress={() => router.push("/operator-profile" as any)}
+                  activeOpacity={0.8}
+                >
+                  {profilePhoto ? (
+                    <Image
+                      source={{ uri: profilePhoto }}
+                      contentFit="cover"
+                      style={styles.profileImage}
+                    />
+                  ) : (
+                    <View style={styles.defaultProfile}>
+                      <Ionicons name="person" size={22} color={Colors.dark} />
+                    </View>
+                  )}
+                </TouchableOpacity>
 
-            <View style={styles.userInfo}>
-              <Text style={styles.username} numberOfLines={1}>
-                {profile?.business_name || user?.first_name || "Host Workspace"}
-              </Text>
-              <Text style={styles.subtitle}>Operator & Host Fleet Manager</Text>
-            </View>
+                <View style={styles.userInfo}>
+                  <Text style={styles.username} numberOfLines={1}>
+                    {profile?.business_name || user?.first_name || "Operator"}
+                  </Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Text style={styles.subtitle}>Fleet Manager</Text>
+                    {isOperatorPending && (
+                      <View style={styles.pendingPill}>
+                        <Text style={styles.pendingPillText}>Under Review</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
 
-            <View style={styles.actions}>
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => router.push("/notifications" as any)}
-                activeOpacity={0.8}
+                <View style={styles.actions}>
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => router.push("/notifications" as any)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="notifications-outline" size={21} color={Colors.dark} />
+                    {unreadCount > 0 && (
+                      <View style={styles.badgeContainer}>
+                        <Text style={styles.badgeText}>
+                          {unreadCount > 99 ? "99+" : unreadCount}
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={openMenu}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialCommunityIcons name="menu" size={23} color={Colors.dark} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Content Area */}
+          <View style={styles.content}>{children}</View>
+
+          {/* Bottom Tab Bar matching Renter CustomTabBar exactly */}
+          <View style={styles.bottomBar}>
+            {/* 1. Home / Dashboard */}
+            <Pressable
+              onPress={() => router.push("/operator-home" as any)}
+              style={styles.tabButton}
+            >
+              <View
+                style={[
+                  styles.iconContainer,
+                  activeRoute === "dashboard" && styles.activeIconContainer,
+                ]}
               >
-                <Ionicons name="notifications-outline" size={21} color={Colors.dark} />
-              </TouchableOpacity>
+                <Ionicons
+                  name="home-outline"
+                  size={25}
+                  color={activeRoute === "dashboard" ? Colors.primary : Colors.secondary}
+                />
+              </View>
+            </Pressable>
 
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={openMenu}
-                activeOpacity={0.8}
+            {/* 2. Trips / Bookings */}
+            <Pressable
+              onPress={() => router.push("/operator-bookings" as any)}
+              style={styles.tabButton}
+            >
+              <View
+                style={[
+                  styles.iconContainer,
+                  activeRoute === "bookings" && styles.activeIconContainer,
+                ]}
               >
-                <MaterialCommunityIcons name="menu" size={23} color={Colors.dark} />
-              </TouchableOpacity>
-            </View>
+                <Ionicons
+                  name="calendar-outline"
+                  size={25}
+                  color={activeRoute === "bookings" ? Colors.primary : Colors.secondary}
+                />
+              </View>
+            </Pressable>
+
+            {/* 3. Center Circle Button: Fleet Catalog (Vehicles) */}
+            <Pressable
+              onPress={() => router.push("/operator-vehicles" as any)}
+              style={styles.bookingButton}
+            >
+              <View
+                style={[
+                  styles.bookingCircle,
+                  activeRoute === "vehicles" && styles.bookingCircleActive,
+                ]}
+              >
+                <Ionicons name="car-sport" size={30} color={Colors.white} />
+              </View>
+            </Pressable>
+
+            {/* 4. Chats */}
+            <Pressable
+              onPress={() => router.push("/operator-chats" as any)}
+              style={styles.tabButton}
+            >
+              <View
+                style={[
+                  styles.iconContainer,
+                  activeRoute === "chats" && styles.activeIconContainer,
+                ]}
+              >
+                <Ionicons
+                  name="chatbubble-outline"
+                  size={25}
+                  color={activeRoute === "chats" ? Colors.primary : Colors.secondary}
+                />
+              </View>
+            </Pressable>
+
+            {/* 5. Profile */}
+            <Pressable
+              onPress={() => router.push("/operator-profile" as any)}
+              style={styles.tabButton}
+            >
+              <View
+                style={[
+                  styles.iconContainer,
+                  activeRoute === "profile" && styles.activeIconContainer,
+                ]}
+              >
+                <Ionicons
+                  name="person-outline"
+                  size={25}
+                  color={activeRoute === "profile" ? Colors.primary : Colors.secondary}
+                />
+              </View>
+            </Pressable>
           </View>
-        </View>
-
-        {/* Content Area */}
-        <View style={styles.content}>{children}</View>
-
-        {/* Bottom Tab Bar at the very bottom */}
-        <View style={styles.bottomBar}>
-          <TouchableOpacity
-            style={styles.tabButton}
-            onPress={() => router.push("/operator-home" as any)}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.iconContainer, activeRoute === "dashboard" && styles.activeIconContainer]}>
-              <Ionicons
-                name="home-outline"
-                size={22}
-                color={activeRoute === "dashboard" ? Colors.primary : Colors.secondary}
-              />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.tabButton}
-            onPress={() => router.push("/operator-vehicles" as any)}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.iconContainer, activeRoute === "vehicles" && styles.activeIconContainer]}>
-              <Ionicons
-                name="car-outline"
-                size={22}
-                color={activeRoute === "vehicles" ? Colors.primary : Colors.secondary}
-              />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.tabButton}
-            onPress={() => router.push("/operator-bookings" as any)}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.iconContainer, activeRoute === "bookings" && styles.activeIconContainer]}>
-              <Ionicons
-                name="calendar-outline"
-                size={22}
-                color={activeRoute === "bookings" ? Colors.primary : Colors.secondary}
-              />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.tabButton}
-            onPress={() => router.push("/operator-chats" as any)}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.iconContainer, activeRoute === "chats" && styles.activeIconContainer]}>
-              <Ionicons
-                name="chatbubble-ellipses-outline"
-                size={22}
-                color={activeRoute === "chats" ? Colors.primary : Colors.secondary}
-              />
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.tabButton}
-            onPress={() => router.push("/operator-profile" as any)}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.iconContainer, activeRoute === "profile" && styles.activeIconContainer]}>
-              <Ionicons
-                name="person-outline"
-                size={22}
-                color={activeRoute === "profile" ? Colors.primary : Colors.secondary}
-              />
-            </View>
-          </TouchableOpacity>
-        </View>
+        </Animated.View>
 
         {/* SideNav matching renter design */}
         {menuVisible && (
-          <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+          <View style={styles.sideNavContainer} pointerEvents="box-none">
             <Pressable style={styles.backdrop} onPress={closeMenu} />
             <Animated.View
               style={[
@@ -211,98 +282,200 @@ export default function OperatorShell({
                 },
               ]}
             >
-              <View style={styles.drawerHeader}>
-                <View>
-                  <Text style={styles.drawerTitle}>Ride4Rent Host</Text>
-                  <Text style={styles.drawerSubtitle}>
-                    {profile?.business_name || user?.first_name || "Operator"}
-                  </Text>
+              <View style={styles.drawerContent}>
+                {/* Header */}
+                <View style={styles.header}>
+                  <View style={{ flex: 1, paddingRight: Spacing.sm }}>
+                    <Text style={styles.headerTitle}>Ride4Rent Host</Text>
+                    <Text style={styles.headerSubtitle} numberOfLines={1}>
+                      {profile?.business_name ||
+                        (user?.first_name ? `Hi, ${user.first_name}!` : user?.name || "Operator")}
+                    </Text>
+                    {isOperatorPending && (
+                      <View style={[styles.pendingPill, { marginTop: 4, alignSelf: "flex-start" }]}>
+                        <Text style={styles.pendingPillText}>Account Under Review</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <Pressable onPress={closeMenu} style={styles.closeButton} hitSlop={10}>
+                    <Ionicons name="close" size={24} color={Colors.dark} />
+                  </Pressable>
                 </View>
-                <TouchableOpacity onPress={closeMenu} style={styles.closeBtn}>
-                  <Ionicons name="close" size={22} color={Colors.dark} />
-                </TouchableOpacity>
+
+                <View style={styles.divider} />
+
+                {/* Section: Fleet Operations */}
+                <View style={styles.menuSection}>
+                  <Text style={styles.sectionTitle}>Fleet Operations</Text>
+
+                  <Pressable
+                    style={styles.menuItem}
+                    onPress={() => {
+                      closeMenu();
+                      if (isOperatorPending) {
+                        showWarning(
+                          "Account Under Review",
+                          "You cannot list new vehicles while your account is pending review. Listing will be enabled once your accreditation is approved."
+                        );
+                        return;
+                      }
+                      router.push("/operator-vehicle-upload" as any);
+                    }}
+                  >
+                    <View style={styles.menuIcon}>
+                      <Ionicons name="add-circle-outline" size={21} color={Colors.dark} />
+                    </View>
+                    <Text style={styles.menuLabel}>List New Vehicle</Text>
+                    <Ionicons name="chevron-forward" size={17} color={Colors.secondary} />
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.menuItem}
+                    onPress={() => {
+                      closeMenu();
+                      router.push("/operator-vehicles" as any);
+                    }}
+                  >
+                    <View style={styles.menuIcon}>
+                      <Ionicons name="car-outline" size={21} color={Colors.dark} />
+                    </View>
+                    <Text style={styles.menuLabel}>Fleet Catalog</Text>
+                    <Ionicons name="chevron-forward" size={17} color={Colors.secondary} />
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.menuItem}
+                    onPress={() => {
+                      closeMenu();
+                      router.push("/operator-bookings" as any);
+                    }}
+                  >
+                    <View style={styles.menuIcon}>
+                      <Ionicons name="calendar-outline" size={21} color={Colors.dark} />
+                    </View>
+                    <Text style={styles.menuLabel}>Rental Reservations</Text>
+                    <Ionicons name="chevron-forward" size={17} color={Colors.secondary} />
+                  </Pressable>
+                </View>
+
+                {/* Section: Account & Business */}
+                <View style={styles.menuSection}>
+                  <Text style={styles.sectionTitle}>Account</Text>
+
+                  <Pressable
+                    style={styles.menuItem}
+                    onPress={() => {
+                      closeMenu();
+                      router.push("/operator-profile" as any);
+                    }}
+                  >
+                    <View style={styles.menuIcon}>
+                      <Ionicons name="business-outline" size={21} color={Colors.dark} />
+                    </View>
+                    <Text style={styles.menuLabel}>Business Profile</Text>
+                    <Ionicons name="chevron-forward" size={17} color={Colors.secondary} />
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.menuItem}
+                    onPress={() => {
+                      closeMenu();
+                      router.push("/settings" as any);
+                    }}
+                  >
+                    <View style={styles.menuIcon}>
+                      <Ionicons name="settings-outline" size={21} color={Colors.dark} />
+                    </View>
+                    <Text style={styles.menuLabel}>Settings</Text>
+                    <Ionicons name="chevron-forward" size={17} color={Colors.secondary} />
+                  </Pressable>
+                </View>
+
+                {/* Section: Support */}
+                <View style={styles.menuSection}>
+                  <Text style={styles.sectionTitle}>Support</Text>
+
+                  <Pressable
+                    style={styles.menuItem}
+                    onPress={() => {
+                      closeMenu();
+                      router.push("/faq" as any);
+                    }}
+                  >
+                    <View style={styles.menuIcon}>
+                      <Ionicons name="help-circle-outline" size={21} color={Colors.dark} />
+                    </View>
+                    <Text style={styles.menuLabel}>FAQ</Text>
+                    <Ionicons name="chevron-forward" size={17} color={Colors.secondary} />
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.menuItem}
+                    onPress={() => {
+                      closeMenu();
+                      router.push("/terms" as any);
+                    }}
+                  >
+                    <View style={styles.menuIcon}>
+                      <Ionicons name="document-text-outline" size={21} color={Colors.dark} />
+                    </View>
+                    <Text style={styles.menuLabel}>Terms & Conditions</Text>
+                    <Ionicons name="chevron-forward" size={17} color={Colors.secondary} />
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.menuItem}
+                    onPress={() => {
+                      closeMenu();
+                      router.push("/support" as any);
+                    }}
+                  >
+                    <View style={styles.menuIcon}>
+                      <Ionicons name="headset-outline" size={21} color={Colors.dark} />
+                    </View>
+                    <Text style={styles.menuLabel}>Contact Support</Text>
+                    <Ionicons name="chevron-forward" size={17} color={Colors.secondary} />
+                  </Pressable>
+                </View>
+
+                {/* Logout Button */}
+                <Pressable
+                  style={styles.logoutButton}
+                  onPress={signOut}
+                >
+                  <Ionicons name="log-out-outline" size={21} color={Colors.white} />
+                  <Text style={styles.logoutText}>Logout</Text>
+                </Pressable>
+
+                {/* Footer with social icons & copyright */}
+                <View style={styles.footer}>
+                  <View style={styles.socialContainer}>
+                    <Pressable
+                      style={styles.socialButton}
+                      onPress={() => console.log("Facebook pressed")}
+                    >
+                      <Ionicons name="logo-facebook" size={19} color={Colors.dark} />
+                    </Pressable>
+
+                    <Pressable
+                      style={styles.socialButton}
+                      onPress={() => console.log("Instagram pressed")}
+                    >
+                      <Ionicons name="logo-instagram" size={19} color={Colors.dark} />
+                    </Pressable>
+
+                    <Pressable
+                      style={styles.socialButton}
+                      onPress={() => console.log("Gmail pressed")}
+                    >
+                      <Ionicons name="mail-outline" size={19} color={Colors.dark} />
+                    </Pressable>
+                  </View>
+
+                  <Text style={styles.footerText}>@2026 Ride4Rent</Text>
+                </View>
               </View>
-
-              <View style={styles.divider} />
-
-              <View style={styles.menuSection}>
-                <Text style={styles.sectionTitle}>Fleet Operations</Text>
-                <TouchableOpacity
-                  style={styles.menuItem}
-                  onPress={() => {
-                    closeMenu();
-                    router.push("/operator-vehicle-upload" as any);
-                  }}
-                >
-                  <Ionicons name="add-circle-outline" size={20} color={Colors.dark} />
-                  <Text style={styles.menuItemText}>List New Vehicle</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.menuItem}
-                  onPress={() => {
-                    closeMenu();
-                    router.push("/operator-vehicles" as any);
-                  }}
-                >
-                  <Ionicons name="car-outline" size={20} color={Colors.dark} />
-                  <Text style={styles.menuItemText}>Manage Fleet Vehicles</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.menuItem}
-                  onPress={() => {
-                    closeMenu();
-                    router.push("/operator-bookings" as any);
-                  }}
-                >
-                  <Ionicons name="clipboard-outline" size={20} color={Colors.dark} />
-                  <Text style={styles.menuItemText}>Rental Reservations</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.menuSection}>
-                <Text style={styles.sectionTitle}>Account & Settings</Text>
-                <TouchableOpacity
-                  style={styles.menuItem}
-                  onPress={() => {
-                    closeMenu();
-                    router.push("/operator-profile" as any);
-                  }}
-                >
-                  <Ionicons name="person-outline" size={20} color={Colors.dark} />
-                  <Text style={styles.menuItemText}>Business Profile</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.menuItem}
-                  onPress={() => {
-                    closeMenu();
-                    router.push("/settings" as any);
-                  }}
-                >
-                  <Ionicons name="settings-outline" size={20} color={Colors.dark} />
-                  <Text style={styles.menuItemText}>App Preferences</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.menuItem}
-                  onPress={() => {
-                    closeMenu();
-                    router.push("/faq" as any);
-                  }}
-                >
-                  <Ionicons name="help-circle-outline" size={20} color={Colors.dark} />
-                  <Text style={styles.menuItemText}>FAQ & Support</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={{ flex: 1 }} />
-
-              <TouchableOpacity style={styles.logoutBtn} onPress={signOut} activeOpacity={0.8}>
-                <Ionicons name="log-out-outline" size={20} color={Colors.error} />
-                <Text style={styles.logoutText}>Sign Out</Text>
-              </TouchableOpacity>
             </Animated.View>
           </View>
         )}
@@ -318,23 +491,28 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
+    backgroundColor: Colors.white,
+    overflow: "hidden",
+  },
+  mainAppContainer: {
+    flex: 1,
   },
   topHeader: {
     backgroundColor: Colors.white,
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: Colors.divider,
   },
   userRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
   },
-  avatarCircle: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+  profileContainer: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: Colors.white,
     justifyContent: "center",
     alignItems: "center",
@@ -342,12 +520,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  avatarImg: {
+  profileImage: {
     width: "100%",
     height: "100%",
   },
+  defaultProfile: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: Colors.inputBackground,
+  },
   userInfo: {
     flex: 1,
+    marginLeft: 10,
+    marginRight: Spacing.sm,
   },
   username: {
     fontFamily: FontFamily.bold,
@@ -362,6 +549,7 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   actionButton: {
@@ -371,31 +559,92 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.inputBackground,
     justifyContent: "center",
     alignItems: "center",
+    position: "relative",
+  },
+  badgeContainer: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    backgroundColor: Colors.primary,
+    borderRadius: 9,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: Colors.white,
+  },
+  badgeText: {
+    color: Colors.white,
+    fontFamily: FontFamily.bold,
+    fontSize: 9,
+    lineHeight: 11,
   },
   content: {
     flex: 1,
   },
   bottomBar: {
-    height: 60,
+    height: 70,
     backgroundColor: Colors.white,
     flexDirection: "row",
-    borderTopWidth: 1,
-    borderTopColor: Colors.divider,
-    paddingBottom: 2,
+    alignItems: "center",
+    justifyContent: "space-around",
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: -3,
+    },
   },
   tabButton: {
     flex: 1,
-    justifyContent: "center",
+    height: "100%",
     alignItems: "center",
+    justifyContent: "center",
   },
   iconContainer: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
+    height: "100%",
+    minWidth: 55,
     alignItems: "center",
+    justifyContent: "center",
+    borderTopWidth: 3,
+    borderTopColor: "transparent",
   },
   activeIconContainer: {
-    transform: [{ scale: 1.1 }],
+    borderTopColor: Colors.primary,
+  },
+  bookingButton: {
+    width: 75,
+    height: 75,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: -35,
+  },
+  bookingCircle: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: Colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
+  },
+  bookingCircleActive: {
+    transform: [{ scale: 1.05 }],
+  },
+  sideNavContainer: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 1000,
   },
   backdrop: {
     position: "absolute",
@@ -403,79 +652,138 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    backgroundColor: "rgba(0,0,0,0.3)",
   },
   drawer: {
     position: "absolute",
-    right: 0,
     top: 0,
+    right: 0,
     bottom: 0,
     backgroundColor: Colors.white,
-    padding: Spacing.lg,
+    elevation: 20,
+    overflow: "visible",
     shadowColor: "#000",
-    shadowOffset: { width: -2, height: 0 },
+    shadowOffset: { width: -3, height: 0 },
     shadowOpacity: 0.15,
     shadowRadius: 10,
-    elevation: 10,
   },
-  drawerHeader: {
+  drawerContent: {
+    flex: 1,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: 40,
+    paddingBottom: Spacing.lg,
+  },
+  header: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginTop: Spacing.sm,
+    justifyContent: "space-between",
   },
-  drawerTitle: {
+  headerTitle: {
     fontFamily: FontFamily.bold,
-    fontSize: 18,
-    color: Colors.dark,
+    fontSize: FontSize.heading,
+    color: Colors.primary,
   },
-  drawerSubtitle: {
+  headerSubtitle: {
+    marginTop: -5,
     fontFamily: FontFamily.regular,
-    fontSize: 12,
+    fontSize: 13,
     color: Colors.secondary,
-    marginTop: 2,
   },
-  closeBtn: {
-    padding: 4,
+  closeButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F5F5F5",
   },
   divider: {
     height: 1,
-    backgroundColor: Colors.divider,
-    marginVertical: Spacing.md,
+    backgroundColor: "#EEEEEE",
+    marginTop: Spacing.lg,
   },
   menuSection: {
-    marginBottom: Spacing.lg,
+    marginTop: Spacing.lg,
   },
   sectionTitle: {
-    fontFamily: FontFamily.bold,
-    fontSize: 11,
+    marginBottom: Spacing.xs,
+    fontFamily: FontFamily.semiBold,
+    fontSize: 13,
     color: Colors.secondary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginBottom: 8,
   },
   menuItem: {
+    minHeight: 48,
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 10,
-    gap: 12,
+    paddingVertical: Spacing.sm,
   },
-  menuItemText: {
+  menuIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F7F7F7",
+  },
+  menuLabel: {
+    flex: 1,
+    marginLeft: Spacing.md,
     fontFamily: FontFamily.medium,
-    fontSize: 14,
+    fontSize: FontSize.body,
     color: Colors.dark,
   },
-  logoutBtn: {
+  logoutButton: {
+    marginTop: Spacing.xl,
+    minHeight: 50,
+    borderRadius: 25,
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
-    gap: 10,
-    borderTopWidth: 1,
-    borderTopColor: Colors.divider,
+    justifyContent: "center",
+    backgroundColor: Colors.primary,
   },
   logoutText: {
+    marginLeft: Spacing.sm,
     fontFamily: FontFamily.bold,
-    fontSize: 14,
-    color: Colors.error,
+    fontSize: FontSize.body,
+    color: Colors.white,
+  },
+  footer: {
+    marginTop: "auto",
+    alignItems: "center",
+  },
+  socialContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+  },
+  socialButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F5F5F5",
+  },
+  footerText: {
+    marginTop: Spacing.sm,
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    color: Colors.secondary,
+  },
+  pendingPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+  pendingPillText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 10,
+    color: "#B45309",
   },
 });

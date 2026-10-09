@@ -56,8 +56,13 @@ class AuthController extends Controller
         // Dispatch Email
         try {
             Mail::to($email)->send(new VerificationOtpMail($otp));
+            Log::info("OTP mail successfully dispatched to {$email} with code: {$otp}");
         } catch (\Exception $e) {
-            Log::error("Failed to send OTP mail to {$email}: " . $e->getMessage());
+            Log::error("Failed to send OTP mail to {$email}: " . $e->getMessage() . "\n" . $e->getTraceAsString());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to deliver email: ' . $e->getMessage(),
+            ], 500);
         }
 
         return response()->json([
@@ -299,12 +304,14 @@ class AuthController extends Controller
         }
 
         $result = $this->authService->registerOperator($validated);
+        $token = $result['user']->createToken('mobile-token')->plainTextToken;
 
         return response()->json([
             'success' => true,
             'message' => 'Operator registration submitted successfully. Your account is pending administrator review.',
-            'user' => $result['user'],
+            'user' => new UserResource($result['user']),
             'operator_profile' => $result['operator_profile'],
+            'token' => $token,
         ], 201);
     }
 

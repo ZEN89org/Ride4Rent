@@ -531,6 +531,7 @@ function DatePickerModal({
       visible={visible}
       transparent
       animationType="fade"
+      statusBarTranslucent={true}
       onRequestClose={onClose}
     >
       <View style={styles.modalContainer}>
@@ -669,6 +670,7 @@ function GenderPickerModal({
       visible={visible}
       transparent
       animationType="fade"
+      statusBarTranslucent={true}
       onRequestClose={onClose}
     >
       <View style={styles.modalContainer}>

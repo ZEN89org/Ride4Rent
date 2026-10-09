@@ -5,6 +5,15 @@ export interface VehicleImageItem {
   sort_order: number;
 }
 
+export interface VehicleReviewItem {
+  id: number;
+  renter_name: string;
+  renter_photo: string | null;
+  rating: number;
+  review: string | null;
+  created_at: string;
+}
+
 export interface Vehicle {
   id: number;
   name: string;
@@ -29,16 +38,36 @@ export interface Vehicle {
   quantity?: number;
   available_units?: number;
   pickup_address?: string;
+  pickup_latitude?: number | null;
+  pickup_longitude?: number | null;
   location?: string;
+  features?: string[];
   description: string | null;
+  min_driver_age?: number;
+  min_driving_experience?: string;
+  fuel_policy?: string;
+  late_return_policy?: string;
+  cancellation_policy?: string;
+  smoking_policy?: string;
+  pet_policy?: string;
+  additional_driver_policy?: string;
+  other_policies?: string;
   image_url: string | null;
   images?: VehicleImageItem[];
+  reviews?: VehicleReviewItem[];
   is_available: boolean;
+  is_rented?: boolean;
   availability_status?: string;
   operator?: {
     id?: number;
     name?: string;
+    profile_photo?: string | null;
     business_name: string | null;
+    business_email?: string | null;
+    business_contact_number?: string | null;
+    street_address?: string | null;
+    barangay?: string | null;
+    municipality?: string | null;
   };
 }
 
@@ -73,6 +102,7 @@ export interface VehicleFormData {
   other_policies: string;
   pickup_latitude: string;
   pickup_longitude: string;
+  features?: string[];
   description: string;
   imageUri?: string;
   imageUris?: string[];

@@ -12,4 +12,9 @@ Route::prefix('v1')
         Route::post('/admin/operators/{user}/approve', [AdminController::class, 'approveOperator']);
         Route::post('/admin/operators/{user}/reject', [AdminController::class, 'rejectOperator']);
 
+        Route::get('/admin/licenses/pending', [AdminController::class, 'pendingLicenses']);
+        Route::post('/admin/licenses/{user}/approve', [AdminController::class, 'approveLicense']);
+        Route::post('/admin/licenses/{user}/reject', [AdminController::class, 'rejectLicense']);
+
     });
+

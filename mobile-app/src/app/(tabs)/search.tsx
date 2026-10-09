@@ -4,7 +4,6 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   StyleSheet,
   Text,
   TextInput,
@@ -16,16 +15,23 @@ import ScreenContainer from "@/components/common/ScreenContainer";
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";
 import { useFavorites } from "@/context/FavoritesContext";
+import { useAuth } from "@/features/auth/hooks/useAuth";
+import AuthRequiredBottomSheet from "@/features/auth/components/AuthRequiredBottomSheet";
+import NearVehicleCard, { NearVehicleItem } from "@/features/renter/components/home/NearVehicleCard";
 import { getAvailableVehicles } from "@/features/operator/services/vehicleService";
 import { Vehicle } from "@/features/operator/types/vehicle";
+
+import { matchesVehicleSearch } from "@/utils/vehicleSearch";
 
 const CATEGORIES = ["All", "Sedan", "SUV", "Van", "Hatchback", "Automatic", "Manual"];
 const PRICE_SORTS = ["Default", "Price: Low to High", "Price: High to Low"];
 
 export default function Search() {
   const params = useLocalSearchParams<{ query?: string }>();
+  const { isGuest } = useAuth();
   const { isFavorite, toggleFavorite } = useFavorites();
   
+  const [showAuthSheet, setShowAuthSheet] = useState(false);
   const [searchQuery, setSearchQuery] = useState(params.query || "");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [sortOption, setSortOption] = useState("Default");
@@ -55,12 +61,7 @@ export default function Search() {
   };
 
   let filteredVehicles = vehicles.filter((v) => {
-    const matchesQuery =
-      v.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (v.brand && v.brand.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (v.description && v.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (v.operator?.business_name && v.operator.business_name.toLowerCase().includes(searchQuery.toLowerCase()));
-
+    const matchesQuery = matchesVehicleSearch(v, searchQuery);
     if (!matchesQuery) return false;
 
     if (selectedCategory === "All") return true;
@@ -69,7 +70,8 @@ export default function Search() {
     }
     return (
       v.vehicle_type?.toLowerCase().includes(selectedCategory.toLowerCase()) ||
-      v.name.toLowerCase().includes(selectedCategory.toLowerCase())
+      v.name.toLowerCase().includes(selectedCategory.toLowerCase()) ||
+      v.body_type?.toLowerCase().includes(selectedCategory.toLowerCase())
     );
   });
 
@@ -79,14 +81,16 @@ export default function Search() {
     filteredVehicles = [...filteredVehicles].sort((a, b) => Number(b.price_per_day) - Number(a.price_per_day));
   }
 
-  const handleViewVehicle = (vehicle: Vehicle) => {
+  const handleViewVehicle = (vehicle: NearVehicleItem) => {
     router.push(`/vehicles/${vehicle.id}` as any);
   };
 
-  const handleOperatorPress = (operatorId?: number) => {
-    if (operatorId) {
-      router.push(`/operator/${operatorId}` as any);
+  const handleFavoriteVehicle = (vehicle: NearVehicleItem) => {
+    if (isGuest) {
+      setShowAuthSheet(true);
+      return;
     }
+    toggleFavorite(vehicle.id);
   };
 
   return (
@@ -159,7 +163,7 @@ export default function Search() {
           </TouchableOpacity>
         </View>
 
-        {/* Vehicle Results in Professional Card Grid / List */}
+        {/* Vehicle Results in Full-Width NearVehicleCard Stack */}
         {loading ? (
           <View style={styles.centerContainer}>
             <ActivityIndicator size="large" color={Colors.primary} />
@@ -179,101 +183,39 @@ export default function Search() {
             contentContainerStyle={styles.list}
             showsVerticalScrollIndicator={false}
             renderItem={({ item }) => {
-              const fav = isFavorite(item.id);
-              const operatorName = item.operator?.business_name || item.operator?.name || "Verified Host";
+              const formattedItem: NearVehicleItem = {
+                id: String(item.id),
+                name: item.name,
+                image: item.image_url
+                  ? { uri: item.image_url }
+                  : { uri: "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=60" },
+                pricePerDay: Number(item.price_per_day),
+                rating: (Number(item.rating_count || 0) > 0 && item.rating !== null && item.rating !== undefined) ? Number(item.rating) : 0,
+                ratingCount: Number(item.rating_count || 0),
+                distance_km: item.distance_km,
+                seats: item.seats ?? undefined,
+                transmission: item.transmission ?? undefined,
+                available_units: item.available_units,
+              };
 
               return (
-                <TouchableOpacity
-                  style={styles.proCard}
-                  onPress={() => handleViewVehicle(item)}
-                  activeOpacity={0.88}
-                >
-                  {/* Image & Badges */}
-                  <View style={styles.cardImageWrap}>
-                    <Image
-                      source={{
-                        uri:
-                          item.image_url ||
-                          "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=60",
-                      }}
-                      style={styles.cardImage}
-                      resizeMode="cover"
-                    />
-
-                    {/* Favorite Heart Button */}
-                    <TouchableOpacity
-                      style={styles.favCircle}
-                      onPress={() => toggleFavorite(item.id)}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons
-                        name={fav ? "heart" : "heart-outline"}
-                        size={18}
-                        color={fav ? Colors.primary : Colors.dark}
-                      />
-                    </TouchableOpacity>
-
-                    {/* Transmission / Seat Pill */}
-                    <View style={styles.typeBadge}>
-                      <Text style={styles.typeBadgeText}>
-                        {item.transmission || "Auto"} • {item.seats || 4} Seats
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Content Section */}
-                  <View style={styles.cardBody}>
-                    <View style={styles.nameRow}>
-                      <Text style={styles.cardTitle} numberOfLines={1}>
-                        {item.name}
-                      </Text>
-                      <View style={styles.rateBadge}>
-                        <Text style={styles.rateAmount}>
-                          ₱{Number(item.price_per_day).toLocaleString()}
-                        </Text>
-                        <Text style={styles.rateUnit}>/day</Text>
-                      </View>
-                    </View>
-
-                    {/* Host & Location */}
-                    <TouchableOpacity
-                      style={styles.operatorRow}
-                      onPress={() => handleOperatorPress(item.operator?.id)}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons name="business-outline" size={14} color={Colors.secondary} />
-                      <Text style={styles.operatorText} numberOfLines={1}>
-                        {operatorName}
-                      </Text>
-                      <Ionicons name="chevron-forward" size={12} color={Colors.secondary} />
-                    </TouchableOpacity>
-
-                    {/* Spec features row */}
-                    <View style={styles.specsLine}>
-                      <View style={styles.specItem}>
-                        <MaterialCommunityIcons name="gas-station" size={13} color={Colors.secondary} />
-                        <Text style={styles.specLabel}>{item.fuel_type || "Gasoline"}</Text>
-                      </View>
-                      <View style={styles.specDot} />
-                      <View style={styles.specItem}>
-                        <MaterialCommunityIcons name="car-door" size={13} color={Colors.secondary} />
-                        <Text style={styles.specLabel}>{item.number_of_doors || 4} Doors</Text>
-                      </View>
-                      <View style={styles.specDot} />
-                      <View style={styles.specItem}>
-                        <Ionicons name="shield-checkmark-outline" size={13} color="#10B981" />
-                        <Text style={[styles.specLabel, { color: "#10B981", fontFamily: FontFamily.semiBold }]}>
-                          Verified
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                </TouchableOpacity>
+                <NearVehicleCard
+                  vehicle={formattedItem}
+                  isFavorite={isFavorite(formattedItem.id)}
+                  onViewPress={handleViewVehicle}
+                  onFavoritePress={handleFavoriteVehicle}
+                  containerStyle={styles.searchCard}
+                />
               );
             }}
           />
         )}
       </View>
+
+      <AuthRequiredBottomSheet
+        visible={showAuthSheet}
+        onClose={() => setShowAuthSheet(false)}
+      />
     </ScreenContainer>
   );
 }
@@ -281,6 +223,7 @@ export default function Search() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: Colors.white,
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
   },
@@ -320,7 +263,7 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
   },
   categoryPillTextActive: {
-    color: Colors.dark,
+    color: Colors.white,
     fontFamily: FontFamily.bold,
   },
   resultsHeader: {
@@ -373,126 +316,12 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   list: {
-    paddingBottom: 24,
+    paddingBottom: 32,
   },
-  proCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 18,
-    marginBottom: Spacing.lg,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: Colors.border,
-    shadowColor: Colors.dark,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  cardImageWrap: {
+  searchCard: {
     width: "100%",
-    height: 170,
-    backgroundColor: Colors.inputBackground,
-    position: "relative",
-  },
-  cardImage: {
-    width: "100%",
-    height: "100%",
-  },
-  favCircle: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.white,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: Colors.dark,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  typeBadge: {
-    position: "absolute",
-    bottom: 12,
-    left: 12,
-    backgroundColor: "rgba(26,26,26,0.75)",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  typeBadgeText: {
-    fontFamily: FontFamily.medium,
-    fontSize: 11,
-    color: Colors.white,
-  },
-  cardBody: {
-    padding: Spacing.md,
-  },
-  nameRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  cardTitle: {
-    flex: 1,
-    fontFamily: FontFamily.bold,
-    fontSize: 17,
-    color: Colors.dark,
-    marginRight: Spacing.sm,
-  },
-  rateBadge: {
-    flexDirection: "row",
-    alignItems: "baseline",
-  },
-  rateAmount: {
-    fontFamily: FontFamily.bold,
-    fontSize: 16,
-    color: Colors.dark,
-  },
-  rateUnit: {
-    fontFamily: FontFamily.regular,
-    fontSize: 11,
-    color: Colors.secondary,
-    marginLeft: 2,
-  },
-  operatorRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: 6,
-    marginBottom: 8,
-  },
-  operatorText: {
-    fontFamily: FontFamily.medium,
-    fontSize: 12,
-    color: Colors.secondary,
-  },
-  specsLine: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderTopWidth: 1,
-    borderTopColor: Colors.divider,
-    paddingTop: 8,
-    marginTop: 4,
-    gap: Spacing.sm,
-  },
-  specItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  specDot: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: Colors.secondary,
-  },
-  specLabel: {
-    fontFamily: FontFamily.regular,
-    fontSize: 11,
-    color: Colors.secondary,
+    height: 190,
+    marginRight: 0,
+    marginBottom: Spacing.md,
   },
 });

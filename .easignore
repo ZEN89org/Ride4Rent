@@ -1,0 +1,8 @@
+# Ignore backend and non-mobile files during EAS build archive
+backend/
+backend/**
+backend/public/storage
+.git/
+.vscode/
+.idea/
+*.log

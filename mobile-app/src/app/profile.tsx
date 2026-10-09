@@ -1,6 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -21,7 +21,7 @@ import { useAuth } from "@/features/auth/hooks/useAuth";
 import { uploadProfilePhoto } from "@/services/profileService";
 
 export default function ProfileScreen() {
-  const { user, isGuest, updateUser } = useAuth();
+  const { user, isGuest, updateUser, refreshUser } = useAuth();
   const { showSuccess, showError, showModal } = useAppToast();
   const [profileImage, setProfileImage] = useState<string | null>(
     user?.profile_photo || null
@@ -33,6 +33,12 @@ export default function ProfileScreen() {
       setProfileImage(user.profile_photo);
     }
   }, [user?.profile_photo]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshUser?.();
+    }, [])
+  );
 
   const handlePickImage = async () => {
     try {
@@ -176,37 +182,179 @@ export default function ProfileScreen() {
           <Text style={styles.userName}>{fullName || "Ride4Rent User"}</Text>
           <Text style={styles.userEmail}>{user.email}</Text>
 
-          <View style={styles.roleBadge}>
+          <View
+            style={[
+              styles.roleBadge,
+              user.role === "operator"
+                ? null
+                : user.is_drivers_license_verified
+                ? styles.roleBadgeVerified
+                : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
+                ? styles.roleBadgePending
+                : styles.roleBadgeUnverified,
+            ]}
+          >
             <Ionicons
-              name={user.role === "operator" ? "business" : "person"}
+              name={
+                user.role === "operator"
+                  ? "business"
+                  : user.is_drivers_license_verified
+                  ? "shield-checkmark"
+                  : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
+                  ? "time"
+                  : "alert-circle"
+              }
               size={14}
-              color={Colors.dark}
+              color={
+                user.role === "operator"
+                  ? Colors.dark
+                  : user.is_drivers_license_verified
+                  ? "#047857"
+                  : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
+                  ? "#92400E"
+                  : "#B45309"
+              }
             />
-            <Text style={styles.roleBadgeText}>
-              {user.role === "operator" ? "Verified Operator" : "Verified Renter"}
+            <Text
+              style={[
+                styles.roleBadgeText,
+                user.role === "operator"
+                  ? null
+                  : user.is_drivers_license_verified
+                  ? styles.roleBadgeTextVerified
+                  : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
+                  ? styles.roleBadgeTextPending
+                  : styles.roleBadgeTextUnverified,
+              ]}
+            >
+              {user.role === "operator"
+                ? "Verified Operator"
+                : user.is_drivers_license_verified
+                ? "Verified Renter"
+                : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
+                ? "Pending Verification"
+                : user.license_verification_status === "rejected"
+                ? "Verification Rejected"
+                : "Unverified Renter"}
             </Text>
           </View>
         </View>
+
+        {/* Account & Driver License Status Card */}
+        {user.role !== "operator" && (
+          <TouchableOpacity
+            style={[
+              styles.licenseStatusCard,
+              user.is_drivers_license_verified
+                ? styles.licenseCardVerified
+                : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
+                ? styles.licenseCardPending
+                : user.license_verification_status === "rejected"
+                ? styles.licenseCardRejected
+                : styles.licenseCardUnverified,
+            ]}
+            onPress={() => router.push("/driver-license" as any)}
+            activeOpacity={0.8}
+          >
+            <View
+              style={[
+                styles.licenseIconWrap,
+                {
+                  backgroundColor: user.is_drivers_license_verified
+                    ? "#ECFDF5"
+                    : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
+                    ? "#FEF3C7"
+                    : user.license_verification_status === "rejected"
+                    ? "#FEE2E2"
+                    : "#FEF3C7",
+                },
+              ]}
+            >
+              <Ionicons
+                name={
+                  user.is_drivers_license_verified
+                    ? "shield-checkmark"
+                    : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
+                    ? "time"
+                    : user.license_verification_status === "rejected"
+                    ? "close-circle"
+                    : "alert-circle"
+                }
+                size={24}
+                color={
+                  user.is_drivers_license_verified
+                    ? "#10B981"
+                    : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
+                    ? "#D97706"
+                    : user.license_verification_status === "rejected"
+                    ? "#EF4444"
+                    : "#D97706"
+                }
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.licenseTitle}>
+                {user.is_drivers_license_verified
+                  ? "Driver's License Verified"
+                  : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
+                  ? "Driver's License Under Review"
+                  : user.license_verification_status === "rejected"
+                  ? "Driver's License Rejected"
+                  : "Driver's License Required"}
+              </Text>
+              <Text style={styles.licenseSubtitle}>
+                {user.is_drivers_license_verified
+                  ? "Your credentials are verified. You can freely book vehicles."
+                  : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
+                  ? "Admin is checking that your details match your card."
+                  : user.license_verification_status === "rejected"
+                  ? user.license_rejection_reason || "Verification failed. Tap to re-upload clear photos."
+                  : "Upload your driver's license (Front & Back) to get verified for booking."}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={Colors.secondary} />
+          </TouchableOpacity>
+        )}
 
         {/* Account Status Card - Premium Presentable UI */}
         <View style={styles.statusCard}>
           <View style={styles.statusIconWrap}>
             <Ionicons
-              name={user.account_status === "active" ? "shield-checkmark" : "time"}
+              name={
+                user.is_drivers_license_verified
+                  ? "checkmark-circle"
+                  : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
+                  ? "time"
+                  : "alert-circle"
+              }
               size={24}
-              color={user.account_status === "active" ? "#10B981" : Colors.primary}
+              color={
+                user.is_drivers_license_verified
+                  ? "#10B981"
+                  : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
+                  ? "#D97706"
+                  : Colors.primary
+              }
             />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.statusTitle}>
-              {user.account_status === "active"
-                ? "Account Verified & Active"
-                : `Status: ${user.account_status?.toUpperCase() || "PENDING"}`}
+              {user.is_drivers_license_verified
+                ? "Renter Status: Fully Verified"
+                : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
+                ? "Renter Status: Verification In Progress"
+                : user.license_verification_status === "rejected"
+                ? "Renter Status: Action Required (Rejected)"
+                : "Renter Status: Action Needed"}
             </Text>
             <Text style={styles.statusSubtitle}>
-              {user.account_status === "active"
+              {user.is_drivers_license_verified
                 ? "You have full booking privileges across all vehicle listings."
-                : "Your account credentials are currently under review."}
+                : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
+                ? "Your submitted driver's license is being analyzed by the Admin."
+                : user.license_verification_status === "rejected"
+                ? "Your license was rejected. Please re-upload matching photos."
+                : "Driver's license verification is required before making reservations."}
             </Text>
           </View>
         </View>
@@ -258,7 +406,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8F9FA",
+    backgroundColor: Colors.white,
   },
   headerBar: {
     flexDirection: "row",
@@ -311,7 +459,7 @@ const styles = StyleSheet.create({
   avatarLetter: {
     fontFamily: FontFamily.bold,
     fontSize: 36,
-    color: Colors.dark,
+    color: Colors.white,
   },
   cameraBadge: {
     position: "absolute",
@@ -353,10 +501,78 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: Colors.logoBackground,
   },
+  roleBadgeVerified: {
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+  },
+  roleBadgePending: {
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+  roleBadgeUnverified: {
+    backgroundColor: "#FEE2E2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
   roleBadgeText: {
     fontFamily: FontFamily.semiBold,
     fontSize: 12,
     color: Colors.dark,
+  },
+  roleBadgeTextVerified: {
+    color: "#047857",
+  },
+  roleBadgeTextPending: {
+    color: "#92400E",
+  },
+  roleBadgeTextUnverified: {
+    color: "#B45309",
+  },
+  licenseStatusCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 16,
+    padding: Spacing.md,
+    gap: Spacing.md,
+    marginBottom: Spacing.md,
+    borderWidth: 1.5,
+  },
+  licenseCardVerified: {
+    backgroundColor: "#F0FDF4",
+    borderColor: "#86EFAC",
+  },
+  licenseCardPending: {
+    backgroundColor: "#FFFBEB",
+    borderColor: "#FCD34D",
+  },
+  licenseCardRejected: {
+    backgroundColor: "#FEF2F2",
+    borderColor: "#FCA5A5",
+  },
+  licenseCardUnverified: {
+    backgroundColor: "#FFFBEB",
+    borderColor: "#FCD34D",
+  },
+  licenseIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  licenseTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 14,
+    color: Colors.dark,
+  },
+  licenseSubtitle: {
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    color: Colors.secondary,
+    marginTop: 2,
+    lineHeight: 16,
   },
   statusCard: {
     flexDirection: "row",
@@ -456,6 +672,6 @@ const styles = StyleSheet.create({
   signInText: {
     fontFamily: FontFamily.bold,
     fontSize: 14,
-    color: Colors.dark,
+    color: Colors.white,
   },
 });

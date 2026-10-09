@@ -25,10 +25,14 @@ export const createVehicle = async (data: VehicleFormData): Promise<Vehicle> => 
 
   formData.append("name", data.name.trim());
   Object.entries(data).forEach(([key, value]) => {
-    if (key !== "imageUri" && key !== "imageUris" && typeof value === "string" && value.trim()) {
+    if (key !== "imageUri" && key !== "imageUris" && key !== "features" && typeof value === "string" && value.trim()) {
       formData.append(key, value.trim());
     }
   });
+
+  if (data.features && Array.isArray(data.features)) {
+    formData.append("features", JSON.stringify(data.features));
+  }
 
   if (data.imageUris && data.imageUris.length > 0) {
     data.imageUris.forEach((uri, index) => {

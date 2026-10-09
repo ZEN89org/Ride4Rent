@@ -18,6 +18,7 @@ import {
   FontSize,
   Spacing,
 } from "@/constants/theme";
+import { useNotificationCount } from "@/context/NotificationContext";
 
 const { height } = Dimensions.get("window");
 
@@ -29,6 +30,8 @@ interface Props {
   onSearchSubmit?: () => void;
   onNotificationPress: () => void;
   onMenuPress: () => void;
+  profilePhoto?: string | null;
+  onProfilePress?: () => void;
 }
 
 export default function HomeHeader({
@@ -39,15 +42,20 @@ export default function HomeHeader({
   onSearchSubmit,
   onNotificationPress,
   onMenuPress,
+  profilePhoto: customPhoto,
+  onProfilePress,
 }: Props) {
-  const profilePhoto = user?.profile_photo;
+  const { unreadCount } = useNotificationCount();
+  const profilePhoto = customPhoto || user?.profile_photo;
 
   return (
     <View style={styles.container}>
-
       <View style={styles.userRow}>
-
-        <View style={styles.profileContainer}>
+        <TouchableOpacity
+          style={styles.profileContainer}
+          onPress={onProfilePress}
+          activeOpacity={0.8}
+        >
           {profilePhoto ? (
             <Image
               source={{ uri: profilePhoto }}
@@ -63,7 +71,7 @@ export default function HomeHeader({
               />
             </View>
           )}
-        </View>
+        </TouchableOpacity>
 
         <View style={styles.userInfo}>
           <Text
@@ -89,6 +97,13 @@ export default function HomeHeader({
               size={21}
               color={Colors.dark}
             />
+            {unreadCount > 0 && (
+              <View style={styles.badgeContainer}>
+                <Text style={styles.badgeText}>
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -106,11 +121,13 @@ export default function HomeHeader({
       </View>
 
       <View style={styles.searchContainer}>
-        <Ionicons
-          name="search"
-          size={21}
-          color={Colors.dark}
-        />
+        <TouchableOpacity onPress={onSearchSubmit} activeOpacity={0.7} style={styles.searchIconBtn}>
+          <Ionicons
+            name="search"
+            size={21}
+            color={Colors.dark}
+          />
+        </TouchableOpacity>
 
         <TextInput
           value={search}
@@ -137,11 +154,12 @@ export default function HomeHeader({
 
 const styles = StyleSheet.create({
   container: {
-    minHeight: height * 0.25,
     backgroundColor: Colors.primary,
     borderRadius: 20,
     paddingHorizontal: Spacing.lg,
-    paddingBottom: 30,
+    paddingTop: Spacing.md,
+    paddingBottom: 72,
+    zIndex: 1,
   },
 
   userRow: {
@@ -150,9 +168,9 @@ const styles = StyleSheet.create({
   },
 
   profileContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: Colors.white,
     justifyContent: "center",
     alignItems: "center",
@@ -174,28 +192,28 @@ const styles = StyleSheet.create({
 
   userInfo: {
     flex: 1,
-    marginTop: 10,
-    marginLeft: 5,
+    marginTop: 6,
+    marginLeft: 8,
     marginRight: Spacing.sm,
   },
 
   username: {
     fontFamily: FontFamily.bold,
     fontSize: FontSize.title,
-    color: Colors.dark,
+    color: Colors.white,
   },
 
   subtitle: {
-    marginTop: -10,
+    marginTop: -8,
     fontFamily: FontFamily.regular,
     fontSize: 10,
-    color: Colors.dark,
+    color: Colors.white,
   },
 
   actions: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 10,
+    marginTop: 6,
     gap: 8,
   },
 
@@ -206,24 +224,55 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     justifyContent: "center",
     alignItems: "center",
+    position: "relative",
+  },
+  badgeContainer: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    backgroundColor: Colors.primary,
+    borderRadius: 9,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: Colors.white,
+  },
+  badgeText: {
+    color: Colors.white,
+    fontFamily: FontFamily.bold,
+    fontSize: 9,
+    lineHeight: 11,
   },
 
   searchContainer: {
-  height: 50,
-  marginTop: 25,
-  backgroundColor: Colors.white,
-  borderRadius: 10,
-  flexDirection: "row",
-  alignItems: "center",
-  paddingHorizontal: Spacing.md,
-},
-
-searchInput: {
-  flex: 1,
-  marginLeft: Spacing.sm,
-  fontFamily: FontFamily.regular,
-  fontSize: FontSize.small,
-  color: Colors.dark,
-  paddingVertical: 0,
-},
+    height: 50,
+    marginTop: 18,
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.md,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+    zIndex: 20,
+  },
+  searchIconBtn: {
+    padding: 2,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: Spacing.sm,
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.small,
+    color: Colors.dark,
+    paddingVertical: 0,
+  },
 });

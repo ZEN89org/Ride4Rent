@@ -1,6 +1,8 @@
 import { Skeleton } from "@/components/common/Skeleton";
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";
+import { useAppToast } from "@/context/ToastContext";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 import OperatorShell from "@/features/operator/components/navigation/OperatorShell";
 import { getMyVehicles } from "@/features/operator/services/vehicleService";
 import { Vehicle } from "@/features/operator/types/vehicle";
@@ -18,9 +20,24 @@ import {
 } from "react-native";
 
 export default function OperatorVehiclesScreen() {
+  const { isOperatorPending } = useAuth();
+  const { showModal } = useAppToast();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  const handleAddCar = () => {
+    if (isOperatorPending) {
+      showModal(
+        "Account Under Review",
+        "You cannot list new vehicles while your account is pending administrator review. Once your business documents are verified, vehicle listing will be unlocked.",
+        [{ text: "Understood", style: "default" }],
+        "warning"
+      );
+      return;
+    }
+    router.push("/operator-vehicle-upload" as any);
+  };
 
   const load = useCallback(async () => {
     try {
@@ -53,13 +70,22 @@ export default function OperatorVehiclesScreen() {
 
           <TouchableOpacity
             style={styles.addBtn}
-            onPress={() => router.push("/operator-vehicle-upload" as any)}
+            onPress={handleAddCar}
             activeOpacity={0.85}
           >
-            <Ionicons name="add" size={18} color={Colors.dark} />
+            <Ionicons name="add" size={18} color={Colors.white} />
             <Text style={styles.addBtnText}>Add Car</Text>
           </TouchableOpacity>
         </View>
+
+        {isOperatorPending && (
+          <View style={styles.pendingNotice}>
+            <Ionicons name="time" size={18} color="#D97706" />
+            <Text style={styles.pendingNoticeText}>
+              Your account is currently under review by the Admin. Vehicle listing will be enabled once your documents are approved.
+            </Text>
+          </View>
+        )}
 
         {loading && !refreshing ? (
           <View style={{ gap: 14 }}>
@@ -77,7 +103,7 @@ export default function OperatorVehiclesScreen() {
             </Text>
             <TouchableOpacity
               style={styles.addFirstBtn}
-              onPress={() => router.push("/operator-vehicle-upload" as any)}
+              onPress={handleAddCar}
               activeOpacity={0.85}
             >
               <Text style={styles.addFirstBtnText}>List Your First Car</Text>
@@ -181,7 +207,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   addBtnText: {
-    color: Colors.dark,
+    color: Colors.white,
     fontFamily: FontFamily.bold,
     fontSize: 13,
   },
@@ -315,6 +341,24 @@ const styles = StyleSheet.create({
   addFirstBtnText: {
     fontFamily: FontFamily.bold,
     fontSize: 14,
-    color: Colors.dark,
+    color: Colors.white,
+  },
+  pendingNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    backgroundColor: "#FFFBEB",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  pendingNoticeText: {
+    flex: 1,
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+    lineHeight: 18,
+    color: "#92400E",
   },
 });

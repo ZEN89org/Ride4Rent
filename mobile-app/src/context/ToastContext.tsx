@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState } from "react";
 import { AppToast } from "@/components/common/AppToast";
 import { AppModal, ModalButton } from "@/components/common/AppModal";
+import { createNotification } from "@/services/notificationService";
+import { useNotificationCount } from "@/context/NotificationContext";
 
 interface ModalConfig {
   visible: boolean;
@@ -38,6 +40,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [type, setType] = useState<"success" | "error" | "info" | "warning">("info");
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState<string | undefined>(undefined);
+  const { refreshUnreadCount } = useNotificationCount();
 
   const [modalConfig, setModalConfig] = useState<ModalConfig>({
     visible: false,
@@ -56,6 +59,17 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setTitle(toastTitle);
     setMessage(toastMsg);
     setVisible(true);
+
+    // Persist as a notification so user can review it in Notifications screen
+    createNotification({
+      title: toastTitle,
+      message: toastMsg || toastTitle,
+      type: toastType,
+    })
+      .then(() => {
+        refreshUnreadCount().catch(() => {});
+      })
+      .catch(() => {});
   };
 
   const showSuccess = (t: string, m?: string) => showToast("success", t, m);

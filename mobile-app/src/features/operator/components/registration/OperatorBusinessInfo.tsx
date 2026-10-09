@@ -682,6 +682,7 @@ function SelectionModal({
       visible={visible}
       transparent
       animationType="fade"
+      statusBarTranslucent={true}
       onRequestClose={handleClose}
     >
       <View style={styles.modalContainer}>

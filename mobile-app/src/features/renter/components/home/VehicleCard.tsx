@@ -278,6 +278,6 @@ const styles = StyleSheet.create({
   bookButtonText: {
     fontFamily: FontFamily.bold,
     fontSize: 12,
-    color: Colors.dark,
+    color: Colors.white,
   },
 });

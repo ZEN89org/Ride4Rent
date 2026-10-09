@@ -1,11 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import {
+  Keyboard,
+  Platform,
   Pressable,
   StyleSheet,
   View,
 } from "react-native";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import AuthRequiredBottomSheet from "@/features/auth/components/AuthRequiredBottomSheet";
 
@@ -26,6 +28,23 @@ export default function CustomTabBar({
   const { isGuest } = useAuth();
 
   const [showAuthSheet, setShowAuthSheet] = useState(false);
+  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      () => setKeyboardVisible(true)
+    );
+    const hideSubscription = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => setKeyboardVisible(false)
+    );
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
 
   const icons = {
     home: "home-outline",
@@ -70,6 +89,10 @@ export default function CustomTabBar({
       navigation.navigate(routeName);
     }
   };
+
+  if (isKeyboardVisible) {
+    return null;
+  }
 
   return (
     <>

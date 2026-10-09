@@ -40,6 +40,7 @@ use App\Models\VehicleType;
     'rating',
     'rating_count',
     'description',
+    'features',
     'cover_photo',
     'min_driver_age',
     'min_driving_experience',
@@ -53,6 +54,12 @@ use App\Models\VehicleType;
     'pickup_address',
     'pickup_latitude',
     'pickup_longitude',
+    'base_price_per_day',
+    'demand_multiplier',
+    'is_dynamic_pricing_enabled',
+    'current_odometer',
+    'last_service_odometer',
+    'service_interval_km',
 ])]
 class Vehicle extends Model
 {
@@ -60,12 +67,32 @@ class Vehicle extends Model
     {
         return [
             'daily_rate' => 'decimal:2',
+            'base_price_per_day' => 'decimal:2',
+            'demand_multiplier' => 'decimal:2',
+            'is_dynamic_pricing_enabled' => 'boolean',
+            'current_odometer' => 'integer',
+            'last_service_odometer' => 'integer',
+            'service_interval_km' => 'integer',
             'reservation_fee' => 'decimal:2',
             'available_from' => 'date',
             'available_until' => 'date',
             'pickup_latitude' => 'float',
             'pickup_longitude' => 'float',
+            'features' => 'array',
         ];
+    }
+
+    protected $appends = ['image_url'];
+
+    public function getImageUrlAttribute(): ?string
+    {
+        if ($this->cover_photo) {
+            if (str_starts_with($this->cover_photo, 'http://') || str_starts_with($this->cover_photo, 'https://')) {
+                return $this->cover_photo;
+            }
+            return url('/storage/' . ltrim($this->cover_photo, '/'));
+        }
+        return null;
     }
 
     public function operator(): BelongsTo
@@ -83,4 +110,15 @@ class Vehicle extends Model
     {
         return $this->hasMany(VehicleImage::class)->orderBy('sort_order');
     }
+
+    public function bookings(): HasMany
+    {
+        return $this->hasMany(Booking::class, 'vehicle_id');
+    }
+
+    public function maintenances(): HasMany
+    {
+        return $this->hasMany(VehicleMaintenance::class, 'vehicle_id');
+    }
 }
+

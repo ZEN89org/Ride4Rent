@@ -117,6 +117,7 @@ export default function RegistrationRoleBottomSheet({
       visible={visible}
       transparent
       animationType="none"
+      statusBarTranslucent={true}
       onRequestClose={closeSheet}
     >
       <View style={styles.container}>

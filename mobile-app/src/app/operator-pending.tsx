@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import {
     StyleSheet,
     Text,
+    TouchableOpacity,
     View,
 } from "react-native";
 
@@ -20,6 +21,7 @@ export default function OperatorPending() {
   const {
     user,
     isOperatorPending,
+    logout,
   } = useAuth();
 
   if (!isOperatorPending) {
@@ -77,15 +79,24 @@ export default function OperatorPending() {
         </View>
 
         <Text style={styles.note}>
-          You will be able to access the Operator
-          Dashboard once your registration has been
-          approved.
+          You can navigate and preview your Operator Dashboard while your application is under review. Full features such as vehicle publishing and bookings will unlock upon approval.
         </Text>
 
         <PrimaryButton style={{ width: "100%" }}
-          title="Back to Login"
-          onPress={() => router.replace("/login")}
+          title="Explore Operator Dashboard"
+          onPress={() => router.replace("/operator-home")}
         />
+
+        <TouchableOpacity
+          onPress={async () => {
+            await logout();
+            router.replace("/login");
+          }}
+          style={styles.backToLoginButton}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.backToLoginText}>Sign Out & Back to Login</Text>
+        </TouchableOpacity>
       </View>
     </ScreenContainer>
   );
@@ -176,5 +187,17 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: Colors.secondary,
     textAlign: "center",
+  },
+
+  backToLoginButton: {
+    marginTop: Spacing.md,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+
+  backToLoginText: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: FontSize.body,
+    color: Colors.secondary,
   },
 });

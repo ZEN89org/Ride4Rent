@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   FlatList,
   StyleSheet,
@@ -14,8 +14,7 @@ import TopRatedVehicleCard, {
 import { Colors } from "@/constants/colors";
 import {
   FontFamily,
-  FontSize,
-  Spacing,
+  Spacing
 } from "@/constants/theme";
 import api from "@/services/api";
 
@@ -36,11 +35,12 @@ export default function TopRatedVehicles({
         if (!mounted) return;
         const apiVehicles = res.data.data || [];
         setVehicles(
-          apiVehicles.slice(0, 6).map((v: any) => ({
+          apiVehicles.slice(0, 10).map((v: any) => ({
             id: String(v.id),
             name: v.name,
             price: Number(v.price_per_day),
-            rating: Number(v.rating || 5.0),
+            rating: v.rating !== null && v.rating !== undefined ? Number(v.rating) : 0,
+            ratingCount: Number(v.rating_count || 0),
             image: v.image_url
               ? { uri: v.image_url }
               : { uri: "https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=800&auto=format&fit=crop&q=60" },
@@ -64,17 +64,19 @@ export default function TopRatedVehicles({
     <View style={styles.container}>
       <View style={styles.sectionHeader}>
         <Text style={styles.title}>Top Rated Vehicles</Text>
+        <View style={styles.yellowLine} />
       </View>
 
       <FlatList
         data={vehicles}
         horizontal
-        pagingEnabled
         showsHorizontalScrollIndicator={false}
-        snapToInterval={cardWidth + Spacing.md}
-        decelerationRate="fast"
-        contentContainerStyle={styles.listContent}
         keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContent}
+        snapToAlignment="start"
+        snapToInterval={290 + 10}
+        decelerationRate="fast"
+        disableIntervalMomentum
         renderItem={({ item }) => (
           <TopRatedVehicleCard
             vehicle={item}
@@ -88,19 +90,29 @@ export default function TopRatedVehicles({
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: Spacing.md,
+    marginTop: 30,
+    paddingBottom: Spacing.lg,
   },
   sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.sm,
+    marginBottom: 8,
+    gap: 10,
   },
   title: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.title,
+    fontFamily: FontFamily.medium,
+    fontSize: 15,
     color: Colors.dark,
+  },
+  yellowLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.primary,
+    borderRadius: 2,
   },
   listContent: {
     paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
+    gap: 8,
   },
 });

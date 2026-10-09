@@ -35,4 +35,13 @@ return [
         ],
     ],
 
+    'gemini' => [
+        'key' => env('GEMINI_API_KEY'),
+    ],
+
+    'paymongo' => [
+        'public_key' => env('PAYMONGO_PUBLIC_KEY', 'pk_test_sample_ride4rent'),
+        'secret_key' => env('PAYMONGO_SECRET_KEY', 'sk_test_sample_ride4rent'),
+        'webhook_secret' => env('PAYMONGO_WEBHOOK_SECRET', 'whsec_sample_ride4rent'),
+    ],
 ];

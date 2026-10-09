@@ -48,16 +48,13 @@ export default function AppInput({
       )}
 
       <TextInput
-
-        {...props}
-
         placeholderTextColor={Colors.secondary}
-
+        {...props}
         style={[
           styles.input,
-          error && styles.errorInput,
+          error ? styles.errorInput : null,
+          props.style,
         ]}
-
       />
 
       {error && (
@@ -97,19 +94,13 @@ const styles = StyleSheet.create({
   },
 
   input: {
-
     backgroundColor: Colors.inputBackground,
-
     borderRadius: Radius.full,
-
     paddingHorizontal: Spacing.lg,
-
     paddingVertical: Spacing.md,
-
     fontFamily: FontFamily.regular,
-
     fontSize: FontSize.body,
-
+    color: Colors.dark,
   },
 
   errorInput: {

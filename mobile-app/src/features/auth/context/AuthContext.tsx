@@ -28,6 +28,7 @@ interface AuthContextType {
   login: (user: any, token: string) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (user: any) => Promise<void>;
+  refreshUser: () => Promise<any>;
 }
 
 export const AuthContext =
@@ -150,6 +151,21 @@ const initializeAuth = async () => {
     setUser(mergedUser);
   };
 
+  const refreshUser = async () => {
+    try {
+      const response = await authService.getCurrentUser();
+      const currentUser = response?.data ?? response?.user;
+      if (currentUser) {
+        await saveUser(currentUser);
+        setUser(currentUser);
+        return currentUser;
+      }
+    } catch (error) {
+      console.log("Failed to refresh user:", error);
+    }
+    return null;
+  };
+
   const isAuthenticated = !!token;
   const isGuest = !token;
 
@@ -189,6 +205,7 @@ const initializeAuth = async () => {
         login,
         logout,
         updateUser,
+        refreshUser,
       }}
     >
       {children}

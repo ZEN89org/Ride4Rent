@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { useAppToast } from "@/context/ToastContext";
 import OtpVerificationModal from "@/features/auth/components/OtpVerificationModal";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 import { sendVerificationOtp } from "@/features/auth/services/authService";
 import OperatorApplicationSubmitted from "@/features/operator/components/registration/OperatorApplicationSubmitted";
 import OperatorBusinessInfo, {
@@ -25,6 +26,7 @@ import {
 
 export default function OperatorRegistration() {
   const { showModal } = useAppToast();
+  const { login, logout } = useAuth();
   const [step, setStep] = useState(1);
 
   const [ownerInfo, setOwnerInfo] =
@@ -140,7 +142,12 @@ export default function OperatorRegistration() {
         otp: otpCode,
       };
 
-      await registerOperator(registrationData);
+      const response = await registerOperator(registrationData);
+
+      // Auto-authenticate so the operator can preview their dashboard right away
+      if (response?.user && response?.token) {
+        await login(response.user, response.token);
+      }
 
       setShowSuccessSheet(true);
     } catch (error: any) {
@@ -162,8 +169,14 @@ export default function OperatorRegistration() {
     }
   };
 
-  const handleBackToLogin = () => {
+  const handleExploreDashboard = () => {
     setShowSuccessSheet(false);
+    router.replace("/operator-home");
+  };
+
+  const handleBackToLogin = async () => {
+    setShowSuccessSheet(false);
+    await logout();
     router.replace("/login");
   };
 
@@ -217,6 +230,7 @@ export default function OperatorRegistration() {
 
       <OperatorApplicationSubmitted
         visible={showSuccessSheet}
+        onExploreDashboard={handleExploreDashboard}
         onBackToLogin={handleBackToLogin}
       />
     </>

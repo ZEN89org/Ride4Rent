@@ -1,9 +1,32 @@
 import api from "@/services/api";
 
+export interface BookingContext {
+  id: number;
+  vehicle_name: string;
+  vehicle_image?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  total_days?: number;
+  total_price: number;
+  reservation_fee: number;
+  balance_due: number;
+  status: string;
+  payment_status: string;
+  operator_payment_info?: {
+    business_name?: string;
+    account_name?: string;
+    account_number?: string;
+    accepted_payment_methods?: string[];
+    qr_code_url?: string | null;
+  } | null;
+}
+
 export interface ChatThreadMessage {
   id: string;
   sender: "user" | "other";
+  sender_id?: number;
   text: string;
+  image_url?: string | null;
   time: string;
   created_at: string;
 }
@@ -26,19 +49,25 @@ export const getConversations = async (): Promise<ConversationItem[]> => {
 
 export const getChatThread = async (
   otherUserId: number | string
-): Promise<{ other_user: any; messages: ChatThreadMessage[] }> => {
+): Promise<{ other_user: any; booking_context?: BookingContext | null; messages: ChatThreadMessage[] }> => {
   const response = await api.get(`/messages/thread/${otherUserId}`);
   return {
     other_user: response.data.other_user,
+    booking_context: response.data.booking_context,
     messages: response.data.data,
   };
 };
 
 export const sendMessage = async (data: {
   receiver_id: number | string;
-  message: string;
+  message?: string;
+  image_base64?: string;
   vehicle_id?: number | string;
 }): Promise<ChatThreadMessage> => {
   const response = await api.post("/messages/send", data);
   return response.data.data;
+};
+
+export const deleteMessage = async (messageId: string | number): Promise<void> => {
+  await api.delete(`/messages/${messageId}`);
 };

@@ -6,6 +6,8 @@ import {
   useSideNav,
 } from "@/context/SideNavContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import AssistantModal from "@/features/assistant/components/AssistantModal";
+import FloatingAssistantFab from "@/features/assistant/components/FloatingAssistantFab";
 import { Tabs } from "expo-router";
 import {
   Animated,
@@ -13,7 +15,7 @@ import {
   View,
 } from "react-native";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { router } from "expo-router";
 
 function TabsContent() {
@@ -28,11 +30,11 @@ function TabsContent() {
     loading,
   } = useAuth();
 
+  const [assistantVisible, setAssistantVisible] = useState(false);
+
   useEffect(() => {
     if (!loading && user?.role === "operator") {
-      if (user.account_status === "pending") {
-        router.replace("/operator-pending");
-      } else if (user.account_status === "rejected") {
+      if (user.account_status === "rejected") {
         router.replace("/operator-rejected");
       } else {
         router.replace("/operator-home");
@@ -81,6 +83,7 @@ function TabsContent() {
           )}
           screenOptions={{
             headerShown: false,
+            sceneStyle: { backgroundColor: "#FFFFFF" },
           }}
         >
           <Tabs.Screen
@@ -118,6 +121,15 @@ function TabsContent() {
             }}
           />
         </Tabs>
+
+        {/* Intelligent Floating Chat Assistant FAB */}
+        <FloatingAssistantFab onPress={() => setAssistantVisible(true)} />
+
+        {/* Intelligent Assistant Modal Sheet */}
+        <AssistantModal
+          visible={assistantVisible}
+          onClose={() => setAssistantVisible(false)}
+        />
       </Animated.View>
 
       {isVisible && (
@@ -142,9 +154,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     overflow: "hidden",
+    backgroundColor: "#FFFFFF",
   },
 
   tabsContainer: {
     flex: 1,
+    backgroundColor: "#FFFFFF",
   },
 });

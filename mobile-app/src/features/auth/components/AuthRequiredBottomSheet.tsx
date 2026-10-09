@@ -100,6 +100,7 @@ export default function AuthRequiredBottomSheet({
       visible={visible}
       transparent
       animationType="none"
+      statusBarTranslucent={true}
       onRequestClose={closeSheet}
     >
       <View style={styles.overlay}>

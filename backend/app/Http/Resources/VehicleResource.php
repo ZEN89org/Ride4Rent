@@ -35,15 +35,29 @@ class VehicleResource extends JsonResource
             'number_of_doors' => $this->number_of_doors,
             'mileage' => $this->mileage,
             'interior_color' => $this->interior_color,
-            'exterior_color' => $this->exterior_color,
-            'price_per_day' => (float) $this->daily_rate,
+            'price_per_day' => (float) ($this->daily_rate ?: 1500),
+            'base_price_per_day' => (float) ($this->base_price_per_day ?: $this->daily_rate ?: 1500),
+            'demand_pricing' => \App\Services\DemandPricingService::calculateVehicleDemand($this->resource),
+            'current_odometer' => (int) ($this->current_odometer ?: 0),
+            'last_service_odometer' => (int) ($this->last_service_odometer ?: 0),
+            'service_interval_km' => (int) ($this->service_interval_km ?: 5000),
             'reservation_fee' => (float) ($this->reservation_fee ?? 500),
-            'rating' => (float) ($this->rating ?? 5.0),
+            'rating' => ((int) ($this->rating_count ?? 0) > 0 && $this->rating !== null) ? (float) $this->rating : null,
             'rating_count' => (int) ($this->rating_count ?? 0),
+            'min_driver_age' => (int) ($this->min_driver_age ?? 21),
+            'min_driving_experience' => $this->min_driving_experience,
+            'fuel_policy' => $this->fuel_policy ?? 'Same-to-Same (Return with same level of fuel)',
+            'late_return_policy' => $this->late_return_policy ?? 'Late returns subject to hourly rate penalty after 1 hour grace period',
+            'cancellation_policy' => $this->cancellation_policy ?? 'Free cancellation before host confirmation',
+            'smoking_policy' => $this->smoking_policy ?? 'No smoking allowed inside the vehicle',
+            'pet_policy' => $this->pet_policy ?? 'Pets allowed with prior host approval and carrier',
+            'additional_driver_policy' => $this->additional_driver_policy ?? 'Allowed with verified license presentation',
+            'other_policies' => $this->other_policies,
             'pickup_address' => $this->pickup_address,
             'pickup_latitude' => $this->pickup_latitude,
             'pickup_longitude' => $this->pickup_longitude,
             'distance_km' => isset($this->distance_km) ? round($this->distance_km, 1) : null,
+            'features' => $this->features ?? [],
             'description' => $this->description,
             'image_url' => $this->cover_photo
                 ? $request->getSchemeAndHttpHost().'/storage/'.$this->cover_photo
@@ -57,6 +71,18 @@ class VehicleResource extends JsonResource
                 ];
             })->values(),
             'availability_status' => $this->availability_status,
+            'is_rented' => \App\Models\Booking::where('vehicle_id', $this->id)
+                ->whereIn('status', [
+                    'approved',
+                    'awaiting_pickup',
+                    'pickup_in_progress',
+                    'ready_to_start',
+                    'trip_in_progress',
+                    'ongoing',
+                    'return_pending',
+                ])
+                ->where('end_date', '>=', now()->toDateString())
+                ->exists(),
             'is_available' => $this->is_active && $this->availability_status === 'available' && ($this->available_units ?? 1) > 0,
             'operator' => [
                 'id' => $operator?->id,
@@ -79,6 +105,25 @@ class VehicleResource extends JsonResource
                     ? $request->getSchemeAndHttpHost().'/storage/'.$profile->qr_code
                     : null,
             ],
+            'reviews' => $this->relationLoaded('bookings')
+                ? $this->bookings
+                    ->whereNotNull('rating')
+                    ->map(function ($b) use ($request) {
+                        $renter = $b->renter;
+                        $fullName = trim(($renter?->first_name ?? '') . ' ' . ($renter?->last_name ?? ''));
+                        return [
+                            'id' => $b->id,
+                            'renter_name' => $fullName !== '' ? $fullName : 'Verified Renter',
+                            'renter_photo' => $renter?->profile_photo
+                                ? $request->getSchemeAndHttpHost() . '/storage/' . $renter->profile_photo
+                                : null,
+                            'rating' => (int) $b->rating,
+                            'review' => $b->review,
+                            'created_at' => $b->updated_at ? $b->updated_at->diffForHumans() : 'Recently',
+                        ];
+                    })
+                    ->values()
+                : [],
         ];
     }
 }

@@ -12,11 +12,43 @@ class LicenseController extends Controller
     public function upload(Request $request): JsonResponse
     {
         $request->validate([
-            'front_image' => ['nullable', 'image', 'max:10240'],
-            'back_image' => ['nullable', 'image', 'max:10240'],
+            'front_image' => ['nullable', function ($attribute, $value, $fail) {
+                if (request()->hasFile($attribute)) {
+                    $file = request()->file($attribute);
+                    $ext = strtolower($file->getClientOriginalExtension() ?: '');
+                    $mime = $file->getMimeType() ?: '';
+                    if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'heic']) && !str_starts_with($mime, 'image/')) {
+                        $fail("The {$attribute} must be a valid image file.");
+                    }
+                }
+            }],
+            'back_image' => ['nullable', function ($attribute, $value, $fail) {
+                if (request()->hasFile($attribute)) {
+                    $file = request()->file($attribute);
+                    $ext = strtolower($file->getClientOriginalExtension() ?: '');
+                    $mime = $file->getMimeType() ?: '';
+                    if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'heic']) && !str_starts_with($mime, 'image/')) {
+                        $fail("The {$attribute} must be a valid image file.");
+                    }
+                }
+            }],
         ]);
 
         $user = $request->user();
+
+        if ($user->license_verification_status === 'pending') {
+            return response()->json([
+                'success' => false,
+                'message' => "Your driver's license is currently under review by our Admin team. You cannot re-upload photos while review is in progress.",
+            ], 422);
+        }
+
+        if ($user->is_drivers_license_verified && $user->license_verification_status === 'approved') {
+            return response()->json([
+                'success' => false,
+                'message' => "Your driver's license has already been verified and approved.",
+            ], 422);
+        }
 
         if ($request->hasFile('front_image')) {
             $frontPath = $request->file('front_image')->store('driver_licenses', 'public');
@@ -28,15 +60,31 @@ class LicenseController extends Controller
             $user->drivers_license_back = $backPath;
         }
 
-        if ($user->drivers_license_front && $user->drivers_license_back) {
-            $user->is_drivers_license_verified = true;
+        if (empty($user->drivers_license_front) || empty($user->drivers_license_back)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please provide both Front and Back photos of your driver\'s license.',
+            ], 422);
         }
 
+        $user->is_drivers_license_verified = false;
+        $user->license_verification_status = 'pending';
+        $user->license_rejection_reason = null;
+        $user->license_submitted_at = now();
         $user->save();
+
+        // Create in-app notification for the renter
+        \App\Models\Notification::create([
+            'user_id' => $user->id,
+            'title' => "License Submitted",
+            'message' => 'Your driver\'s license is pending verification.',
+            'type' => 'info',
+            'action_url' => '/driver-license',
+        ]);
 
         return response()->json([
             'success' => true,
-            'message' => "Driver's license submitted successfully.",
+            'message' => "Driver's license submitted successfully for Administrator verification.",
             'data' => new UserResource($user),
         ]);
     }

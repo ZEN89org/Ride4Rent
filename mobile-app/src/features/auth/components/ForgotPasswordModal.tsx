@@ -64,10 +64,16 @@ export default function ForgotPasswordModal({
 
   useEffect(() => {
     let timer: any;
-    if (visible && step === 2 && countdown > 0) {
-      timer = setInterval(() => {
-        setCountdown((prev) => prev - 1);
-      }, 1000);
+    if (visible && step === 2) {
+      setTimeout(() => {
+        inputRefs.current[0]?.focus();
+      }, 300);
+
+      if (countdown > 0) {
+        timer = setInterval(() => {
+          setCountdown((prev) => prev - 1);
+        }, 1000);
+      }
     }
     return () => clearInterval(timer);
   }, [visible, step, countdown]);
@@ -222,16 +228,18 @@ export default function ForgotPasswordModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" statusBarTranslucent={true} onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={styles.overlay}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
       >
         <View style={styles.card}>
           <ScrollView
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.scrollContent}
+            bounces={false}
           >
             {/* Header */}
             <View style={styles.header}>
@@ -413,11 +421,11 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     padding: Spacing.xl,
-    paddingBottom: Platform.OS === "ios" ? Spacing.xl + 20 : Spacing.xl,
-    maxHeight: "90%",
+    paddingBottom: Platform.OS === "ios" ? 34 : 24,
+    maxHeight: "92%",
   },
   scrollContent: {
-    paddingBottom: Spacing.md,
+    paddingBottom: 30,
   },
   header: {
     flexDirection: "row",

@@ -10,17 +10,16 @@ import {
 
 import { Colors } from "@/constants/colors";
 import {
-  FontFamily,
-  FontSize,
-  Spacing,
+  FontFamily
 } from "@/constants/theme";
 
 export interface TopRatedVehicle {
   id: string;
   name: string;
   price: number;
-  rating: number;
+  rating?: number | null;
   image: ImageSourcePropType;
+  ratingCount?: number;
 }
 
 interface Props {
@@ -32,39 +31,62 @@ export default function TopRatedVehicleCard({
   vehicle,
   onViewPress,
 }: Props) {
+  const hasRating = vehicle.rating !== null && vehicle.rating !== undefined && Number(vehicle.rating) > 0;
+  const ratingVal = hasRating ? Number(vehicle.rating).toFixed(1) : null;
+  const countVal = (vehicle.ratingCount ?? 0) > 0 ? `(${vehicle.ratingCount})` : "";
+
   return (
     <TouchableOpacity
       style={styles.card}
       onPress={() => onViewPress?.(vehicle)}
-      activeOpacity={0.88}
+      activeOpacity={0.9}
     >
+      {/* Fixed-size image container with background fill */}
       <View style={styles.imageContainer}>
         <Image
           source={vehicle.image}
           contentFit="cover"
-          style={styles.image}
+          style={styles.carImage}
         />
-        <View style={styles.ratingBadge}>
-          <Ionicons name="star" size={11} color={Colors.primary} />
-          <Text style={styles.ratingText}>{vehicle.rating.toFixed(1)}</Text>
-        </View>
       </View>
 
-      <View style={styles.details}>
-        <Text style={styles.name} numberOfLines={1}>
+      {/* Right side vehicle details */}
+      <View style={styles.infoWrap}>
+        <View style={styles.priceContainer}>
+          <Text style={styles.priceText} numberOfLines={1}>
+            PHP {vehicle.price.toLocaleString()}
+          </Text>
+          <Text style={styles.pricePer}> / day</Text>
+        </View>
+
+        <Text style={styles.vehicleName} numberOfLines={1}>
           {vehicle.name}
         </Text>
 
         <View style={styles.bottomRow}>
-          <Text style={styles.price}>
-            ₱{vehicle.price.toLocaleString()}
-            <Text style={styles.period}>/day</Text>
-          </Text>
-
-          <View style={styles.viewPill}>
-            <Text style={styles.viewText}>View</Text>
-            <Ionicons name="chevron-forward" size={12} color={Colors.dark} />
+          <View style={styles.ratingRow}>
+            {hasRating ? (
+              <>
+                <Ionicons name="star" size={14} color="#F59E0B" />
+                <Text style={styles.ratingText}>
+                  {ratingVal} <Text style={styles.ratingCount}>{countVal}</Text>
+                </Text>
+              </>
+            ) : (
+              <View style={styles.newBadge}>
+                <Text style={styles.newBadgeText}>New Listing</Text>
+              </View>
+            )}
           </View>
+
+          {/* View Action Pill Button */}
+          <TouchableOpacity
+            style={styles.viewButton}
+            onPress={() => onViewPress?.(vehicle)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.viewButtonText}>View</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </TouchableOpacity>
@@ -73,77 +95,96 @@ export default function TopRatedVehicleCard({
 
 const styles = StyleSheet.create({
   card: {
-    width: 220,
+    width: 285,
+    height: 104,
     backgroundColor: Colors.white,
     borderRadius: 16,
-    overflow: "hidden",
+    padding: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    marginRight: 12,
     borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: Spacing.xs,
+    borderColor: "#E5E7EB",
   },
   imageContainer: {
-    width: "100%",
-    height: 110,
-    backgroundColor: Colors.inputBackground,
-    position: "relative",
+    width: 88,
+    height: 84,
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "#F3F4F6",
   },
-  image: {
+  carImage: {
     width: "100%",
     height: "100%",
   },
-  ratingBadge: {
-    position: "absolute",
-    top: 8,
-    right: 8,
+  infoWrap: {
+    flex: 1,
+    marginLeft: 12,
+    justifyContent: "space-between",
+    height: 84,
+  },
+  priceContainer: {
+    flexDirection: "row",
+    alignItems: "baseline",
+  },
+  priceText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 15,
+    color: Colors.dark,
+  },
+  pricePer: {
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    color: Colors.secondary,
+  },
+  vehicleName: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 13,
+    color: "#374151",
+    marginTop: -2,
+  },
+  bottomRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  ratingRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 3,
-    backgroundColor: "rgba(26,26,26,0.7)",
+  },
+  ratingText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 12,
+    color: Colors.dark,
+  },
+  ratingCount: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11,
+    color: Colors.secondary,
+  },
+  newBadge: {
+    backgroundColor: "#F3F4F6",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
   },
-  ratingText: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: 10,
-    color: Colors.white,
-  },
-  details: {
-    padding: 10,
-  },
-  name: {
-    fontFamily: FontFamily.bold,
-    fontSize: 14,
-    color: Colors.dark,
-  },
-  bottomRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 6,
-  },
-  price: {
-    fontFamily: FontFamily.bold,
-    fontSize: 13,
-    color: Colors.dark,
-  },
-  period: {
-    fontFamily: FontFamily.regular,
-    fontSize: 10,
+  newBadgeText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 10.5,
     color: Colors.secondary,
   },
-  viewPill: {
-    flexDirection: "row",
+  viewButton: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 5,
+    borderRadius: 14,
+    justifyContent: "center",
     alignItems: "center",
-    backgroundColor: Colors.inputBackground,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-    gap: 2,
   },
-  viewText: {
-    fontFamily: FontFamily.medium,
-    fontSize: 11,
-    color: Colors.dark,
+  viewButtonText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 11.5,
+    color: Colors.white,
   },
 });

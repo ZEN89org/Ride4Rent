@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   FlatList,
   Image,
@@ -28,24 +28,32 @@ export default function Chats() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    if (!isGuest) {
-      loadConversations();
-    }
-  }, [isGuest]);
-
-  const loadConversations = async () => {
+  const loadConversations = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const data = await getConversations();
       setConversations(data);
     } catch (e) {
       console.log("Error loading conversations:", e);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!isGuest) {
+      loadConversations();
+    }
+  }, [isGuest, loadConversations]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!isGuest) {
+        loadConversations(true);
+      }
+    }, [isGuest, loadConversations])
+  );
 
   const filteredChats = conversations.filter(
     (c) =>
@@ -187,6 +195,7 @@ export default function Chats() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: Colors.white,
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
   },
@@ -318,7 +327,7 @@ const styles = StyleSheet.create({
   exploreButtonText: {
     fontFamily: FontFamily.bold,
     fontSize: 14,
-    color: Colors.dark,
+    color: Colors.white,
   },
   signInButton: {
     marginTop: Spacing.xl,
@@ -330,6 +339,6 @@ const styles = StyleSheet.create({
   signInText: {
     fontFamily: FontFamily.bold,
     fontSize: 14,
-    color: Colors.dark,
+    color: Colors.white,
   },
 });

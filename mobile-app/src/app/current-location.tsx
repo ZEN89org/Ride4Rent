@@ -357,7 +357,7 @@ body {
 .leaflet-container {
   width: 100%;
   height: 100%;
-  background: #ffffff;
+  background: #fdfbf7;
 
   font-family:
     -apple-system,
@@ -625,12 +625,26 @@ const map = L.map(
 
 
 L.tileLayer(
-  "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+  "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
   {
+    maxNativeZoom: 16,
     maxZoom: 19,
     minZoom: 3,
-    tileSize: 256,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
+    keepBuffer: 6,
+    updateWhenZooming: false,
+    updateWhenIdle: true,
+    updateInterval: 150,
+  }
+).addTo(map);
+
+// Add clear street labels layer on top
+L.tileLayer(
+  "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+  {
+    maxNativeZoom: 16,
+    maxZoom: 19,
+    minZoom: 3,
     keepBuffer: 6,
     updateWhenZooming: false,
     updateWhenIdle: true,

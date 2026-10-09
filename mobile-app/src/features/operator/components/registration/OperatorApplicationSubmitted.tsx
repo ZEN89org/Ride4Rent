@@ -6,7 +6,8 @@ import {
     Modal,
     StyleSheet,
     Text,
-    View
+    TouchableOpacity,
+    View,
 } from "react-native";
 
 import PrimaryButton from "@/components/common/PrimaryButton";
@@ -20,6 +21,7 @@ import {
 
 type OperatorApplicationSubmittedBottomSheetProps = {
   visible: boolean;
+  onExploreDashboard: () => void;
   onBackToLogin: () => void;
 };
 
@@ -27,6 +29,7 @@ const { height } = Dimensions.get("window");
 
 export default function OperatorApplicationSubmittedBottomSheet({
   visible,
+  onExploreDashboard,
   onBackToLogin,
 }: OperatorApplicationSubmittedBottomSheetProps) {
   const [translateY] = useState(
@@ -70,6 +73,7 @@ export default function OperatorApplicationSubmittedBottomSheet({
       visible={visible}
       transparent
       animationType="none"
+      statusBarTranslucent={true}
       onRequestClose={() => {}}
     >
       <View style={styles.container}>
@@ -128,16 +132,26 @@ export default function OperatorApplicationSubmittedBottomSheet({
             </Text>
           </View>
 
-          <Text style={styles.notificationText}>
-            We’ll notify you once your account has been
-            approved.
-          </Text>
+          <View style={styles.previewModeBox}>
+            <Ionicons name="sparkles" size={16} color="#D97706" />
+            <Text style={styles.previewModeText}>
+              You can navigate and preview your Operator Dashboard now while waiting for verification.
+            </Text>
+          </View>
 
           <PrimaryButton
-            title="Back to Login"
-            onPress={onBackToLogin}
+            title="Explore Operator Dashboard"
+            onPress={onExploreDashboard}
             style={styles.button}
           />
+
+          <TouchableOpacity
+            onPress={onBackToLogin}
+            style={styles.secondaryButton}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.secondaryButtonText}>Back to Login</Text>
+          </TouchableOpacity>
         </Animated.View>
       </View>
     </Modal>
@@ -231,16 +245,41 @@ const styles = StyleSheet.create({
     color: Colors.dark,
   },
 
-  notificationText: {
-    marginTop: Spacing.lg,
-    fontFamily: FontFamily.regular,
-    fontSize: 13,
-    lineHeight: 20,
-    color: Colors.secondary,
-    textAlign: "center",
+  previewModeBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: Spacing.md,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: "#FEF3C7",
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+
+  previewModeText: {
+    flex: 1,
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+    color: "#92400E",
+    lineHeight: 16,
   },
 
   button: {
-    marginTop: Spacing.xl,
+    marginTop: Spacing.lg,
+  },
+
+  secondaryButton: {
+    marginTop: Spacing.xs,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  secondaryButtonText: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: FontSize.body,
+    color: Colors.secondary,
   },
 });

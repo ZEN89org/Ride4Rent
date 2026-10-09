@@ -24,7 +24,7 @@ import api from "@/services/api";
 import { uploadProfilePhoto } from "@/services/profileService";
 
 export default function OperatorProfileScreen() {
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, isOperatorPending } = useAuth();
   const { showSuccess, showError } = useAppToast();
   const profile = user?.operatorProfile ?? user?.operator_profile;
 
@@ -189,15 +189,38 @@ export default function OperatorProfileScreen() {
           <Text style={styles.userName}>{profile?.business_name || fullName || "Host Workspace"}</Text>
           <Text style={styles.userEmail}>{user?.email}</Text>
 
-          <View style={styles.verifiedBadge}>
-            <Ionicons name="checkmark-circle" size={14} color="#10B981" />
-            <Text style={styles.verifiedText}>Verified Fleet Operator</Text>
-          </View>
+          {isOperatorPending ? (
+            <View style={[styles.verifiedBadge, styles.pendingBadge]}>
+              <Ionicons name="time" size={14} color="#D97706" />
+              <Text style={[styles.verifiedText, styles.pendingBadgeText]}>Application Under Review</Text>
+            </View>
+          ) : (
+            <View style={styles.verifiedBadge}>
+              <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+              <Text style={styles.verifiedText}>Verified Fleet Operator</Text>
+            </View>
+          )}
         </View>
 
         {/* Business Info Section */}
         <Text style={styles.sectionHeading}>Business Information</Text>
         <View style={styles.card}>
+          <View style={styles.infoRow}>
+            <Ionicons
+              name={isOperatorPending ? "time-outline" : "shield-checkmark-outline"}
+              size={18}
+              color={isOperatorPending ? "#D97706" : "#10B981"}
+            />
+            <View style={styles.infoTextWrap}>
+              <Text style={styles.infoLabel}>Account Accreditation</Text>
+              <Text style={[styles.infoValue, isOperatorPending && { color: "#D97706", fontFamily: FontFamily.bold }]}>
+                {isOperatorPending ? "Pending Administrator Verification" : "Active & Verified"}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.divider} />
+
           <View style={styles.infoRow}>
             <Ionicons name="person-outline" size={18} color={Colors.secondary} />
             <View style={styles.infoTextWrap}>
@@ -375,6 +398,12 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bold,
     fontSize: 11,
     color: "#10B981",
+  },
+  pendingBadge: {
+    backgroundColor: "#FEF3C7",
+  },
+  pendingBadgeText: {
+    color: "#D97706",
   },
   sectionHeading: {
     fontFamily: FontFamily.bold,

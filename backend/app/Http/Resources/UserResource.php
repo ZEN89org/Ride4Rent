@@ -29,6 +29,9 @@ class UserResource extends JsonResource
                 ? $request->getSchemeAndHttpHost().'/storage/'.$this->drivers_license_back
                 : null,
             'is_drivers_license_verified' => (bool) $this->is_drivers_license_verified,
+            'license_verification_status' => $this->license_verification_status ?? ($this->is_drivers_license_verified ? 'approved' : ($this->drivers_license_front ? 'pending' : 'unverified')),
+            'license_rejection_reason' => $this->license_rejection_reason,
+            'license_submitted_at' => $this->license_submitted_at,
 
             'date_of_birth' => $this->date_of_birth,
             'sex' => $this->sex,

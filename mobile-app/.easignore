@@ -1,0 +1,8 @@
+# Ignore dependencies and unnecessary build artifacts
+node_modules/
+.expo/
+dist/
+web-build/
+android/
+ios/
+*.log

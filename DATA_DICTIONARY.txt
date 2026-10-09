@@ -1,0 +1,667 @@
+========================================================================================================================
+                                     RIDE4RENT MOBILE & WEB APPLICATION                                                 
+                                       SYSTEM DATABASE DATA DICTIONARY                                                  
+                               Database System: PostgreSQL (ride4rent)                                                  
+                                        Total Tables: 33 Tables                                                         
+========================================================================================================================
+
+------------------------------------------------------------------------------------------------------------------------
+Table 1: Data Dictionary of Users
+Database Table Name: users
+Description: Stores primary account credentials, roles, and verification statuses for Renters, Operators, and Admins.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 29                                      
+email                          | Registered email address                                                    | String         | 255            | Unique, Not Null                 | admin@ride4rent.com                     
+profile_photo                  | URL path to the uploaded profile photo                                      | String         | 255            | Nullable                         | Sample Profile Photo                    
+role                           | System access role ('renter', 'operator', 'admin')                          | String         | 255            | Not Null                         | admin                                   
+email_verified_at              | Timestamp when email address was verified                                   | Timestamp      | N/A            | Nullable                         | 2026-10-07 14:30:00                     
+password                       | Hashed account login password                                               | String         | 255            | Not Null                         | $2y$12$feRqwlkxgYi46HnOVq5NdeDBs...     
+remember_token                 | Authentication remember token for sessions                                  | String         | 100            | Nullable                         | Sample Remember Token                   
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-08-22 08:12:20                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-08-22 08:12:20                     
+first_name                     | First name of the user                                                      | String         | 100            | Nullable                         | ZenSys                                  
+last_name                      | Last name of the user                                                       | String         | 100            | Nullable                         | Org                                     
+sex                            | Gender / biological sex of the user                                         | String         | 20             | Nullable                         | Prefer not to say                       
+mobile_number                  | Contact mobile phone number                                                 | String         | 20             | Nullable                         | Sample Mobile Number                    
+account_status                 | Status of user account ('active', 'suspended', 'pending')                   | String         | 255            | Not Null                         | active                                  
+last_login_at                  | Timestamp of the user's most recent login                                   | Timestamp      | N/A            | Nullable                         | 2026-10-07 14:30:00                     
+drivers_license_front          | Path to uploaded front photo of the government driver's license             | String         | 255            | Nullable                         | Sample Drivers License Front            
+drivers_license_back           | Path to uploaded back photo of the government driver's license              | String         | 255            | Nullable                         | Sample Drivers License Back             
+is_drivers_license_verified    | Boolean indicator if driver's license is verified                           | Boolean        | 1              | Not Null                         | false (0)                               
+license_verification_status    | Current status of license verification ('unverified', 'pending', 'verified' | String         | 255            | Not Null                         | unverified                              
+license_rejection_reason       | Explanation notes if license was rejected                                   | Text           | N/A            | Nullable                         | Sample License Rejection Reason         
+license_submitted_at           | Timestamp when the driver's license was submitted                           | Timestamp      | N/A            | Nullable                         | 2026-10-07 14:30:00                     
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 2: Data Dictionary of Operator Profiles
+Database Table Name: operator_profiles
+Description: Stores business information, accreditation documents, and payment details of vehicle operators.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 11                                      
+user_id                        | Foreign key referencing the associated user account                         | BigInteger     | 20             | Unique, Foreign Key, Not Null    | 34                                      
+business_name                  | Registered commercial name of the rental business                           | String         | 255            | Not Null                         | Santos Motorcycle Rentals               
+business_email                 | Official contact email of the business                                      | String         | 255            | Not Null                         | kiii98553@gmail.com                     
+business_contact_number        | Official phone number of the business                                       | String         | 255            | Not Null                         | 09174567890                             
+street_address                 | Street address / building location                                          | String         | 255            | Not Null                         | Camilmil Street, Subdivision            
+barangay                       | Barangay locality                                                           | String         | 255            | Not Null                         | Lumangbayan                             
+municipality                   | City or municipality location                                               | String         | 255            | Not Null                         | Pinamalayan                             
+government_id_front            | Path to uploaded government ID front image                                  | String         | 255            | Nullable                         | operator-documents/government-id...     
+business_permit_front          | Path to uploaded Mayor's / Business permit front image                      | String         | 255            | Nullable                         | operator-documents/business-perm...     
+dti_sec_registration           | Path to uploaded DTI/SEC registration certificate                           | String         | 255            | Nullable                         | Sample Dti Sec Registration             
+accepted_payment_methods       | JSON array of accepted payment channels                                     | JSON           | N/A            | Nullable                         | ["gcash"]                               
+account_name                   | Bank / e-wallet account holder name                                         | String         | 255            | Nullable                         | Mark Anthony Santoss                    
+account_number                 | Bank account or mobile payment number                                       | String         | 255            | Nullable                         | 09174567890                             
+qr_code                        | Path to operator's payment QR code image                                    | String         | 255            | Nullable                         | payment_qr_codes/LfsqhoQvDlcu60P...     
+rejection_reason               | Reason provided if accreditation was rejected                               | Text           | N/A            | Nullable                         | Sample Rejection Reason                 
+reviewed_at                    | Timestamp when operator accreditation was reviewed                          | Timestamp      | N/A            | Nullable                         | 2026-09-05 07:58:42                     
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-09-05 07:58:08                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-10-04 14:25:35                     
+government_id_back             | Path to uploaded government ID back image                                   | String         | 255            | Nullable                         | operator-documents/government-id...     
+business_permit_back           | Path to uploaded business permit back image                                 | String         | 255            | Nullable                         | operator-documents/business-perm...     
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 3: Data Dictionary of Driver Licenses
+Database Table Name: driver_licenses
+Description: Stores government driver license details and card image attachments submitted by renters.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 1                                       
+user_id                        | Foreign key referencing the associated user account                         | BigInteger     | 20             | Foreign Key, Not Null            | 1                                       
+license_number                 | Government-issued Driver's License ID Number (e.g., N01-23-456789)          | String         | 255            | Not Null                         | Sample License Number                   
+front_image                    | File path to front scan of driver's license card                            | String         | 255            | Not Null                         | Sample Front Image                      
+back_image                     | File path to back scan of driver's license card                             | String         | 255            | Not Null                         | Sample Back Image                       
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-10-07 14:30:00                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-10-07 14:30:00                     
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 4: Data Dictionary of Vehicles
+Database Table Name: vehicles
+Description: Stores comprehensive fleet specifications, daily rates, policies, and availability of rental vehicles.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 14                                      
+operator_id                    | Foreign key referencing the operator user account                           | BigInteger     | 20             | Foreign Key, Not Null            | 34                                      
+name                           | Name or display title                                                       | String         | 255            | Not Null                         | Honda Click 125i                        
+vehicle_type_id                | Foreign key referencing the vehicle type category                           | BigInteger     | 20             | Foreign Key, Not Null            | 7                                       
+brand_id                       | Foreign key referencing the vehicle brand manufacturer                      | BigInteger     | 20             | Foreign Key, Not Null            | 2                                       
+model                          | Vehicle model name (e.g., Vios, Click 125i)                                 | String         | 255            | Not Null                         | Click 125i                              
+year_model                     | Manufacturing year of the vehicle                                           | Integer        | 11             | Not Null                         | 2023                                    
+plate_number                   | Official vehicle registration license plate number                          | String         | 255            | Not Null                         | DLO 4821                                
+body_type_id                   | Foreign key referencing the body type category                              | BigInteger     | 20             | Foreign Key, Nullable            | 8                                       
+transmission_type_id           | Foreign key referencing the transmission type                               | BigInteger     | 20             | Foreign Key, Not Null            | 1                                       
+fuel_type_id                   | Foreign key referencing the fuel type                                       | BigInteger     | 20             | Foreign Key, Not Null            | 1                                       
+seating_capacity               | Total passenger seating capacity                                            | Integer        | 11             | Not Null                         | 2                                       
+number_of_doors                | Number of vehicle passenger doors                                           | Integer        | 11             | Not Null                         | 0                                       
+mileage                        | Current odometer reading in kilometers                                      | Integer        | 11             | Not Null                         | 18500                                   
+interior_color                 | Color of vehicle interior                                                   | String         | 255            | Nullable                         | white                                   
+exterior_color                 | Color of vehicle exterior paint                                             | String         | 255            | Nullable                         | white                                   
+availability_status            | Availability flag ('available', 'rented', 'maintenance')                    | String         | 255            | Not Null                         | available                               
+available_from                 | Stores Available From attribute of the vehicles record                      | Date           | N/A            | Nullable                         | 2026-10-07                              
+available_until                | Stores Available Until attribute of the vehicles record                     | Date           | N/A            | Nullable                         | 2026-10-07                              
+daily_rate                     | Standard rental rate charged per 24-hour day (in PHP)                       | Decimal        | 10,2           | Not Null                         | 500.00                                  
+reservation_fee                | Initial reservation fee required (in PHP)                                   | Decimal        | 10,2           | Not Null                         | 100.00                                  
+description                    | Detailed vehicle overview and notes                                         | Text           | N/A            | Nullable                         | A refuel-efficient scooter suita...     
+cover_photo                    | Path to primary featured vehicle photo                                      | String         | 255            | Nullable                         | vehicles/1gmZooAc0MNindPFawLrPFw...     
+min_driver_age                 | Stores Min Driver Age attribute of the vehicles record                      | Integer        | 11             | Not Null                         | 21                                      
+min_driving_experience         | Stores Min Driving Experience attribute of the vehicles record              | Integer        | 11             | Not Null                         | 1                                       
+fuel_policy                    | Stores Fuel Policy attribute of the vehicles record                         | Text           | N/A            | Nullable                         | Sample Fuel Policy                      
+late_return_policy             | Stores Late Return Policy attribute of the vehicles record                  | Text           | N/A            | Nullable                         | Sample Late Return Policy               
+cancellation_policy            | Stores Cancellation Policy attribute of the vehicles record                 | Text           | N/A            | Nullable                         | Sample Cancellation Policy              
+smoking_policy                 | Stores Smoking Policy attribute of the vehicles record                      | Text           | N/A            | Nullable                         | Sample Smoking Policy                   
+pet_policy                     | Stores Pet Policy attribute of the vehicles record                          | Text           | N/A            | Nullable                         | Sample Pet Policy                       
+additional_driver_policy       | Stores Additional Driver Policy attribute of the vehicles record            | Text           | N/A            | Nullable                         | Sample Additional Driver Policy         
+other_policies                 | Stores Other Policies attribute of the vehicles record                      | Text           | N/A            | Nullable                         | Sample Other Policies                   
+rating                         | Average customer feedback rating (1.00 to 5.00)                             | Decimal        | 10,2           | Not Null                         | 5.00                                    
+rating_count                   | Total number of reviews received                                            | Integer        | 11             | Not Null                         | 0                                       
+is_active                      | Boolean flag indicating if listing is active                                | Boolean        | 1              | Not Null                         | true (1)                                
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-09-05 08:56:29                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-10-04 08:50:54                     
+pickup_address                 | Standard pickup and return physical address                                 | String         | 255            | Nullable                         | Camilmil Street, Subdivision, Lu...     
+pickup_latitude                | GPS latitude coordinate for vehicle terminal                                | Decimal        | 10,2           | Nullable                         | 1500.00                                 
+pickup_longitude               | GPS longitude coordinate for vehicle terminal                               | Decimal        | 10,2           | Nullable                         | 1500.00                                 
+quantity                       | Total unit inventory count for this listing                                 | Integer        | 11             | Not Null                         | 1                                       
+available_units                | Number of currently available unreserved units                              | Integer        | 11             | Not Null                         | 1                                       
+features                       | Stores Features attribute of the vehicles record                            | JSON           | N/A            | Nullable                         | Sample Features                         
+base_price_per_day             | Stores Base Price Per Day attribute of the vehicles record                  | Decimal        | 10,2           | Nullable                         | 1500.00                                 
+demand_multiplier              | Dynamic pricing factor based on demand                                      | Decimal        | 10,2           | Not Null                         | 1.00                                    
+is_dynamic_pricing_enabled     | Flag indicating if automated demand pricing is active                       | Boolean        | 1              | Not Null                         | true (1)                                
+current_odometer               | Active vehicle odometer reading in km                                       | Integer        | 11             | Not Null                         | 25000                                   
+last_service_odometer          | Odometer reading during the most recent service                             | Integer        | 11             | Not Null                         | 25000                                   
+service_interval_km            | Recommended interval between maintenance in km                              | Integer        | 11             | Not Null                         | 5000                                    
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 5: Data Dictionary of Vehicle Images
+Database Table Name: vehicle_images
+Description: Stores photo gallery and cover image references for each vehicle listing.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 7                                       
+vehicle_id                     | Foreign key referencing the vehicle                                         | BigInteger     | 20             | Foreign Key, Not Null            | 10                                      
+image_path                     | Stores Image Path attribute of the vehicle_images record                    | String         | 255            | Not Null                         | vehicles/Vm5nTadI3HtKYkZ04RBVbYc...     
+is_cover                       | Stores Is Cover attribute of the vehicle_images record                      | Boolean        | 1              | Not Null                         | true (1)                                
+image_type                     | Stores Image Type attribute of the vehicle_images record                    | String         | 255            | Not Null                         | exterior                                
+sort_order                     | Stores Sort Order attribute of the vehicle_images record                    | Integer        | 11             | Not Null                         | 0                                       
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-09-05 08:26:52                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-09-05 08:26:52                     
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 6: Data Dictionary of Vehicle Maintenances
+Database Table Name: vehicle_maintenances
+Description: Tracks routine maintenance, repairs, costs, and service schedules for fleet vehicles.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 1                                       
+vehicle_id                     | Foreign key referencing the vehicle                                         | BigInteger     | 20             | Foreign Key, Not Null            | 14                                      
+operator_id                    | Foreign key referencing the operator user account                           | BigInteger     | 20             | Foreign Key, Not Null            | 34                                      
+service_type                   | Stores Service Type attribute of the vehicle_maintenances record            | String         | 255            | Not Null                         | Battery Change                          
+mileage_at_service             | Stores Mileage At Service attribute of the vehicle_maintenances record      | Integer        | 11             | Not Null                         | 25000                                   
+cost                           | Stores Cost attribute of the vehicle_maintenances record                    | Decimal        | 10,2           | Not Null                         | 1500.00                                 
+service_date                   | Stores Service Date attribute of the vehicle_maintenances record            | Date           | N/A            | Not Null                         | 2026-10-04                              
+next_service_mileage           | Stores Next Service Mileage attribute of the vehicle_maintenances record    | Integer        | 11             | Nullable                         | 30000                                   
+status                         | Booking lifecycle status ('pending', 'approved', 'rejected', 'in_progress', | String         | 255            | Not Null                         | completed                               
+performed_by                   | Stores Performed By attribute of the vehicle_maintenances record            | String         | 255            | Nullable                         | QuickLube Calapan                       
+notes                          | Stores Notes attribute of the vehicle_maintenances record                   | Text           | N/A            | Nullable                         | Sample Notes                            
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-10-04 07:29:25                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-10-04 07:29:25                     
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 7: Data Dictionary of Bookings
+Database Table Name: bookings
+Description: Stores rental transactions, reservations, Face-to-Face payment statuses, inspection logs, and trip lifecycles.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 9                                       
+renter_id                      | Foreign key referencing the renter user account                             | BigInteger     | 20             | Foreign Key, Not Null            | 33                                      
+vehicle_id                     | Foreign key referencing the vehicle                                         | BigInteger     | 20             | Foreign Key, Not Null            | 13                                      
+operator_id                    | Foreign key referencing the operator user account                           | BigInteger     | 20             | Foreign Key, Not Null            | 34                                      
+start_date                     | Rental start date                                                           | Date           | N/A            | Not Null                         | 2026-09-08                              
+end_date                       | Rental return date                                                          | Date           | N/A            | Not Null                         | 2026-09-11                              
+total_days                     | Calculated total duration of rental in days                                 | Integer        | 11             | Not Null                         | 3                                       
+daily_rate                     | Standard rental rate charged per 24-hour day (in PHP)                       | Decimal        | 10,2           | Not Null                         | 2800.00                                 
+reservation_fee                | Initial reservation fee required (in PHP)                                   | Decimal        | 10,2           | Not Null                         | 700.00                                  
+total_price                    | Total rental cost including daily rates and fees (in PHP)                   | Decimal        | 10,2           | Not Null                         | 9100.00                                 
+status                         | Booking lifecycle status ('pending', 'approved', 'rejected', 'in_progress', | String         | 255            | Not Null                         | completed                               
+pickup_location                | Stores Pickup Location attribute of the bookings record                     | String         | 255            | Nullable                         | Camilmil Street, Subdivision, Lu...     
+notes                          | Stores Notes attribute of the bookings record                               | Text           | N/A            | Nullable                         | Sample Notes                            
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-09-06 07:30:09                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-09-07 08:57:28                     
+payment_status                 | Rental fee settlement status ('unpaid', 'paid_full', 'paid_reservation')    | String         | 255            | Not Null                         | paid_full                               
+payment_method                 | Payment mode ('face_to_face', 'cash', etc.)                                 | String         | 255            | Nullable                         | Sample Payment Method                   
+payment_reference              | Receipt reference code for the transaction                                  | String         | 255            | Nullable                         | Sample Payment Reference                
+rating                         | Average customer feedback rating (1.00 to 5.00)                             | SmallInteger   | 5              | Nullable                         | 4                                       
+review                         | Renter feedback commentary                                                  | Text           | N/A            | Nullable                         | good rental experience, thank yo...     
+actual_start_time              | Timestamp when vehicle keys were physically handed over                     | Timestamp      | N/A            | Nullable                         | 2026-09-06 08:26:06                     
+start_mileage                  | Odometer reading at initial vehicle release                                 | Integer        | 11             | Nullable                         | 38600                                   
+start_fuel_level               | Fuel gauge percentage level at rental start (0 - 100%)                      | SmallInteger   | 5              | Nullable                         | 75                                      
+start_inspection_notes         | Remarks on initial vehicle condition and existing scratches                 | Text           | N/A            | Nullable                         | Sample Start Inspection Notes           
+start_inspection_photos        | JSON array of photos taken prior to vehicle handover                        | JSON           | N/A            | Nullable                         | Sample Start Inspection Photos          
+actual_end_time                | Timestamp when vehicle was physically returned                              | Timestamp      | N/A            | Nullable                         | 2026-09-07 08:56:39                     
+end_mileage                    | Odometer reading upon vehicle return                                        | Integer        | 11             | Nullable                         | 40000                                   
+end_fuel_level                 | Fuel gauge percentage level at return (0 - 100%)                            | SmallInteger   | 5              | Nullable                         | 75                                      
+distance_traveled              | Total distance driven during the trip in km                                 | Integer        | 11             | Nullable                         | 1400                                    
+end_inspection_notes           | Remarks on return condition and post-rental inspection                      | Text           | N/A            | Nullable                         | Sample End Inspection Notes             
+end_inspection_photos          | JSON array of photos taken after vehicle return                             | JSON           | N/A            | Nullable                         | Sample End Inspection Photos            
+fuel_charge                    | Surcharge assessed for unreturned fuel shortfall (in PHP)                   | Decimal        | 10,2           | Not Null                         | 0.00                                    
+damage_charge                  | Repair fee assessed for new damages during trip (in PHP)                    | Decimal        | 10,2           | Not Null                         | 0.00                                    
+late_fee                       | Penalty fee charged for returning beyond agreed schedule (in PHP)           | Decimal        | 10,2           | Not Null                         | 0.00                                    
+other_charges                  | Miscellaneous fees or incidental expenses (in PHP)                          | Decimal        | 10,2           | Not Null                         | 0.00                                    
+final_amount_due               | Remaining balance settled during face-to-face handover                      | Decimal        | 10,2           | Nullable                         | 8400.00                                 
+current_latitude               | Latest GPS latitude coordinate of the rented vehicle                        | Decimal        | 10,2           | Nullable                         | 12.9620699                              
+current_longitude              | Latest GPS longitude coordinate of the rented vehicle                       | Decimal        | 10,2           | Nullable                         | 121.4379949                             
+current_speed                  | Real-time tracked vehicle velocity in km/h                                  | Double         | N/A            | Nullable                         | 0                                       
+last_location_updated_at       | Timestamp of most recent GPS coordinate sync                                | Timestamp      | N/A            | Nullable                         | 2026-09-07 08:52:31                     
+current_street                 | Current street location of the vehicle                                      | String         | 255            | Nullable                         | Buong Lupa                              
+current_barangay               | Current barangay of the vehicle                                             | String         | 255            | Nullable                         | Oriental Mindoro                        
+current_city                   | Current city or municipality of the vehicle                                 | String         | 255            | Nullable                         | Gloria                                  
+current_location_address       | Complete human-readable address derived from GPS                            | Text           | N/A            | Nullable                         | Buong Lupa, Brgy. Oriental Mindo...     
+is_multi_vehicle_rental        | Flag indicating if multiple units were reserved in one transaction          | Boolean        | 1              | Not Null                         | false (0)                               
+secondary_driver_name          | Full name of designated secondary driver                                    | String         | 255            | Nullable                         | Sample Secondary Driver Name            
+secondary_driver_phone         | Contact number of designated secondary driver                               | String         | 255            | Nullable                         | Sample Secondary Driver Phone           
+secondary_driver_license_front | Front license photo of secondary driver                                     | String         | 255            | Nullable                         | Sample Secondary Driver License Front   
+secondary_driver_license_back  | Back license photo of secondary driver                                      | String         | 255            | Nullable                         | Sample Secondary Driver License Back    
+expires_at                     | Timestamp when the token or OTP expires                                     | Timestamp      | N/A            | Nullable                         | 2026-10-07 14:30:00                     
+renter_refund_method           | Stores Renter Refund Method attribute of the bookings record                | String         | 255            | Nullable                         | Sample Renter Refund Method             
+renter_refund_account_name     | Stores Renter Refund Account Name attribute of the bookings record          | String         | 255            | Nullable                         | Sample Renter Refund Account Name       
+renter_refund_account_number   | Stores Renter Refund Account Number attribute of the bookings record        | String         | 255            | Nullable                         | Sample Renter Refund Account Number     
+refund_amount                  | Monetary amount refunded to renter (in PHP)                                 | Decimal        | 10,2           | Not Null                         | 0.00                                    
+refund_status                  | Status of refund request ('pending', 'processed', 'declined')               | String         | 255            | Nullable                         | Sample Refund Status                    
+refund_reference               | Transaction reference number of issued refund                               | String         | 255            | Nullable                         | Sample Refund Reference                 
+refund_notes                   | Reason or remarks regarding the refund                                      | Text           | N/A            | Nullable                         | Sample Refund Notes                     
+refunded_at                    | Timestamp when refund was released                                          | Timestamp      | N/A            | Nullable                         | 2026-10-07 14:30:00                     
+extension_days                 | Number of requested extension days                                          | Integer        | 11             | Nullable                         | 0                                       
+extension_end_date             | New proposed return date after extension                                    | Date           | N/A            | Nullable                         | 2026-10-07                              
+extension_price                | Computed rental charge for extension period (in PHP)                        | Decimal        | 10,2           | Nullable                         | 1500.00                                 
+extension_status               | Status of extension request ('pending', 'approved', 'rejected')             | String         | 255            | Nullable                         | Sample Extension Status                 
+extension_payment_method       | Mode of payment for rental extension                                        | String         | 255            | Nullable                         | Sample Extension Payment Method         
+extension_payment_reference    | Payment confirmation code for extension                                     | String         | 255            | Nullable                         | Sample Extension Payment Reference      
+extension_requested_at         | Timestamp when extension was requested                                      | Timestamp      | N/A            | Nullable                         | 2026-10-07 14:30:00                     
+paymongo_checkout_id           | PayMongo digital session checkout identifier (if applicable)                | String         | 255            | Nullable                         | 1                                       
+paymongo_payment_intent_id     | PayMongo payment intent reference                                           | String         | 255            | Nullable                         | 1                                       
+paymongo_checkout_url          | Secure checkout URL generated by payment gateway                            | Text           | N/A            | Nullable                         | Sample Paymongo Checkout Url            
+paid_at                        | Timestamp when Face-to-Face payment was confirmed                           | Timestamp      | N/A            | Nullable                         | 2026-10-07 14:30:00                     
+admin_memo                     | Administrative private notes regarding the booking                          | Text           | N/A            | Nullable                         | Sample Admin Memo                       
+is_review_hidden               | Moderation flag hiding abusive or inappropriate reviews                     | Boolean        | 1              | Not Null                         | false (0)                               
+review_moderation_note         | Admin explanation if review visibility was suppressed                       | String         | 255            | Nullable                         | Sample Review Moderation Note           
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 8: Data Dictionary of Messages
+Database Table Name: messages
+Description: Stores in-app chat communications and coordinate exchanges between Renters and Operators.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 5                                       
+sender_id                      | Foreign key referencing the user sending the message                        | BigInteger     | 20             | Foreign Key, Not Null            | 33                                      
+receiver_id                    | Foreign key referencing the user receiving the message                      | BigInteger     | 20             | Foreign Key, Not Null            | 34                                      
+vehicle_id                     | Foreign key referencing the vehicle                                         | BigInteger     | 20             | Foreign Key, Nullable            | 1                                       
+message                        | Text content of the message                                                 | Text           | N/A            | Nullable                         | hello po                                
+is_read                        | Boolean flag indicating whether content has been read                       | Boolean        | 1              | Not Null                         | true (1)                                
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-09-05 09:48:57                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-09-06 07:00:22                     
+image_url                      | Attachment image URL path                                                   | String         | 255            | Nullable                         | Sample Image Url                        
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 9: Data Dictionary of Notifications
+Database Table Name: notifications
+Description: Stores user notification alerts regarding booking updates, payment confirmations, and system announcements.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 30                                      
+user_id                        | Foreign key referencing the associated user account                         | BigInteger     | 20             | Foreign Key, Not Null            | 34                                      
+title                          | Headline title of the notification alert                                    | String         | 255            | Not Null                         | New Booking Request                     
+message                        | Text content of the message                                                 | Text           | N/A            | Not Null                         | New vehicle reservation request ...     
+type                           | Classification category of the notification                                 | String         | 255            | Not Null                         | booking                                 
+action_url                     | Deep link or screen path opened upon tapping alert                          | String         | 255            | Nullable                         | /operator-bookings                      
+is_read                        | Boolean flag indicating whether content has been read                       | Boolean        | 1              | Not Null                         | false (0)                               
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-10-01 12:29:25                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-10-01 12:29:25                     
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 10: Data Dictionary of Vehicle Types
+Database Table Name: vehicle_types
+Description: Lookup table classifying vehicle categories (Sedan, SUV, Van, Motorcycle, etc.).
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 1                                       
+name                           | Name or display title                                                       | String         | 255            | Not Null                         | Sedan                                   
+slug                           | URL-friendly unique slug identifier                                         | String         | 255            | Unique, Not Null                 | sedan                                   
+icon                           | Stores Icon attribute of the vehicle_types record                           | String         | 255            | Nullable                         | car-outline                             
+is_active                      | Boolean flag indicating if listing is active                                | Boolean        | 1              | Not Null                         | true (1)                                
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-08-16 16:15:12                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-08-16 16:15:12                     
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 11: Data Dictionary of Vehicle Brands
+Database Table Name: vehicle_brands
+Description: Lookup table for vehicle manufacturers and brand logos (Toyota, Honda, Mitsubishi, etc.).
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 1                                       
+name                           | Name or display title                                                       | String         | 255            | Not Null                         | Toyota                                  
+slug                           | URL-friendly unique slug identifier                                         | String         | 255            | Unique, Not Null                 | toyota                                  
+logo                           | Stores Logo attribute of the vehicle_brands record                          | String         | 255            | Nullable                         | toyota.png                              
+is_active                      | Boolean flag indicating if listing is active                                | Boolean        | 1              | Not Null                         | true (1)                                
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-08-16 16:15:12                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-08-16 16:15:12                     
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 12: Data Dictionary of Body Types
+Database Table Name: body_types
+Description: Lookup table for vehicle body configurations (4-Door Sedan, Compact Hatchback, etc.).
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 1                                       
+name                           | Name or display title                                                       | String         | 255            | Not Null                         | 4-Door Sedan                            
+slug                           | URL-friendly unique slug identifier                                         | String         | 255            | Unique, Not Null                 | 4-door-sedan                            
+is_active                      | Boolean flag indicating if listing is active                                | Boolean        | 1              | Not Null                         | true (1)                                
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-08-16 16:15:12                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-08-16 16:15:12                     
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 13: Data Dictionary of Transmission Types
+Database Table Name: transmission_types
+Description: Lookup table for transmission configurations (Automatic, Manual, CVT).
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 1                                       
+name                           | Name or display title                                                       | String         | 255            | Not Null                         | Automatic                               
+slug                           | URL-friendly unique slug identifier                                         | String         | 255            | Unique, Not Null                 | automatic                               
+is_active                      | Boolean flag indicating if listing is active                                | Boolean        | 1              | Not Null                         | true (1)                                
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-08-16 16:15:12                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-08-16 16:15:12                     
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 14: Data Dictionary of Fuel Types
+Database Table Name: fuel_types
+Description: Lookup table for vehicle engine fuel requirements (Gasoline, Diesel, Hybrid, Electric).
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 1                                       
+name                           | Name or display title                                                       | String         | 255            | Not Null                         | Gasoline                                
+slug                           | URL-friendly unique slug identifier                                         | String         | 255            | Unique, Not Null                 | gasoline                                
+is_active                      | Boolean flag indicating if listing is active                                | Boolean        | 1              | Not Null                         | true (1)                                
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-08-16 16:15:12                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-08-16 16:15:12                     
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 15: Data Dictionary of Vehicle Features
+Database Table Name: vehicle_features
+Description: Catalog of amenities and safety features available in vehicles (GPS, Bluetooth, Dashcam, etc.).
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 1                                       
+name                           | Name or display title                                                       | String         | 255            | Not Null                         | Leather Seats                           
+category                       | Stores Category attribute of the vehicle_features record                    | String         | 255            | Not Null                         | interior                                
+icon                           | Stores Icon attribute of the vehicle_features record                        | String         | 255            | Nullable                         | seat                                    
+is_active                      | Boolean flag indicating if listing is active                                | Boolean        | 1              | Not Null                         | true (1)                                
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-08-16 16:15:12                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-08-16 16:15:12                     
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 16: Data Dictionary of Vehicle Feature Pivots
+Database Table Name: vehicle_feature_pivots
+Description: Associative pivot table linking vehicles with their equipped features and amenities.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 1                                       
+vehicle_id                     | Foreign key referencing the vehicle                                         | BigInteger     | 20             | Unique, Foreign Key, Not Null    | 1                                       
+vehicle_feature_id             | Stores Vehicle Feature Id attribute of the vehicle_feature_pivots record    | BigInteger     | 20             | Unique, Foreign Key, Not Null    | 1                                       
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-10-07 14:30:00                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-10-07 14:30:00                     
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 17: Data Dictionary of Verification Requirements
+Database Table Name: verification_requirements
+Description: Catalog of compliance requirements necessary for operator accreditation and renter verification.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 1                                       
+name                           | Name or display title                                                       | String         | 255            | Not Null                         | Valid Driver's License                  
+description                    | Detailed vehicle overview and notes                                         | Text           | N/A            | Nullable                         | Original and non-expired governm...     
+is_active                      | Boolean flag indicating if listing is active                                | Boolean        | 1              | Not Null                         | true (1)                                
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-08-16 16:15:12                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-08-16 16:15:12                     
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 18: Data Dictionary of Vehicle Requirement Pivots
+Database Table Name: vehicle_requirement_pivots
+Description: Associative pivot table defining specific verification criteria required per vehicle.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 1                                       
+vehicle_id                     | Foreign key referencing the vehicle                                         | BigInteger     | 20             | Unique, Foreign Key, Not Null    | 1                                       
+verification_requirement_id    | Stores Verification Requirement Id attribute of the vehicle_requirement_piv | BigInteger     | 20             | Unique, Foreign Key, Not Null    | 1                                       
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-10-07 14:30:00                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-10-07 14:30:00                     
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 19: Data Dictionary of Maintenance Types
+Database Table Name: maintenance_types
+Description: Preset maintenance service categories and recommended interval thresholds.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 1                                       
+name                           | Name or display title                                                       | String         | 255            | Not Null                         | Engine Oil & Filter Change              
+default_mileage_interval       | Stores Default Mileage Interval attribute of the maintenance_types record   | Integer        | 11             | Not Null                         | 5000                                    
+default_time_interval_days     | Stores Default Time Interval Days attribute of the maintenance_types record | Integer        | 11             | Not Null                         | 90                                      
+priority_level                 | Stores Priority Level attribute of the maintenance_types record             | String         | 255            | Not Null                         | high                                    
+is_active                      | Boolean flag indicating if listing is active                                | Boolean        | 1              | Not Null                         | true (1)                                
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-08-16 16:15:12                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-08-16 16:15:12                     
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 20: Data Dictionary of Payment Method Types
+Database Table Name: payment_method_types
+Description: Reference list of supported payment categories (Face-to-Face Cash, Over-the-Counter, etc.).
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 1                                       
+name                           | Name or display title                                                       | String         | 255            | Not Null                         | GCash                                   
+code                           | Stores Code attribute of the payment_method_types record                    | String         | 255            | Unique, Not Null                 | gcash                                   
+icon                           | Stores Icon attribute of the payment_method_types record                    | String         | 255            | Nullable                         | gcash.png                               
+is_active                      | Boolean flag indicating if listing is active                                | Boolean        | 1              | Not Null                         | true (1)                                
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-08-16 16:15:12                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-08-16 16:15:12                     
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 21: Data Dictionary of Rental Policy Templates
+Database Table Name: rental_policy_templates
+Description: Standard policy clauses for fuel policies, cancellation terms, and late return penalties.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 1                                       
+title                          | Headline title of the notification alert                                    | String         | 255            | Not Null                         | Full-to-Full Fuel Policy                
+policy_type                    | Stores Policy Type attribute of the rental_policy_templates record          | String         | 255            | Not Null                         | fuel                                    
+description                    | Detailed vehicle overview and notes                                         | Text           | N/A            | Not Null                         | Vehicle is delivered with a full...     
+is_active                      | Boolean flag indicating if listing is active                                | Boolean        | 1              | Not Null                         | true (1)                                
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-08-16 16:15:12                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-08-16 16:15:12                     
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 22: Data Dictionary of Email Verification OTPs
+Database Table Name: email_verification_otps
+Description: Temporary one-time passwords for email verification during registration.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 2                                       
+email                          | Registered email address                                                    | String         | 255            | Not Null                         | santos@gmail.com                        
+otp                            | 6-digit verification code string                                            | String         | 6              | Not Null                         | 323230                                  
+expires_at                     | Timestamp when the token or OTP expires                                     | Timestamp      | N/A            | Not Null                         | 2026-09-05 08:04:39                     
+is_used                        | Boolean flag indicating whether OTP has been redeemed                       | Boolean        | 1              | Not Null                         | false (0)                               
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-09-05 07:54:39                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-09-05 07:54:39                     
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 23: Data Dictionary of Personal Access Tokens
+Database Table Name: personal_access_tokens
+Description: Laravel Sanctum authentication tokens for mobile app and API session authorization.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 1                                       
+tokenable_type                 | Stores Tokenable Type attribute of the personal_access_tokens record        | String         | 255            | Not Null                         | App\Models\User                         
+tokenable_id                   | Stores Tokenable Id attribute of the personal_access_tokens record          | BigInteger     | 20             | Not Null                         | 1                                       
+name                           | Name or display title                                                       | Text           | N/A            | Not Null                         | mobile-token                            
+token                          | Stores Token attribute of the personal_access_tokens record                 | String         | 64             | Unique, Not Null                 | 958f63dc8e22cbf01164c1b01bdf12fa...     
+abilities                      | Stores Abilities attribute of the personal_access_tokens record             | Text           | N/A            | Nullable                         | ["*"]                                   
+last_used_at                   | Stores Last Used At attribute of the personal_access_tokens record          | Timestamp      | N/A            | Nullable                         | 2026-10-07 14:30:00                     
+expires_at                     | Timestamp when the token or OTP expires                                     | Timestamp      | N/A            | Nullable                         | 2026-10-07 14:30:00                     
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-07-27 05:47:04                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-07-27 05:47:04                     
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 24: Data Dictionary of Admin Audit Logs
+Database Table Name: admin_audit_logs
+Description: System audit trail logging administrative actions, verifications, and approvals.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 1                                       
+admin_id                       | Foreign key referencing the admin performing the action                     | BigInteger     | 20             | Foreign Key, Nullable            | 1                                       
+admin_name                     | Name of the admin performing the action                                     | String         | 255            | Nullable                         | Sample Admin Name                       
+action                         | Administrative action executed (e.g., 'approve_operator', 'verify_license') | String         | 255            | Not Null                         | Sample Action                           
+target_type                    | Model type affected by action (e.g., 'User', 'Vehicle')                     | String         | 255            | Nullable                         | Sample Target Type                      
+target_id                      | Primary key ID of target entity                                             | BigInteger     | 20             | Nullable                         | 1                                       
+target_name                    | Descriptive name of targeted entity                                         | String         | 255            | Nullable                         | Sample Target Name                      
+details                        | Detailed audit payload and parameters modified                              | Text           | N/A            | Nullable                         | Sample Details                          
+ip_address                     | IP address from which request originated                                    | String         | 255            | Nullable                         | Sample Ip Address                       
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-10-07 14:30:00                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-10-07 14:30:00                     
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 25: Data Dictionary of Platform Settings
+Database Table Name: platform_settings
+Description: System-wide configuration parameters, terms, and dynamic platform flags.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 1                                       
+key                            | Unique configuration key identifier                                         | String         | 255            | Unique, Not Null                 | Sample Key                              
+value                          | Configuration parameter value string                                        | Text           | N/A            | Nullable                         | Sample Value                            
+group                          | Settings grouping category (e.g., 'general', 'billing', 'notifications')    | String         | 255            | Not Null                         | Sample Group                            
+description                    | Detailed vehicle overview and notes                                         | String         | 255            | Nullable                         | Sample Description                      
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-10-07 14:30:00                     
+updated_at                     | Timestamp when the record was last modified                                 | Timestamp      | N/A            | Nullable                         | 2026-10-07 14:30:00                     
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 26: Data Dictionary of Sessions
+Database Table Name: sessions
+Description: Storage for active web browser user sessions and security payloads.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | String         | 255            | Primary Key                      | r162axeuVkcf7BW5UrplkTbFAK53GpHY...     
+user_id                        | Foreign key referencing the associated user account                         | BigInteger     | 20             | Nullable                         | 1                                       
+ip_address                     | IP address from which request originated                                    | String         | 45             | Nullable                         | 127.0.0.1                               
+user_agent                     | Stores User Agent attribute of the sessions record                          | Text           | N/A            | Nullable                         | curl/8.21.0                             
+payload                        | Stores Payload attribute of the sessions record                             | Text           | N/A            | Not Null                         | eyJfdG9rZW4iOiJ0ZUVvVXpiTHNXSkhO...     
+last_activity                  | Stores Last Activity attribute of the sessions record                       | Integer        | 11             | Not Null                         | 1791129690                              
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 27: Data Dictionary of Password Reset Tokens
+Database Table Name: password_reset_tokens
+Description: Security tokens generated for password reset authentication requests.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+email                          | Registered email address                                                    | String         | 255            | Primary Key                      | user@example.com                        
+token                          | Stores Token attribute of the password_reset_tokens record                  | String         | 255            | Not Null                         | Sample Token                            
+created_at                     | Timestamp when the record was created                                       | Timestamp      | N/A            | Nullable                         | 2026-10-07 14:30:00                     
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 28: Data Dictionary of Cache
+Database Table Name: cache
+Description: High-speed application data caching table.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+key                            | Unique configuration key identifier                                         | String         | 255            | Primary Key                      | Sample Key                              
+value                          | Configuration parameter value string                                        | Text           | N/A            | Not Null                         | Sample Value                            
+expiration                     | Stores Expiration attribute of the cache record                             | BigInteger     | 20             | Not Null                         | 0                                       
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 29: Data Dictionary of Cache Locks
+Database Table Name: cache_locks
+Description: Atomic lock storage to prevent race conditions during concurrent processes.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+key                            | Unique configuration key identifier                                         | String         | 255            | Primary Key                      | Sample Key                              
+owner                          | Stores Owner attribute of the cache_locks record                            | String         | 255            | Not Null                         | Sample Owner                            
+expiration                     | Stores Expiration attribute of the cache_locks record                       | BigInteger     | 20             | Not Null                         | 0                                       
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 30: Data Dictionary of Jobs
+Database Table Name: jobs
+Description: Asynchronous background task queue management.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 1                                       
+queue                          | Stores Queue attribute of the jobs record                                   | String         | 255            | Not Null                         | Sample Queue                            
+payload                        | Stores Payload attribute of the jobs record                                 | Text           | N/A            | Not Null                         | Sample Payload                          
+attempts                       | Stores Attempts attribute of the jobs record                                | SmallInteger   | 5              | Not Null                         | Sample Attempts                         
+reserved_at                    | Stores Reserved At attribute of the jobs record                             | Integer        | 11             | Nullable                         | 0                                       
+available_at                   | Stores Available At attribute of the jobs record                            | Integer        | 11             | Not Null                         | 0                                       
+created_at                     | Timestamp when the record was created                                       | Integer        | 11             | Not Null                         | 0                                       
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 31: Data Dictionary of Job Batches
+Database Table Name: job_batches
+Description: Batched job queue execution tracker.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | String         | 255            | Primary Key                      | 1                                       
+name                           | Name or display title                                                       | String         | 255            | Not Null                         | Sample Name                             
+total_jobs                     | Stores Total Jobs attribute of the job_batches record                       | Integer        | 11             | Not Null                         | 0                                       
+pending_jobs                   | Stores Pending Jobs attribute of the job_batches record                     | Integer        | 11             | Not Null                         | 0                                       
+failed_jobs                    | Stores Failed Jobs attribute of the job_batches record                      | Integer        | 11             | Not Null                         | 0                                       
+failed_job_ids                 | Stores Failed Job Ids attribute of the job_batches record                   | Text           | N/A            | Not Null                         | Sample Failed Job Ids                   
+options                        | Stores Options attribute of the job_batches record                          | Text           | N/A            | Nullable                         | Sample Options                          
+cancelled_at                   | Stores Cancelled At attribute of the job_batches record                     | Integer        | 11             | Nullable                         | 0                                       
+created_at                     | Timestamp when the record was created                                       | Integer        | 11             | Not Null                         | 0                                       
+finished_at                    | Stores Finished At attribute of the job_batches record                      | Integer        | 11             | Nullable                         | 0                                       
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 32: Data Dictionary of Failed Jobs
+Database Table Name: failed_jobs
+Description: Error log recording failed background queue job executions.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | BigInteger     | 20             | Primary Key                      | 1                                       
+uuid                           | Stores Uuid attribute of the failed_jobs record                             | String         | 255            | Unique, Not Null                 | Sample Uuid                             
+connection                     | Stores Connection attribute of the failed_jobs record                       | String         | 255            | Not Null                         | Sample Connection                       
+queue                          | Stores Queue attribute of the failed_jobs record                            | String         | 255            | Not Null                         | Sample Queue                            
+payload                        | Stores Payload attribute of the failed_jobs record                          | Text           | N/A            | Not Null                         | Sample Payload                          
+exception                      | Stores Exception attribute of the failed_jobs record                        | Text           | N/A            | Not Null                         | Sample Exception                        
+failed_at                      | Stores Failed At attribute of the failed_jobs record                        | Timestamp      | N/A            | Not Null                         | 2026-10-07 14:30:00                     
+
+
+------------------------------------------------------------------------------------------------------------------------
+Table 33: Data Dictionary of Migrations
+Database Table Name: migrations
+Description: Database versioning and schema migration history log.
+------------------------------------------------------------------------------------------------------------------------
+Field Name                     | Data Description                                                            | Data Type      | Field Length   | Constraint                       | Possible Values                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+id                             | Unique identifier for the record (Primary Key)                              | Integer        | 11             | Primary Key                      | 1                                       
+migration                      | Stores Migration attribute of the migrations record                         | String         | 255            | Not Null                         | 0001_01_01_000000_create_users_t...     
+batch                          | Stores Batch attribute of the migrations record                             | Integer        | 11             | Not Null                         | 1                                       
+
+

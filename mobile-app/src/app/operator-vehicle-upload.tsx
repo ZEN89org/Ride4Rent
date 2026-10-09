@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { router } from "expo-router";
@@ -18,6 +18,10 @@ import PrimaryButton from "@/components/common/PrimaryButton";
 import ScreenContainer from "@/components/common/ScreenContainer";
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Radius, Spacing } from "@/constants/theme";
+import {
+  getAmenitiesForType,
+  getDefaultAmenitiesForType,
+} from "@/constants/vehicleAmenities";
 import { useAppToast } from "@/context/ToastContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import {
@@ -65,6 +69,9 @@ const initialForm: VehicleFormData = {
 export default function OperatorVehicleUpload() {
   const { showModal, showWarning } = useAppToast();
   const [form, setForm] = useState(initialForm);
+  const [selectedAmenities, setSelectedAmenities] = useState<string[]>(
+    getDefaultAmenitiesForType("Sedan")
+  );
   const [images, setImages] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -73,7 +80,7 @@ export default function OperatorVehicleUpload() {
   const [showCustomBrandInput, setShowCustomBrandInput] = useState(false);
   const [customBrandText, setCustomBrandText] = useState("");
 
-  const { user } = useAuth();
+  const { user, isOperatorPending } = useAuth();
   const operatorProfile = user?.operatorProfile ?? user?.operator_profile;
   const pickupAddress = [
     operatorProfile?.street_address,
@@ -93,7 +100,17 @@ export default function OperatorVehicleUpload() {
     return options[key].find((item) => String(item.id) === value)?.name ?? "Select";
   };
 
-  const isMotorcycle = selectedName("vehicle_types", form.vehicle_type_id).toLowerCase().includes("motorcycle");
+  const currentVehicleTypeName = selectedName("vehicle_types", form.vehicle_type_id);
+  const isMotorcycle = currentVehicleTypeName.toLowerCase().includes("motorcycle");
+  const availableAmenities = getAmenitiesForType(currentVehicleTypeName);
+
+  const toggleAmenity = (amenityId: string) => {
+    setSelectedAmenities((prev) =>
+      prev.includes(amenityId)
+        ? prev.filter((id) => id !== amenityId)
+        : [...prev, amenityId]
+    );
+  };
 
   const update = (key: keyof VehicleFormData, value: string) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -119,9 +136,12 @@ export default function OperatorVehicleUpload() {
       update(fieldMap[key], String(value.id));
     }
 
-    // When switching vehicle type to Motorcycle, adapt defaults (doors=0, seats=2)
+    // When switching vehicle type, adapt defaults & amenities
     if (key === "vehicle_types") {
-      if (value.name.toLowerCase().includes("motorcycle")) {
+      const isMoto = value.name.toLowerCase().includes("motorcycle");
+      setSelectedAmenities(getDefaultAmenitiesForType(value.name));
+
+      if (isMoto) {
         setForm((current) => ({
           ...current,
           vehicle_type_id: String(value.id),
@@ -229,6 +249,16 @@ export default function OperatorVehicleUpload() {
   };
 
   const submit = async () => {
+    if (isOperatorPending) {
+      showModal(
+        "Listing Locked",
+        "Your operator application is currently under review by our administrators. You cannot publish vehicles until your account is approved.",
+        [{ text: "Understood", style: "default" }],
+        "warning"
+      );
+      return;
+    }
+
     if (!form.name.trim() || !form.model.trim() || !form.plate_number.trim() || !form.daily_rate.trim()) {
       setError("Vehicle name, model, plate number, and daily rate are required.");
       return;
@@ -248,6 +278,7 @@ export default function OperatorVehicleUpload() {
       setIsSubmitting(true);
       const submissionData = {
         ...form,
+        features: selectedAmenities,
         imageUris: images,
         imageUri: images[0],
       };
@@ -280,6 +311,18 @@ export default function OperatorVehicleUpload() {
         <Text style={styles.eyebrow}>Fleet workspace</Text>
         <Text style={styles.title}>List a vehicle</Text>
         <Text style={styles.subtitle}>Give renters detailed photos and specs to inspect your car thoroughly.</Text>
+
+        {isOperatorPending && (
+          <View style={styles.pendingWarningBanner}>
+            <Ionicons name="time" size={22} color="#D97706" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.pendingWarningTitle}>Operator Application Under Review</Text>
+              <Text style={styles.pendingWarningText}>
+                You are currently in Preview Mode. You can test filling out vehicle specs, but publishing to the fleet catalog requires verified operator status.
+              </Text>
+            </View>
+          </View>
+        )}
 
         <View style={styles.locationNotice}>
           <Text style={styles.label}>Pickup location</Text>
@@ -380,6 +423,54 @@ export default function OperatorVehicleUpload() {
           <Field label="Exterior color" value={form.exterior_color} onChangeText={(value) => update("exterior_color", value)} placeholder="White" />
         </View>
 
+        {/* Highlights & Amenities Selector */}
+        <View style={styles.amenitiesSection}>
+          <View style={styles.amenitiesHeaderRow}>
+            <View>
+              <Text style={styles.sectionTitle}>Highlights & Amenities</Text>
+              <Text style={styles.amenitiesSubtitle}>
+                Select features included in this {currentVehicleTypeName || "vehicle"} ({selectedAmenities.length} selected)
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.amenitiesGrid}>
+            {availableAmenities.map((amenity) => {
+              const isSelected = selectedAmenities.includes(amenity.id);
+              return (
+                <TouchableOpacity
+                  key={amenity.id}
+                  style={[styles.amenityChip, isSelected && styles.amenityChipSelected]}
+                  onPress={() => toggleAmenity(amenity.id)}
+                  activeOpacity={0.75}
+                >
+                  <View style={[styles.amenityIconWrap, isSelected && styles.amenityIconWrapSelected]}>
+                    {amenity.iconType === "mci" ? (
+                      <MaterialCommunityIcons
+                        name={amenity.icon as any}
+                        size={16}
+                        color={isSelected ? Colors.white : Colors.dark}
+                      />
+                    ) : (
+                      <Ionicons
+                        name={amenity.icon as any}
+                        size={16}
+                        color={isSelected ? Colors.white : Colors.dark}
+                      />
+                    )}
+                  </View>
+                  <Text style={[styles.amenityLabel, isSelected && styles.amenityLabelSelected]} numberOfLines={2}>
+                    {amenity.label}
+                  </Text>
+                  {isSelected ? (
+                    <Ionicons name="checkmark-circle" size={16} color={Colors.primary} style={styles.amenityCheck} />
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
         <View style={styles.field}>
           <Text style={styles.sectionTitle}>Description & policies</Text>
           <TextInput
@@ -393,11 +484,15 @@ export default function OperatorVehicleUpload() {
         </View>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        <PrimaryButton title="Publish vehicle" onPress={submit} loading={isSubmitting} />
+        <PrimaryButton
+          title={isOperatorPending ? "Publishing Locked (Under Review)" : "Publish vehicle"}
+          onPress={submit}
+          loading={isSubmitting}
+        />
       </ScrollView>
 
       {/* Option Picker Bottom Sheet with Click-Outside-To-Close */}
-      <Modal visible={picker !== null} transparent animationType="slide" onRequestClose={() => { setPicker(null); setShowCustomBrandInput(false); }}>
+      <Modal visible={picker !== null} transparent animationType="slide" statusBarTranslucent={true} onRequestClose={() => { setPicker(null); setShowCustomBrandInput(false); }}>
         <View style={styles.modalBackdrop}>
           {/* Clickable Backdrop Outside the Sheet */}
           <TouchableOpacity
@@ -562,6 +657,76 @@ const styles = StyleSheet.create({
   customBrandSave: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 8, backgroundColor: Colors.primary },
   saveText: { color: Colors.white, fontFamily: FontFamily.bold, fontSize: 13 },
   cancel: { color: Colors.secondary, fontFamily: FontFamily.semiBold, paddingTop: Spacing.md, textAlign: "center" },
+  amenitiesSection: { marginTop: Spacing.lg },
+  amenitiesHeaderRow: { marginBottom: Spacing.sm },
+  amenitiesSubtitle: { color: Colors.secondary, fontFamily: FontFamily.regular, fontSize: 12, marginTop: 2 },
+  amenitiesGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 6 },
+  amenityChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: Colors.inputBackground,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    width: "48.5%",
+    minHeight: 48,
+  },
+  amenityChipSelected: {
+    backgroundColor: Colors.logoBackground,
+    borderColor: Colors.primary,
+  },
+  amenityIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.white,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  amenityIconWrapSelected: {
+    backgroundColor: Colors.primary,
+  },
+  amenityLabel: {
+    flex: 1,
+    fontFamily: FontFamily.medium,
+    fontSize: 11.5,
+    color: Colors.dark,
+    lineHeight: 15,
+  },
+  amenityLabelSelected: {
+    fontFamily: FontFamily.bold,
+    color: Colors.dark,
+  },
+  amenityCheck: {
+    marginLeft: 2,
+  },
+  pendingWarningBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: Spacing.sm,
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    borderRadius: Radius.md,
+    padding: Spacing.md,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.xs,
+  },
+  pendingWarningTitle: {
+    color: "#92400E",
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.body,
+    marginBottom: 2,
+  },
+  pendingWarningText: {
+    color: "#B45309",
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.small,
+    lineHeight: 18,
+  },
 });
 
 

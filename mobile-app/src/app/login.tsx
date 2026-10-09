@@ -122,26 +122,12 @@ export default function Login() {
 
       await signIn(loggedInUser, loggedInToken);
 
-      if (
-        loggedInUser.role === "operator" &&
-        loggedInUser.account_status === "pending"
-      ) {
-        router.replace("/operator-pending");
-        return;
-      }
+      if (loggedInUser.role === "operator") {
+        if (loggedInUser.account_status === "rejected") {
+          router.replace("/operator-rejected");
+          return;
+        }
 
-      if (
-        loggedInUser.role === "operator" &&
-        loggedInUser.account_status === "rejected"
-      ) {
-        router.replace("/operator-rejected");
-        return;
-      }
-
-      if (
-        loggedInUser.role === "operator" &&
-        loggedInUser.account_status === "active"
-      ) {
         router.replace("/operator-home");
         return;
       }

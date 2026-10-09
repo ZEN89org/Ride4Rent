@@ -98,7 +98,9 @@ const styles = StyleSheet.create({
     marginTop: Spacing.xl,
     padding: Spacing.md,
     borderRadius: 12,
-    backgroundColor: "#F8F8F8",
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
 
   reasonTitle: {

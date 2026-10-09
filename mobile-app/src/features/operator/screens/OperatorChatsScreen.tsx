@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   FlatList,
   Image,
@@ -26,22 +26,28 @@ export default function OperatorChatsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadOperatorChats();
-  }, []);
-
-  const loadOperatorChats = async () => {
+  const loadOperatorChats = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const data = await getConversations();
       setConversations(data);
     } catch (e) {
       console.log("Error loading operator conversations", e);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadOperatorChats();
+  }, [loadOperatorChats]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadOperatorChats(true);
+    }, [loadOperatorChats])
+  );
 
   const handleOpenThread = (item: ConversationItem) => {
     router.push({

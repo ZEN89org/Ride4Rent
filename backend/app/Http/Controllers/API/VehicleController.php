@@ -47,13 +47,47 @@ class VehicleController extends Controller
             ])
             ->where('is_active', true)
             ->where('availability_status', 'available')
+            ->where(function ($q) {
+                $q->whereRaw('(SELECT COUNT(*) FROM bookings WHERE bookings.vehicle_id = vehicles.id AND bookings.status IN (\'approved\', \'awaiting_pickup\', \'pickup_in_progress\', \'ready_to_start\', \'trip_in_progress\', \'ongoing\', \'return_pending\') AND bookings.end_date >= CURRENT_DATE) < COALESCE(vehicles.quantity, 1)');
+            })
             ->whereHas('operator', fn ($q) => $q
                 ->where('role', 'operator')
                 ->where('account_status', 'active'));
 
+        $searchTerm = trim($request->input('search') ?? $request->input('query') ?? $request->input('q') ?? '');
+        if ($searchTerm !== '') {
+            $terms = array_filter(explode(' ', $searchTerm));
+            foreach ($terms as $term) {
+                $likeTerm = "%{$term}%";
+                $query->where(function ($q) use ($likeTerm) {
+                    $q->where('name', 'LIKE', $likeTerm)
+                      ->orWhere('model', 'LIKE', $likeTerm)
+                      ->orWhere('year_model', 'LIKE', $likeTerm)
+                      ->orWhere('description', 'LIKE', $likeTerm)
+                      ->orWhere('pickup_address', 'LIKE', $likeTerm)
+                      ->orWhereHas('brand', fn ($b) => $b->where('name', 'LIKE', $likeTerm))
+                      ->orWhereHas('vehicleType', fn ($vt) => $vt->where('name', 'LIKE', $likeTerm))
+                      ->orWhereHas('bodyType', fn ($bt) => $bt->where('name', 'LIKE', $likeTerm))
+                      ->orWhereHas('transmissionType', fn ($tt) => $tt->where('name', 'LIKE', $likeTerm))
+                      ->orWhereHas('fuelType', fn ($ft) => $ft->where('name', 'LIKE', $likeTerm))
+                      ->orWhereHas('operator', function ($op) use ($likeTerm) {
+                          $op->where('first_name', 'LIKE', $likeTerm)
+                             ->orWhere('last_name', 'LIKE', $likeTerm)
+                             ->orWhere(DB::raw("CONCAT(first_name, ' ', last_name)"), 'LIKE', $likeTerm)
+                             ->orWhereHas('operatorProfile', function ($opp) use ($likeTerm) {
+                                 $opp->where('business_name', 'LIKE', $likeTerm)
+                                     ->orWhere('street_address', 'LIKE', $likeTerm)
+                                     ->orWhere('barangay', 'LIKE', $likeTerm)
+                                     ->orWhere('municipality', 'LIKE', $likeTerm);
+                             });
+                      });
+                });
+            }
+        }
+
         if ($request->query('sort') === 'top_rated') {
             $query->orderBy('rating', 'desc')->orderBy('rating_count', 'desc');
-        } elseif ($request->boolean('random', true)) {
+        } elseif ($request->boolean('random', true) && $searchTerm === '') {
             $query->inRandomOrder();
         } else {
             $query->latest();
@@ -105,6 +139,12 @@ class VehicleController extends Controller
             'transmissionType',
             'fuelType',
             'images',
+            'bookings' => function ($query) {
+                $query->whereNotNull('rating')
+                    ->with('renter')
+                    ->latest('updated_at')
+                    ->take(20);
+            },
         ])->findOrFail($id);
 
         return response()->json([
@@ -184,6 +224,14 @@ class VehicleController extends Controller
     public function store(Request $request): JsonResponse
     {
         $operator = $request->user();
+
+        if ($operator->account_status !== 'active') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Your operator account is currently under review by administrators. You will be able to list vehicles once approved.',
+            ], 403);
+        }
+
         $profile = $operator->operatorProfile;
 
         // Validation: Operator must have setup payment accounts before uploading vehicle
@@ -213,6 +261,7 @@ class VehicleController extends Controller
             'exterior_color' => ['nullable', 'string', 'max:50'],
             'daily_rate' => ['required', 'numeric', 'min:1'],
             'reservation_fee' => ['nullable', 'numeric', 'min:0'],
+            'features' => ['nullable'],
             'description' => ['nullable', 'string'],
             'pickup_address' => ['nullable', 'string'],
             'cover_photo' => ['nullable', 'image', 'max:10240'],
@@ -259,6 +308,15 @@ class VehicleController extends Controller
 
         $qty = $validated['quantity'] ?? 1;
 
+        // Parse features if passed as JSON string from multipart/form-data
+        $features = $validated['features'] ?? null;
+        if (is_string($features)) {
+            $decoded = json_decode($features, true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $features = $decoded;
+            }
+        }
+
         $vehicle = Vehicle::create([
             'operator_id' => $operator->id,
             'name' => $validated['name'],
@@ -279,6 +337,7 @@ class VehicleController extends Controller
             'exterior_color' => $validated['exterior_color'] ?? null,
             'daily_rate' => $validated['daily_rate'],
             'reservation_fee' => $validated['reservation_fee'] ?? 500,
+            'features' => $features,
             'description' => $validated['description'] ?? null,
             'pickup_address' => $validated['pickup_address'] ?? ($profile->street_address.', '.$profile->barangay.', '.$profile->municipality),
             'cover_photo' => $coverPhotoPath,
@@ -310,8 +369,16 @@ class VehicleController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Vehicle listed successfully.',
-            'data' => new VehicleResource($vehicle->load(['vehicleType', 'brand', 'bodyType', 'transmissionType', 'fuelType', 'operator', 'images'])),
+            'message' => 'Vehicle uploaded successfully.',
+            'data' => new VehicleResource($vehicle->load([
+                'operator.operatorProfile',
+                'vehicleType',
+                'brand',
+                'bodyType',
+                'transmissionType',
+                'fuelType',
+                'images',
+            ])),
         ], 201);
     }
 
@@ -333,6 +400,7 @@ class VehicleController extends Controller
             'quantity' => ['nullable', 'integer', 'min:1'],
             'daily_rate' => ['sometimes', 'required', 'numeric', 'min:1'],
             'reservation_fee' => ['nullable', 'numeric', 'min:0'],
+            'features' => ['nullable'],
             'description' => ['nullable', 'string'],
             'pickup_address' => ['nullable', 'string'],
             'availability_status' => ['sometimes', 'in:available,unavailable,maintenance'],
@@ -341,11 +409,41 @@ class VehicleController extends Controller
             'images.*' => ['image', 'max:10240'],
         ]);
 
+        if (isset($validated['features']) && is_string($validated['features'])) {
+            $decoded = json_decode($validated['features'], true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $validated['features'] = $decoded;
+            }
+        }
+
         if ($request->hasFile('cover_photo')) {
             if ($vehicle->cover_photo && Storage::disk('public')->exists($vehicle->cover_photo)) {
                 Storage::disk('public')->delete($vehicle->cover_photo);
             }
             $validated['cover_photo'] = $request->file('cover_photo')->store('vehicles', 'public');
+        }
+
+        if (isset($validated['availability_status']) && $validated['availability_status'] === 'available') {
+            $activeCount = \App\Models\Booking::where('vehicle_id', $vehicle->id)
+                ->whereIn('status', [
+                    'approved',
+                    'awaiting_pickup',
+                    'pickup_in_progress',
+                    'ready_to_start',
+                    'trip_in_progress',
+                    'ongoing',
+                    'return_pending',
+                ])
+                ->where('end_date', '>=', now()->toDateString())
+                ->count();
+
+            $totalUnits = max(1, (int) ($vehicle->quantity ?? 1));
+            if ($activeCount >= $totalUnits) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cannot set to Available: this vehicle is currently rented out on an active trip. It will automatically become available once the trip is completed.',
+                ], 422);
+            }
         }
 
         if (isset($validated['quantity'])) {

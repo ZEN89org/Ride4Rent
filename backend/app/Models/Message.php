@@ -15,6 +15,7 @@ class Message extends Model
         'receiver_id',
         'vehicle_id',
         'message',
+        'image_url',
         'is_read',
     ];
 

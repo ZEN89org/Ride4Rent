@@ -35,9 +35,7 @@ export default function SplashScreen() {
 
       if (token) {
         if (user?.role === "operator") {
-          if (user.account_status === "pending") {
-            router.replace("/operator-pending");
-          } else if (user.account_status === "rejected") {
+          if (user.account_status === "rejected") {
             router.replace("/operator-rejected");
           } else {
             router.replace("/operator-home");

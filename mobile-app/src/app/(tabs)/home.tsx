@@ -11,6 +11,7 @@ import TopRatedVehicles from "@/features/renter/components/home/TopRatedVehicles
 
 import { useSideNav } from "@/context/SideNavContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import { Colors } from "@/constants/colors";
 
 export default function Home() {
   const {
@@ -55,7 +56,12 @@ export default function Home() {
 
   return (
     <ScreenContainer>
-      <View style={styles.container}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         <HomeHeader
           user={user}
           isGuest={isGuest}
@@ -80,7 +86,7 @@ export default function Home() {
           visible={showAuthSheet}
           onClose={() => setShowAuthSheet(false)}
         />
-      </View>
+      </ScrollView>
     </ScreenContainer>
   );
 }
@@ -88,5 +94,9 @@ export default function Home() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: Colors.white,
+  },
+  scrollContent: {
+    paddingBottom: 40,
   },
 });

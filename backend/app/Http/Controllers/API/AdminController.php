@@ -85,6 +85,81 @@ class AdminController extends Controller
         ]);
     }
 
+    public function pendingLicenses(): JsonResponse
+    {
+        $renters = User::whereIn('role', ['customer', 'renter'])
+            ->where(function ($query) {
+                $query->where('license_verification_status', 'pending')
+                    ->orWhere(function ($q) {
+                        $q->whereNull('license_verification_status')
+                            ->where('is_drivers_license_verified', false)
+                            ->whereNotNull('drivers_license_front');
+                    });
+            })
+            ->latest('license_submitted_at')
+            ->latest()
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $renters->map(fn (User $renter) => new UserResource($renter))->values(),
+        ]);
+    }
+
+    public function approveLicense(User $user): JsonResponse
+    {
+        abort_unless(in_array($user->role, ['customer', 'renter']), 404);
+
+        $user->update([
+            'is_drivers_license_verified' => true,
+            'license_verification_status' => 'approved',
+            'license_rejection_reason' => null,
+        ]);
+
+        \App\Models\Notification::create([
+            'user_id' => $user->id,
+            'title' => "Driver's License Approved 🎉",
+            'message' => 'Your driver\'s license has been verified by the Admin. You now have full booking privileges!',
+            'type' => 'success',
+            'action_url' => '/profile',
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Driver's license approved successfully.",
+            'data' => new UserResource($user->fresh()),
+        ]);
+    }
+
+    public function rejectLicense(Request $request, User $user): JsonResponse
+    {
+        abort_unless(in_array($user->role, ['customer', 'renter']), 404);
+
+        $validated = $request->validate([
+            'rejection_reason' => ['required', 'string', 'max:1000'],
+        ]);
+
+        $user->update([
+            'is_drivers_license_verified' => false,
+            'license_verification_status' => 'rejected',
+            'license_rejection_reason' => $validated['rejection_reason'],
+        ]);
+
+        \App\Models\Notification::create([
+            'user_id' => $user->id,
+            'title' => "Driver's License Verification Rejected",
+            'message' => 'Your driver\'s license verification was not approved: "' . $validated['rejection_reason'] . '". Please re-upload a clear and matching license photo.',
+            'type' => 'error',
+            'action_url' => '/driver-license',
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Driver's license rejected.",
+            'data' => new UserResource($user->fresh()),
+        ]);
+    }
+
     private function ensureOperator(User $user): void
     {
         abort_unless($user->role === 'operator', 404);

@@ -29,7 +29,7 @@ export default function About() {
         {/* Brand Banner */}
         <View style={styles.brandBox}>
           <View style={styles.logoWrap}>
-            <Ionicons name="car-sport" size={40} color={Colors.dark} />
+            <Ionicons name="car-sport" size={40} color={Colors.white} />
           </View>
           <Text style={styles.brandTitle}>Ride4Rent</Text>
           <Text style={styles.brandTagline}>Your trusted peer-to-peer car rental platform</Text>
@@ -78,7 +78,7 @@ export default function About() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8F9FA",
+    backgroundColor: Colors.white,
   },
   headerBar: {
     flexDirection: "row",

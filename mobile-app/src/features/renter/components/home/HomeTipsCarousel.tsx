@@ -4,7 +4,7 @@ import {
   Dimensions,
   FlatList,
   StyleSheet,
-  View
+  View,
 } from "react-native";
 
 const { width } = Dimensions.get("window");
@@ -77,7 +77,10 @@ export default function HomeTipsCarousel() {
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: -100,
+    marginTop: -90,
+    marginBottom: -30,
+    zIndex: 10,
+    elevation: 10,
   },
 
   slide: {

@@ -1,4 +1,4 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { useEffect, useState } from "react";
 import {
@@ -10,7 +10,7 @@ import {
 } from "react-native";
 
 import AuthRequiredBottomSheet from "@/features/auth/components/AuthRequiredBottomSheet";
-import VehicleCard from "@/features/renter/components/home/VehicleCard";
+import NearVehicleCard from "@/features/renter/components/home/NearVehicleCard";
 
 import { Colors } from "@/constants/colors";
 import {
@@ -30,6 +30,8 @@ import { router } from "expo-router";
 import { useFavorites } from "@/context/FavoritesContext";
 
 import { VehicleCardSkeleton } from "@/components/common/Skeleton";
+
+import { matchesVehicleSearch } from "@/utils/vehicleSearch";
 
 interface AvailableVehiclesProps {
   searchQuery?: string;
@@ -91,18 +93,30 @@ export default function AvailableVehicles({ searchQuery = "" }: AvailableVehicle
         }
 
         setVehicles(apiVehicles.map((vehicle) => ({
+          ...vehicle,
           id: String(vehicle.id),
           name: vehicle.name,
+          brand: vehicle.brand,
+          model: vehicle.model,
+          year_model: vehicle.year_model,
+          vehicle_type: vehicle.vehicle_type,
+          body_type: vehicle.body_type,
+          fuel_type: vehicle.fuel_type,
+          pickup_address: vehicle.pickup_address,
+          description: vehicle.description,
+          operator: vehicle.operator,
           image: vehicle.image_url
             ? { uri: vehicle.image_url }
             : { uri: "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=60" },
           pricePerDay: Number(vehicle.price_per_day),
-          rating: Number(vehicle.rating || 5.0),
+          rating: (Number(vehicle.rating_count || 0) > 0 && vehicle.rating !== null && vehicle.rating !== undefined) ? Number(vehicle.rating) : 0,
           ratingCount: Number(vehicle.rating_count || 0),
           distance_km: vehicle.distance_km,
           seats: vehicle.seats,
           transmission: vehicle.transmission,
           available_units: vehicle.available_units,
+          demand_badge: (vehicle as any).demand_pricing?.demand_badge,
+          demand_level: (vehicle as any).demand_pricing?.demand_level,
         })));
       })
       .catch(() => undefined)
@@ -133,10 +147,8 @@ export default function AvailableVehicles({ searchQuery = "" }: AvailableVehicle
   };
 
   const displayedVehicles = searchQuery.trim()
-    ? vehicles.filter((v) =>
-        v.name.toLowerCase().includes(searchQuery.trim().toLowerCase())
-      )
-    : vehicles;
+    ? vehicles.filter((v) => matchesVehicleSearch(v, searchQuery))
+    : vehicles.slice(0, 10);
 
   return (
     <>
@@ -147,16 +159,9 @@ export default function AvailableVehicles({ searchQuery = "" }: AvailableVehicle
           <View style={{ flex: 1 }}>
             <Text style={styles.title}>
               {searchQuery.trim()
-                ? `Search Results (${displayedVehicles.length})`
-                : isShowingFallbackAll
-                ? "Available Vehicles in Region"
+                ? `Search: ${searchQuery.trim()} (${displayedVehicles.length})`
                 : "Available Vehicles Near You"}
             </Text>
-            {isShowingFallbackAll && !searchQuery.trim() ? (
-              <Text style={styles.subtitleHint}>
-                No vehicles within 25km of your exact spot — showing top listings across Oriental Mindoro
-              </Text>
-            ) : null}
           </View>
 
           <TouchableOpacity
@@ -168,9 +173,9 @@ export default function AvailableVehicles({ searchQuery = "" }: AvailableVehicle
               View More
             </Text>
 
-            <MaterialCommunityIcons
-              name="chevron-right"
-              size={21}
+            <Ionicons
+              name="arrow-forward"
+              size={16}
               color={Colors.primary}
             />
           </TouchableOpacity>
@@ -182,19 +187,19 @@ export default function AvailableVehicles({ searchQuery = "" }: AvailableVehicle
           <View style={styles.topShadow} />
 
           {loading ? (
-            <View style={{ flexDirection: "row", paddingHorizontal: Spacing.lg, gap: Spacing.md }}>
-              <VehicleCardSkeleton width={270} height={190} />
-              <VehicleCardSkeleton width={270} height={190} />
+            <View style={{ flexDirection: "row", paddingHorizontal: Spacing.lg, gap: Spacing.sm }}>
+              <VehicleCardSkeleton width={250} height={180} />
+              <VehicleCardSkeleton width={250} height={180} />
             </View>
           ) : displayedVehicles.length === 0 ? (
             <View style={styles.emptyContainer}>
               <MaterialCommunityIcons name="car-off" size={32} color={Colors.secondary} />
-              <Text style={styles.emptyTitle}>No Vehicles Available Currently</Text>
+              <Text style={styles.emptyTitle}>No Vehicles Found</Text>
               <Text style={styles.emptyText}>
                 Check back soon or explore different search filters.
               </Text>
               <TouchableOpacity style={styles.exploreBtn} onPress={handleViewMore}>
-                <Text style={styles.exploreBtnText}>Browse Full Catalog</Text>
+                <Text style={styles.exploreBtnText}>Browse All</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -204,12 +209,12 @@ export default function AvailableVehicles({ searchQuery = "" }: AvailableVehicle
               showsHorizontalScrollIndicator={false}
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.list}
-              snapToAlignment="center"
-              snapToInterval={270 + Spacing.md}
+              snapToAlignment="start"
+              snapToInterval={250 + Spacing.sm}
               decelerationRate="fast"
               disableIntervalMomentum
               renderItem={({ item }) => (
-                <VehicleCard
+                <NearVehicleCard
                   vehicle={item}
                   isFavorite={isFavorite(item.id)}
                   onViewPress={handleViewVehicle}
@@ -236,7 +241,7 @@ export default function AvailableVehicles({ searchQuery = "" }: AvailableVehicle
 const styles = StyleSheet.create({
   container: {
     position: "relative",
-    marginTop: -40,
+    marginTop: Spacing.xs,
     paddingVertical: Spacing.xs,
     backgroundColor: Colors.white,
     overflow: "hidden",
@@ -247,25 +252,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.md,
+    marginBottom: 8,
   },
 
   title: {
     flex: 1,
     fontFamily: FontFamily.medium,
-    fontSize: FontSize.body,
+    fontSize: 15,
     color: Colors.dark,
   },
 
   viewMoreButton: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 4,
     marginLeft: Spacing.sm,
   },
 
   viewMoreText: {
     fontFamily: FontFamily.medium,
-    fontSize: 13,
+    fontSize: 12,
     color: Colors.dark,
   },
 
@@ -275,7 +281,7 @@ const styles = StyleSheet.create({
 
   list: {
     paddingHorizontal: Spacing.lg,
-    gap: Spacing.md,
+    gap: 8,
   },
 
   topShadow: {

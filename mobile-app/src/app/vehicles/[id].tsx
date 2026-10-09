@@ -8,7 +8,10 @@ import {
   ActivityIndicator,
   Dimensions,
   Image,
+  KeyboardAvoidingView,
+  Linking,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -25,11 +28,16 @@ import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";
 import { useFavorites } from "@/context/FavoritesContext";
 import { useAppToast } from "@/context/ToastContext";
+import {
+  getDefaultAmenitiesForType,
+  resolveAmenityDisplay,
+} from "@/constants/vehicleAmenities";
+import AssistantModal from "@/features/assistant/components/AssistantModal";
 import AuthRequiredBottomSheet from "@/features/auth/components/AuthRequiredBottomSheet";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { getVehicleById } from "@/features/operator/services/vehicleService";
 import { Vehicle } from "@/features/operator/types/vehicle";
-import { createBooking } from "@/services/bookingService";
+import { createBooking, getMyBookings, Booking } from "@/services/bookingService";
 import api from "@/services/api";
 
 export default function VehicleDetailsScreen() {
@@ -44,12 +52,22 @@ export default function VehicleDetailsScreen() {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
 
+  // AI Assistant modal state for this car
+  const [showAssistantModal, setShowAssistantModal] = useState(false);
+  const [assistantPrompt, setAssistantPrompt] = useState("");
+
   // Booking bottom sheet state
   const [showBookingModal, setShowBookingModal] = useState(false);
-  const [startDaysFromNow, setStartDaysFromNow] = useState(1);
+  const [startDaysFromNow, setStartDaysFromNow] = useState(0);
   const [tripDurationDays, setTripDurationDays] = useState(2);
   const [bookingNotes, setBookingNotes] = useState("");
   const [submittingBooking, setSubmittingBooking] = useState(false);
+
+  // Multi-Car / Concurrent Rental Designated Driver State
+  const [hasActiveTripOverlap, setHasActiveTripOverlap] = useState(false);
+  const [activeTripVehicleName, setActiveTripVehicleName] = useState<string>("");
+  const [secondaryDriverName, setSecondaryDriverName] = useState("");
+  const [secondaryDriverPhone, setSecondaryDriverPhone] = useState("");
 
   // Operator vehicle management state
   const [deleting, setDeleting] = useState(false);
@@ -119,8 +137,8 @@ export default function VehicleDetailsScreen() {
       await api.patch(`/operator/vehicles/${vehicle.id}`, { availability_status: newStatus });
       showSuccess("Status Updated", `Vehicle set to ${newStatus}.`);
       loadVehicle();
-    } catch {
-      showError("Error", "Could not update availability.");
+    } catch (e: any) {
+      showError("Availability Notice", e.response?.data?.message || "Could not update availability.");
     }
   };
 
@@ -148,7 +166,64 @@ export default function VehicleDetailsScreen() {
       return;
     }
 
-    setShowBookingModal(true);
+    const isVerified = Boolean(user?.is_drivers_license_verified);
+    const verificationStatus =
+      user?.license_verification_status || (isVerified ? "approved" : "pending");
+
+    if (!isVerified || verificationStatus !== "approved") {
+      if (verificationStatus === "rejected") {
+        showModal(
+          "Driver's License Rejected",
+          user?.license_rejection_reason ||
+            "Your driver's license verification was rejected by Admin. Please re-upload clear photos of your license to proceed.",
+          [
+            { text: "Re-upload Now", style: "default", onPress: () => router.push("/driver-license" as any) },
+            { text: "Close", style: "cancel" },
+          ],
+          "error"
+        );
+        return;
+      }
+
+      showModal(
+        "Verification Under Review",
+        "Your driver's license is currently under review by our Admin team. You will be able to book vehicles once your identity is verified.",
+        [
+          { text: "View Status", style: "default", onPress: () => router.push("/driver-license" as any) },
+          { text: "OK", style: "cancel" },
+        ],
+        "info"
+      );
+      return;
+    }
+
+    // Check if user currently has an active trip in progress
+    getMyBookings()
+      .then((myBookings) => {
+        const activeTrip = myBookings.find((b) =>
+          [
+            "approved",
+            "awaiting_pickup",
+            "pickup_in_progress",
+            "ready_to_start",
+            "trip_in_progress",
+            "ongoing",
+            "return_pending",
+          ].includes(b.status)
+        );
+
+        if (activeTrip) {
+          setHasActiveTripOverlap(true);
+          setActiveTripVehicleName(activeTrip.vehicle?.name || "Active Vehicle");
+        } else {
+          setHasActiveTripOverlap(false);
+          setActiveTripVehicleName("");
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        setShowBookingModal(true);
+      });
   };
 
   const calculateFormattedDates = () => {
@@ -178,6 +253,14 @@ export default function VehicleDetailsScreen() {
     if (!vehicle) return;
     const { startDateStr, endDateStr } = calculateFormattedDates();
 
+    if (hasActiveTripOverlap && (!secondaryDriverName.trim() || !secondaryDriverPhone.trim())) {
+      showError(
+        "Designated Driver Required",
+        "Because you currently have an active rental trip, please enter the name and contact number of the authorized secondary driver."
+      );
+      return;
+    }
+
     try {
       setSubmittingBooking(true);
       await createBooking({
@@ -185,6 +268,8 @@ export default function VehicleDetailsScreen() {
         start_date: startDateStr,
         end_date: endDateStr,
         notes: bookingNotes.trim() || undefined,
+        secondary_driver_name: hasActiveTripOverlap ? secondaryDriverName.trim() : undefined,
+        secondary_driver_phone: hasActiveTripOverlap ? secondaryDriverPhone.trim() : undefined,
       });
 
       setShowBookingModal(false);
@@ -368,9 +453,23 @@ export default function VehicleDetailsScreen() {
           <View style={styles.titleRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.vehicleName}>{vehicle.name}</Text>
-              <Text style={styles.vehicleModel}>
-                {vehicle.brand || "Sedan"} • {vehicle.transmission || "Automatic"}
-              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 3 }}>
+                <Text style={styles.vehicleModel}>
+                  {vehicle.brand || "Sedan"} • {vehicle.transmission || "Automatic"}
+                </Text>
+                {vehicle.rating && (vehicle.rating_count ?? 0) > 0 ? (
+                  <View style={styles.inlineRatingBadge}>
+                    <Ionicons name="star" size={12} color="#F59E0B" />
+                    <Text style={styles.inlineRatingText}>
+                      {Number(vehicle.rating).toFixed(1)} ({vehicle.rating_count})
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.inlineNewBadge}>
+                    <Text style={styles.inlineNewBadgeText}>New Listing</Text>
+                  </View>
+                )}
+              </View>
             </View>
             <View style={styles.priceBadge}>
               <Text style={styles.priceAmount}>₱{Number(vehicle.price_per_day).toLocaleString()}</Text>
@@ -378,8 +477,13 @@ export default function VehicleDetailsScreen() {
             </View>
           </View>
 
-          {/* Quick Specs */}
-          <View style={styles.specsRow}>
+          {/* Quick Specs Pill Row - Horizontally Scrollable */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.specsScrollContainer}
+            style={styles.specsScrollView}
+          >
             <View style={styles.specPill}>
               <MaterialCommunityIcons name="car-seat" size={18} color={Colors.dark} />
               <Text style={styles.specText}>{vehicle.seats || 4} Seats</Text>
@@ -390,29 +494,326 @@ export default function VehicleDetailsScreen() {
             </View>
             <View style={styles.specPill}>
               <MaterialCommunityIcons name="gas-station" size={18} color={Colors.dark} />
-              <Text style={styles.specText}>{vehicle.vehicle_type || "Gasoline"}</Text>
+              <Text style={styles.specText}>{vehicle.fuel_type || "Gasoline"}</Text>
+            </View>
+            {vehicle.mileage ? (
+              <View style={styles.specPill}>
+                <MaterialCommunityIcons name="speedometer" size={18} color={Colors.dark} />
+                <Text style={styles.specText}>{Number(vehicle.mileage).toLocaleString()} km</Text>
+              </View>
+            ) : null}
+            {vehicle.vehicle_type ? (
+              <View style={styles.specPill}>
+                <MaterialCommunityIcons name="car-side" size={18} color={Colors.dark} />
+                <Text style={styles.specText}>{vehicle.vehicle_type}</Text>
+              </View>
+            ) : null}
+          </ScrollView>
+
+          {/* Key Amenities & Features Grid - Dynamically Tailored or Operator-Selected */}
+          {(() => {
+            const vType = (vehicle.vehicle_type || "").toLowerCase();
+            const hasCustomFeatures = Array.isArray(vehicle.features) && vehicle.features.length > 0;
+
+            let amenities: { icon: any; iconType?: "ion" | "mci"; color: string; label: string }[] = [];
+
+            if (hasCustomFeatures) {
+              amenities = vehicle.features!.map((feat: string) => {
+                const resolved = resolveAmenityDisplay(feat);
+                return {
+                  icon: resolved.icon,
+                  iconType: resolved.iconType,
+                  color: resolved.color,
+                  label: resolved.label,
+                };
+              });
+            } else {
+              const defaultIds = getDefaultAmenitiesForType(vType);
+              amenities = defaultIds.map((id) => {
+                const resolved = resolveAmenityDisplay(id);
+                return {
+                  icon: resolved.icon,
+                  iconType: resolved.iconType,
+                  color: resolved.color,
+                  label: resolved.label,
+                };
+              });
+            }
+
+            return (
+              <>
+                <View style={styles.sectionDivider} />
+                <Text style={styles.sectionHeading}>Vehicle Highlights & Amenities</Text>
+                <View style={styles.amenitiesGrid}>
+                  {amenities.map((item, idx) => (
+                    <View key={idx} style={styles.amenityItem}>
+                      {item.iconType === "mci" ? (
+                        <MaterialCommunityIcons name={item.icon as any} size={18} color={item.color} />
+                      ) : (
+                        <Ionicons name={item.icon as any} size={18} color={item.color} />
+                      )}
+                      <Text style={styles.amenityText} numberOfLines={2}>
+                        {item.label}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            );
+          })()}
+
+          {/* AI Vehicle Assistant Action Card */}
+          <TouchableOpacity
+            style={styles.aiInsightCard}
+            onPress={() => {
+              setAssistantPrompt(`Tell me more about renting the ${vehicle.name}. Is it good for travel in Mindoro and what are the requirements?`);
+              setShowAssistantModal(true);
+            }}
+            activeOpacity={0.85}
+          >
+            <View style={styles.aiIconBadge}>
+              <MaterialCommunityIcons name="robot-excited-outline" size={22} color={Colors.white} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.aiCardTitle}>Ask AI About This Vehicle</Text>
+              <Text style={styles.aiCardSubtitle}>Get instant answers on suitability, fuel cost, and Mindoro routes.</Text>
+            </View>
+            <Ionicons name="chatbubbles-outline" size={20} color={Colors.primary} />
+          </TouchableOpacity>
+
+          {/* Transparent Price & Fee Breakdown */}
+          <View style={styles.sectionDivider} />
+          <Text style={styles.sectionHeading}>Price & Fee Breakdown</Text>
+          <View style={styles.priceBreakdownCard}>
+            <View style={styles.breakdownRow}>
+              <Text style={styles.breakdownLabel}>Daily Rental Rate</Text>
+              <Text style={styles.breakdownValue}>₱{Number(vehicle.price_per_day).toLocaleString()} / day</Text>
+            </View>
+            <View style={styles.breakdownRow}>
+              <Text style={styles.breakdownLabel}>Required Reservation Fee (GCash/Maya)</Text>
+              <Text style={[styles.breakdownValue, { color: Colors.primary }]}>
+                ₱{Number(vehicle.reservation_fee || 500).toLocaleString()}
+              </Text>
+            </View>
+            <View style={styles.breakdownRow}>
+              <Text style={styles.breakdownLabel}>Remaining Balance on Handover</Text>
+              <Text style={styles.breakdownValue}>
+                ₱{Math.max(0, Number(vehicle.price_per_day) - Number(vehicle.reservation_fee || 500)).toLocaleString()} (for 1 day)
+              </Text>
+            </View>
+            <View style={styles.breakdownDivider} />
+            <View style={styles.breakdownNoteRow}>
+              <Ionicons name="information-circle-outline" size={15} color={Colors.secondary} />
+              <Text style={styles.breakdownNoteText}>
+                Reservation fee secures your booking schedule with the host. Balance is settled upon meetup.
+              </Text>
             </View>
           </View>
+
+          {/* Rental Requirements & Policies */}
+          <View style={styles.sectionDivider} />
+          <Text style={styles.sectionHeading}>Rental Rules & Policies</Text>
+          <View style={styles.policiesCard}>
+            <View style={styles.policyRow}>
+              <View style={styles.policyIconCircle}>
+                <Ionicons name="id-card-outline" size={18} color={Colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.policyTitle}>Driver Requirements</Text>
+                <Text style={styles.policyDesc}>
+                  Age {vehicle.min_driver_age || 21}+ with valid Philippine or International Driver's License and 1 secondary ID.
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.policyRow}>
+              <View style={styles.policyIconCircle}>
+                <MaterialCommunityIcons name="gas-station" size={18} color={Colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.policyTitle}>Fuel Policy</Text>
+                <Text style={styles.policyDesc}>{vehicle.fuel_policy || "Same-to-Same (Return with identical fuel level at pickup)."}</Text>
+              </View>
+            </View>
+
+            <View style={styles.policyRow}>
+              <View style={styles.policyIconCircle}>
+                <Ionicons name="time-outline" size={18} color={Colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.policyTitle}>Late Return & Extension</Text>
+                <Text style={styles.policyDesc}>{vehicle.late_return_policy || "Inform host 3 hours prior to extension. Overtime rates apply."}</Text>
+              </View>
+            </View>
+
+            <View style={styles.policyRow}>
+              <View style={styles.policyIconCircle}>
+                <Ionicons name="ban-outline" size={18} color={Colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.policyTitle}>Inside Vehicle Policies</Text>
+                <Text style={styles.policyDesc}>
+                  {vehicle.smoking_policy || "Strictly no smoking inside."} • {vehicle.pet_policy || "Pets allowed in carrier."}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Location & Handover Point */}
+          <View style={styles.sectionDivider} />
+          <Text style={styles.sectionHeading}>Pickup & Meetup Location</Text>
+          <View style={styles.locationCard}>
+            <View style={styles.locationInfoRow}>
+              <Ionicons name="location-sharp" size={22} color={Colors.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.locationTitle}>{vehicle.pickup_address || "Pinamalayan, Oriental Mindoro"}</Text>
+                <Text style={styles.locationSubtitle}>Exact meetup coordination provided upon booking confirmation.</Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.directionsButton}
+              onPress={() => {
+                router.push({
+                  pathname: "/live-tracking",
+                  params: {
+                    type: "pickup",
+                    title: "Pickup Location",
+                    vehicleName: vehicle.name,
+                    address: vehicle.pickup_address || "Pinamalayan, Oriental Mindoro",
+                    latitude: vehicle.pickup_latitude ? String(vehicle.pickup_latitude) : undefined,
+                    longitude: vehicle.pickup_longitude ? String(vehicle.pickup_longitude) : undefined,
+                  },
+                } as any);
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="map-outline" size={16} color={Colors.dark} />
+              <Text style={styles.directionsButtonText}>View Pickup Location on Map</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Rating & Renter Reviews Section */}
+          <View style={styles.sectionDivider} />
+          <View style={styles.sectionHeadingRow}>
+            <Text style={styles.sectionHeading}>
+              Ratings & Reviews {vehicle.rating_count ? `(${vehicle.rating_count})` : ""}
+            </Text>
+            {vehicle.rating ? (
+              <View style={styles.ratingBadgePill}>
+                <Ionicons name="star" size={14} color="#F59E0B" />
+                <Text style={styles.ratingBadgeText}>{Number(vehicle.rating).toFixed(1)}</Text>
+              </View>
+            ) : null}
+          </View>
+
+          {Array.isArray(vehicle.reviews) && vehicle.reviews.length > 0 ? (
+            <View style={{ gap: 10, marginTop: 4 }}>
+              {vehicle.reviews.map((rev) => (
+                <View key={rev.id} style={styles.reviewCard}>
+                  <View style={styles.reviewHeader}>
+                    {rev.renter_photo ? (
+                      <Image source={{ uri: rev.renter_photo }} style={styles.reviewerAvatarImage} />
+                    ) : (
+                      <View style={styles.reviewerAvatar}>
+                        <Text style={styles.reviewerInitial}>
+                          {(rev.renter_name || "R").charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.reviewerName}>{rev.renter_name}</Text>
+                      <Text style={styles.reviewDate}>{rev.created_at || "Verified Renter"}</Text>
+                    </View>
+                    <View style={styles.reviewStars}>
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <Ionicons
+                          key={s}
+                          name={s <= rev.rating ? "star" : "star-outline"}
+                          size={13}
+                          color={s <= rev.rating ? "#F59E0B" : Colors.border}
+                        />
+                      ))}
+                    </View>
+                  </View>
+                  {rev.review ? (
+                    <Text style={styles.reviewContent}>{rev.review}</Text>
+                  ) : (
+                    <Text style={[styles.reviewContent, { fontStyle: "italic", color: Colors.secondary }]}>
+                      Rated {rev.rating} out of 5 stars
+                    </Text>
+                  )}
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.newListingReviewCard}>
+              <Ionicons name="sparkles-outline" size={20} color={Colors.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.newListingReviewTitle}>No Reviews Yet</Text>
+                <Text style={styles.newListingReviewText}>
+                  Be among the first renters to book this vehicle and share your experience!
+                </Text>
+              </View>
+            </View>
+          )}
 
           {/* Operator Controls or Renter Host Section */}
           {isOwner ? (
             <View style={styles.ownerControlsCard}>
               <Text style={styles.ownerTitle}>Operator Management Actions</Text>
+              
+              {vehicle.is_rented && (
+                <View style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  backgroundColor: "#FEF3C7",
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  borderRadius: 8,
+                  marginBottom: 12,
+                  gap: 8,
+                }}>
+                  <Ionicons name="lock-closed" size={16} color="#D97706" />
+                  <Text style={{ fontSize: 12, color: "#92400E", flex: 1, fontFamily: FontFamily?.medium || undefined }}>
+                    This vehicle is currently on an active rental trip. Availability cannot be manually altered until the booking completes.
+                  </Text>
+                </View>
+              )}
+
               <View style={styles.ownerButtonsRow}>
                 <TouchableOpacity
-                  style={[styles.ownerBtn, { backgroundColor: Colors.inputBackground }]}
+                  style={[
+                    styles.ownerBtn,
+                    { backgroundColor: Colors.inputBackground },
+                    vehicle.is_rented && { opacity: 0.5 },
+                  ]}
                   onPress={handleToggleAvailability}
+                  disabled={vehicle.is_rented}
                   activeOpacity={0.8}
                 >
-                  <Ionicons name="swap-horizontal" size={16} color={Colors.dark} />
+                  <Ionicons
+                    name={vehicle.is_rented ? "lock-closed" : "swap-horizontal"}
+                    size={16}
+                    color={Colors.dark}
+                  />
                   <Text style={styles.ownerBtnText}>
-                    {vehicle.availability_status === "available" ? "Set Unavailable" : "Set Available"}
+                    {vehicle.is_rented
+                      ? "Currently Rented"
+                      : vehicle.availability_status === "available"
+                      ? "Set Unavailable"
+                      : "Set Available"}
                   </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.ownerBtn, { backgroundColor: "#FEF2F2" }]}
+                  style={[
+                    styles.ownerBtn,
+                    { backgroundColor: "#FEF2F2" },
+                    vehicle.is_rented && { opacity: 0.5 },
+                  ]}
                   onPress={handleDeleteVehicle}
+                  disabled={vehicle.is_rented || deleting}
                   activeOpacity={0.8}
                 >
                   <Ionicons name="trash-outline" size={16} color={Colors.error} />
@@ -422,7 +823,7 @@ export default function VehicleDetailsScreen() {
             </View>
           ) : (
             <>
-              {/* Operator / Location Info with Avatar */}
+              {/* Operator / Location Info with Avatar & Chat Button */}
               <View style={styles.sectionDivider} />
               <View style={styles.sectionHeadingRow}>
                 <Text style={styles.sectionHeading}>Verified Host & Operator</Text>
@@ -436,31 +837,52 @@ export default function VehicleDetailsScreen() {
                 )}
               </View>
 
-              <TouchableOpacity
-                style={styles.operatorRow}
-                onPress={() => {
-                  if (operator?.id) router.push(`/operator/${operator.id}` as any);
-                }}
-                activeOpacity={0.8}
-              >
-                {operator?.profile_photo ? (
-                  <Image source={{ uri: operator.profile_photo }} style={styles.operatorAvatar} />
-                ) : (
-                  <View style={styles.operatorIconWrap}>
-                    <Ionicons name="business" size={20} color={Colors.dark} />
-                  </View>
-                )}
+              <View style={styles.operatorRow}>
+                <TouchableOpacity
+                  style={{ flexDirection: "row", alignItems: "center", flex: 1, gap: 12 }}
+                  onPress={() => {
+                    if (operator?.id) router.push(`/operator/${operator.id}` as any);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  {operator?.profile_photo ? (
+                    <Image source={{ uri: operator.profile_photo }} style={styles.operatorAvatar} />
+                  ) : (
+                    <View style={styles.operatorIconWrap}>
+                      <Ionicons name="business" size={20} color={Colors.dark} />
+                    </View>
+                  )}
 
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.operatorName}>
-                    {operator?.business_name || operator?.name || "Verified Host"}
-                  </Text>
-                  <Text style={styles.operatorAddress} numberOfLines={1}>
-                    {vehicle.pickup_address || "Pickup address available upon booking"}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={Colors.secondary} />
-              </TouchableOpacity>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.operatorName}>
+                      {operator?.business_name || operator?.name || "Verified Host"}
+                    </Text>
+                    <Text style={styles.operatorAddress} numberOfLines={1}>
+                      {vehicle.pickup_address || "Pickup address available upon booking"}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                {operator?.id && (
+                  <TouchableOpacity
+                    style={styles.chatHostButton}
+                    onPress={() => {
+                      if (isGuest) {
+                        setShowAuthSheet(true);
+                        return;
+                      }
+                      router.push({
+                        pathname: `/chat/${operator.id}`,
+                        params: { name: operator?.business_name || operator?.name || "Host" },
+                      } as any);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="chatbubble-ellipses-outline" size={18} color={Colors.dark} />
+                    <Text style={styles.chatHostButtonText}>Message</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </>
           )}
 
@@ -483,30 +905,69 @@ export default function VehicleDetailsScreen() {
             <Text style={styles.bottomPrice}>₱{Number(vehicle.price_per_day).toLocaleString()} / day</Text>
           </View>
 
-          <TouchableOpacity
-            style={[
-              styles.bookNowButton,
-              vehicle.availability_status !== "available" && styles.bookNowDisabled,
-            ]}
-            onPress={handleBookNow}
-            disabled={vehicle.availability_status !== "available"}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.bookNowText}>
-              {vehicle.availability_status === "available" ? "Book Vehicle" : "Currently Unavailable"}
-            </Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            {operator?.id && (
+              <TouchableOpacity
+                style={styles.bottomChatButton}
+                onPress={() => {
+                  if (isGuest) {
+                    setShowAuthSheet(true);
+                    return;
+                  }
+                  router.push({
+                    pathname: `/chat/${operator.id}`,
+                    params: { name: operator?.business_name || operator?.name || "Host" },
+                  } as any);
+                }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="chatbubble-outline" size={20} color={Colors.dark} />
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[
+                styles.bookNowButton,
+                vehicle.availability_status !== "available" && styles.bookNowDisabled,
+              ]}
+              onPress={handleBookNow}
+              disabled={vehicle.availability_status !== "available"}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.bookNowText}>
+                {vehicle.availability_status === "available" ? "Book Vehicle" : "Currently Unavailable"}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
+
+      {/* AI Assistant Sheet */}
+      <AssistantModal
+        visible={showAssistantModal}
+        onClose={() => {
+          setShowAssistantModal(false);
+          setAssistantPrompt("");
+        }}
+        initialPrompt={assistantPrompt}
+      />
 
       {/* Date Picker & Booking Confirmation Modal */}
       <Modal
         visible={showBookingModal}
         transparent
         animationType="slide"
+        statusBarTranslucent={true}
         onRequestClose={() => setShowBookingModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setShowBookingModal(false)}
+          />
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Select Trip Dates</Text>
@@ -519,75 +980,113 @@ export default function VehicleDetailsScreen() {
               Reserve {vehicle.name} • ₱{Number(vehicle.price_per_day).toLocaleString()}/day
             </Text>
 
-            {/* Quick start date options (realistic dates only) */}
-            <Text style={styles.fieldLabel}>Pickup Date</Text>
-            <View style={styles.pickerRow}>
-              {[
-                { label: "Tomorrow", days: 1 },
-                { label: "In 2 Days", days: 2 },
-                { label: "In 3 Days", days: 3 },
-                { label: "This Weekend", days: 5 },
-              ].map((opt) => (
-                <TouchableOpacity
-                  key={opt.days}
-                  style={[styles.pickerPill, startDaysFromNow === opt.days && styles.pickerPillActive]}
-                  onPress={() => setStartDaysFromNow(opt.days)}
-                >
-                  <Text style={[styles.pickerPillText, startDaysFromNow === opt.days && styles.pickerPillTextActive]}>
-                    {opt.label}
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingBottom: Spacing.md }}
+              style={{ maxHeight: Dimensions.get("window").height * 0.65 }}
+            >
+              {/* Quick start date options (realistic dates only) */}
+              <Text style={styles.fieldLabel}>Pickup Date</Text>
+              <View style={styles.pickerRow}>
+                {[
+                  { label: "Today", days: 0 },
+                  { label: "Tomorrow", days: 1 },
+                  { label: "In 2 Days", days: 2 },
+                  { label: "In 3 Days", days: 3 },
+                  { label: "This Weekend", days: 5 },
+                ].map((opt) => (
+                  <TouchableOpacity
+                    key={opt.days}
+                    style={[styles.pickerPill, startDaysFromNow === opt.days && styles.pickerPillActive]}
+                    onPress={() => setStartDaysFromNow(opt.days)}
+                  >
+                    <Text style={[styles.pickerPillText, startDaysFromNow === opt.days && styles.pickerPillTextActive]}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Duration Selector */}
+              <Text style={styles.fieldLabel}>Trip Duration</Text>
+              <View style={styles.pickerRow}>
+                {[
+                  { label: "1 Day", days: 1 },
+                  { label: "2 Days", days: 2 },
+                  { label: "3 Days", days: 3 },
+                  { label: "5 Days", days: 5 },
+                  { label: "1 Week", days: 7 },
+                ].map((opt) => (
+                  <TouchableOpacity
+                    key={opt.days}
+                    style={[styles.pickerPill, tripDurationDays === opt.days && styles.pickerPillActive]}
+                    onPress={() => setTripDurationDays(opt.days)}
+                  >
+                    <Text style={[styles.pickerPillText, tripDurationDays === opt.days && styles.pickerPillTextActive]}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Selected Date Summary */}
+              <View style={styles.dateSummaryBox}>
+                <Ionicons name="calendar-outline" size={18} color={Colors.dark} />
+                <Text style={styles.dateSummaryText}>
+                  {displayStart} → {displayEnd} ({tripDurationDays} {tripDurationDays === 1 ? "day" : "days"})
+                </Text>
+              </View>
+
+              {/* Multi-Vehicle Rental Verification Notice */}
+              {hasActiveTripOverlap && (
+                <View style={styles.multiCarNoticeCard}>
+                  <View style={styles.multiCarNoticeHeader}>
+                    <Ionicons name="shield-checkmark" size={16} color="#B45309" />
+                    <Text style={styles.multiCarNoticeTitle}>Concurrent Multi-Vehicle Rental</Text>
+                  </View>
+                  <Text style={styles.multiCarNoticeText}>
+                    You have an active ongoing trip ({activeTripVehicleName}). For insurance and verification, please designate the authorized secondary driver for this vehicle.
                   </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
 
-            {/* Duration Selector */}
-            <Text style={styles.fieldLabel}>Trip Duration</Text>
-            <View style={styles.pickerRow}>
-              {[
-                { label: "1 Day", days: 1 },
-                { label: "2 Days", days: 2 },
-                { label: "3 Days", days: 3 },
-                { label: "5 Days", days: 5 },
-                { label: "1 Week", days: 7 },
-              ].map((opt) => (
-                <TouchableOpacity
-                  key={opt.days}
-                  style={[styles.pickerPill, tripDurationDays === opt.days && styles.pickerPillActive]}
-                  onPress={() => setTripDurationDays(opt.days)}
-                >
-                  <Text style={[styles.pickerPillText, tripDurationDays === opt.days && styles.pickerPillTextActive]}>
-                    {opt.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+                  <Text style={[styles.fieldLabel, { marginTop: 10 }]}>Designated Driver Name *</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={secondaryDriverName}
+                    onChangeText={setSecondaryDriverName}
+                    placeholder="Full name (as written on Driver's License)"
+                  />
 
-            {/* Selected Date Summary */}
-            <View style={styles.dateSummaryBox}>
-              <Ionicons name="calendar-outline" size={18} color={Colors.dark} />
-              <Text style={styles.dateSummaryText}>
-                {displayStart} → {displayEnd} ({tripDurationDays} {tripDurationDays === 1 ? "day" : "days"})
-              </Text>
-            </View>
+                  <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Designated Driver Mobile *</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={secondaryDriverPhone}
+                    onChangeText={setSecondaryDriverPhone}
+                    keyboardType="phone-pad"
+                    placeholder="e.g. 09171234567"
+                  />
+                </View>
+              )}
 
-            {/* Trip Notes */}
-            <Text style={styles.fieldLabel}>Trip Notes (Optional)</Text>
-            <TextInput
-              style={styles.modalInput}
-              value={bookingNotes}
-              onChangeText={setBookingNotes}
-              placeholder="Special requests or pickup preferences..."
-            />
-
-            <View style={{ marginTop: Spacing.lg }}>
-              <PrimaryButton
-                title={submittingBooking ? "Creating Booking..." : "Confirm & Proceed to Payment"}
-                onPress={handleConfirmReservation}
-                loading={submittingBooking}
+              {/* Trip Notes */}
+              <Text style={styles.fieldLabel}>Trip Notes (Optional)</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={bookingNotes}
+                onChangeText={setBookingNotes}
+                placeholder="Special requests or pickup preferences..."
               />
-            </View>
+
+              <View style={{ marginTop: Spacing.lg }}>
+                <PrimaryButton
+                  title={submittingBooking ? "Creating Booking..." : "Confirm & Proceed to Payment"}
+                  onPress={handleConfirmReservation}
+                  loading={submittingBooking}
+                />
+              </View>
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <AuthRequiredBottomSheet visible={showAuthSheet} onClose={() => setShowAuthSheet(false)} />
@@ -597,6 +1096,7 @@ export default function VehicleDetailsScreen() {
         visible={fullscreenImage !== null}
         transparent
         animationType="fade"
+        statusBarTranslucent={true}
         onRequestClose={() => setFullscreenImage(null)}
       >
         <View style={styles.fullscreenBackdrop}>
@@ -786,10 +1286,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.secondary,
   },
-  specsRow: {
-    flexDirection: "row",
-    gap: 8,
+  specsScrollView: {
     marginTop: Spacing.md,
+    marginHorizontal: -Spacing.lg,
+  },
+  specsScrollContainer: {
+    paddingHorizontal: Spacing.lg,
+    gap: 8,
+    alignItems: "center",
   },
   specPill: {
     flexDirection: "row",
@@ -865,6 +1369,314 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: 6,
   },
+  amenitiesGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    rowGap: 8,
+    marginTop: 10,
+  },
+  amenityItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: Colors.inputBackground,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: 12,
+    width: "48.5%",
+    minHeight: 44,
+  },
+  amenityText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 11.5,
+    color: Colors.dark,
+    flex: 1,
+    lineHeight: 15,
+  },
+  aiInsightCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.logoBackground,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    padding: Spacing.md,
+    borderRadius: 16,
+    marginTop: Spacing.lg,
+    gap: 12,
+  },
+  aiIconBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.primary,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  aiCardTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 13,
+    color: Colors.dark,
+  },
+  aiCardSubtitle: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11,
+    color: Colors.secondary,
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  priceBreakdownCard: {
+    backgroundColor: Colors.inputBackground,
+    borderRadius: 16,
+    padding: Spacing.md,
+    marginTop: 8,
+  },
+  breakdownRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 4,
+  },
+  breakdownLabel: {
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+    color: Colors.secondary,
+    flex: 1,
+    paddingRight: 8,
+  },
+  breakdownValue: {
+    fontFamily: FontFamily.bold,
+    fontSize: 13,
+    color: Colors.dark,
+  },
+  breakdownDivider: {
+    height: 1,
+    backgroundColor: Colors.divider,
+    marginVertical: 8,
+  },
+  breakdownNoteRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+    marginTop: 2,
+  },
+  breakdownNoteText: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11,
+    color: Colors.secondary,
+    flex: 1,
+    lineHeight: 15,
+  },
+  policiesCard: {
+    backgroundColor: Colors.inputBackground,
+    borderRadius: 16,
+    padding: Spacing.md,
+    marginTop: 8,
+    gap: 14,
+  },
+  policyRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  policyIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.logoBackground,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 2,
+  },
+  policyTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 13,
+    color: Colors.dark,
+  },
+  policyDesc: {
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    color: Colors.secondary,
+    marginTop: 2,
+    lineHeight: 17,
+  },
+  locationCard: {
+    backgroundColor: Colors.inputBackground,
+    borderRadius: 16,
+    padding: Spacing.md,
+    marginTop: 8,
+    gap: 12,
+  },
+  locationInfoRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  locationTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 13,
+    color: Colors.dark,
+  },
+  locationSubtitle: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11,
+    color: Colors.secondary,
+    marginTop: 2,
+  },
+  directionsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.logoBackground,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 6,
+  },
+  directionsButtonText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 12,
+    color: Colors.dark,
+  },
+  inlineRatingBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#FEF3C7",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  inlineRatingText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 11,
+    color: "#D97706",
+  },
+  inlineNewBadge: {
+    backgroundColor: "#F3F4F6",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  inlineNewBadgeText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 10,
+    color: Colors.secondary,
+  },
+  ratingBadgePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#FEF3C7",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  ratingBadgeText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 12,
+    color: "#D97706",
+  },
+  reviewCard: {
+    backgroundColor: Colors.inputBackground,
+    borderRadius: 16,
+    padding: Spacing.md,
+    marginTop: 8,
+  },
+  reviewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  reviewerAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.primary,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  reviewerAvatarImage: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.inputBackground,
+  },
+  reviewerInitial: {
+    fontFamily: FontFamily.bold,
+    fontSize: 14,
+    color: Colors.white,
+  },
+  reviewerName: {
+    fontFamily: FontFamily.bold,
+    fontSize: 13,
+    color: Colors.dark,
+  },
+  reviewDate: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11,
+    color: Colors.secondary,
+    marginTop: 1,
+  },
+  reviewStars: {
+    flexDirection: "row",
+    gap: 2,
+  },
+  reviewContent: {
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    color: Colors.dark,
+    marginTop: 8,
+    lineHeight: 18,
+  },
+  newListingReviewCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.inputBackground,
+    padding: Spacing.md,
+    borderRadius: 16,
+    marginTop: 8,
+    gap: 12,
+  },
+  newListingReviewTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 13,
+    color: Colors.dark,
+  },
+  newListingReviewText: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11,
+    color: Colors.secondary,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  chatHostButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: Colors.logoBackground,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  chatHostButtonText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 12,
+    color: Colors.dark,
+  },
+  bottomChatButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: Colors.inputBackground,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
   ownerControlsCard: {
     marginTop: Spacing.lg,
     padding: Spacing.md,
@@ -931,7 +1743,7 @@ const styles = StyleSheet.create({
   bookNowText: {
     fontFamily: FontFamily.bold,
     fontSize: 14,
-    color: Colors.dark,
+    color: Colors.white,
   },
   modalOverlay: {
     flex: 1,
@@ -942,8 +1754,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    padding: Spacing.lg,
-    paddingBottom: 36,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.lg,
+    paddingBottom: Platform.OS === "ios" ? 28 : 20,
+    maxHeight: Dimensions.get("window").height * 0.85,
   },
   modalHeader: {
     flexDirection: "row",
@@ -1017,6 +1831,33 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.regular,
     fontSize: 14,
     color: Colors.dark,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  multiCarNoticeCard: {
+    backgroundColor: "#FEF3C7",
+    borderRadius: 14,
+    padding: 12,
+    marginVertical: 8,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+  multiCarNoticeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 4,
+  },
+  multiCarNoticeTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 12,
+    color: "#92400E",
+  },
+  multiCarNoticeText: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11.5,
+    color: "#78350F",
+    lineHeight: 16,
   },
   errorText: {
     fontFamily: FontFamily.bold,
@@ -1033,6 +1874,6 @@ const styles = StyleSheet.create({
   backButtonText: {
     fontFamily: FontFamily.bold,
     fontSize: 13,
-    color: Colors.dark,
+    color: Colors.white,
   },
 });

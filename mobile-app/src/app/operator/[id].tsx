@@ -81,6 +81,13 @@ export default function OperatorProfileScreen() {
   }
 
   const businessName = operator?.business_name || operator?.name || "Verified Operator";
+  const addressParts = [
+    operator?.street_address,
+    operator?.barangay,
+    operator?.municipality,
+  ].filter(Boolean);
+  const fullAddress = addressParts.length > 0 ? addressParts.join(", ") : operator?.address || null;
+  const profilePhoto = operator?.profile_photo;
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.container}>
@@ -101,60 +108,90 @@ export default function OperatorProfileScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
-          <View style={styles.profileHero}>
-            {/* Host Identity */}
-            <View style={styles.identityRow}>
+          <View style={styles.profileHeaderSection}>
+            {/* Host Cover Accent Banner */}
+            <View style={styles.coverAccent}>
+              <View style={styles.accentCircleOne} />
+              <View style={styles.accentCircleTwo} />
+            </View>
+
+            {/* Avatar overlapping the banner */}
+            <View style={styles.avatarRowWrapper}>
               <View style={styles.avatarWrap}>
-                <Ionicons name="business" size={30} color={Colors.dark} />
+                {profilePhoto ? (
+                  <Image source={{ uri: profilePhoto }} style={styles.avatarImg} />
+                ) : (
+                  <Ionicons name="business" size={36} color={Colors.dark} />
+                )}
               </View>
-              <View style={{ flex: 1 }}>
-                <View style={styles.nameVerifiedRow}>
-                  <Text style={styles.businessTitle} numberOfLines={1}>
-                    {businessName}
+
+              <View style={styles.verifiedBadge}>
+                <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                <Text style={styles.verifiedText}>Verified Host</Text>
+              </View>
+            </View>
+
+            {/* Host Identity Details */}
+            <View style={styles.detailsBlock}>
+              <Text style={styles.businessTitle} numberOfLines={2}>
+                {businessName}
+              </Text>
+
+              <Text style={styles.ownerText}>
+                Managed by {operator?.name || "Verified Host"}
+              </Text>
+
+              {fullAddress ? (
+                <View style={styles.addressContainer}>
+                  <Ionicons name="location-sharp" size={15} color={Colors.primary} />
+                  <Text style={styles.addressText} numberOfLines={2}>
+                    {fullAddress}
                   </Text>
-                  <Ionicons name="checkmark-circle" size={18} color="#10B981" />
                 </View>
-                <Text style={styles.ownerText}>
-                  Managed by {operator?.name || "Verified Host"}
-                </Text>
-                {operator?.address ? (
-                  <Text style={styles.addressText} numberOfLines={1}>
-                    📍 {operator.address}
-                  </Text>
+              ) : null}
+
+              {/* Action Buttons Row */}
+              <View style={styles.actionButtonsRow}>
+                <TouchableOpacity
+                  style={styles.chatAction}
+                  onPress={handleChatPress}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="chatbubble-ellipses" size={18} color={Colors.white} />
+                  <Text style={styles.chatActionText}>Message Host</Text>
+                </TouchableOpacity>
+
+                {operator?.business_contact_number || operator?.mobile_number ? (
+                  <View style={styles.contactBadge}>
+                    <Ionicons name="call-outline" size={15} color={Colors.dark} />
+                    <Text style={styles.contactText}>
+                      {operator.business_contact_number || operator.mobile_number}
+                    </Text>
+                  </View>
                 ) : null}
               </View>
-            </View>
 
-            {/* Quick Metrics Bar */}
-            <View style={styles.metricsBar}>
-              <View style={styles.metricItem}>
-                <Text style={styles.metricNumber}>{vehicles.length}</Text>
-                <Text style={styles.metricLabel}>Active Cars</Text>
-              </View>
-              <View style={styles.metricDivider} />
-              <View style={styles.metricItem}>
-                <Text style={styles.metricNumber}>100%</Text>
-                <Text style={styles.metricLabel}>Response Rate</Text>
-              </View>
-              <View style={styles.metricDivider} />
-              <View style={styles.metricItem}>
-                <Text style={styles.metricNumber}>Verified</Text>
-                <Text style={styles.metricLabel}>Account</Text>
+              {/* Statistics Pill Line */}
+              <View style={styles.statsRow}>
+                <View style={styles.statPill}>
+                  <Text style={styles.statNumber}>{vehicles.length}</Text>
+                  <Text style={styles.statLabel}>Available Cars</Text>
+                </View>
+
+                <View style={styles.statPill}>
+                  <Text style={styles.statNumber}>Fast</Text>
+                  <Text style={styles.statLabel}>Response Rate</Text>
+                </View>
+
+                <View style={styles.statPill}>
+                  <Text style={styles.statNumber}>5.0 ★</Text>
+                  <Text style={styles.statLabel}>Host Rating</Text>
+                </View>
               </View>
             </View>
-
-            {/* Direct Message Action */}
-            <TouchableOpacity
-              style={styles.chatAction}
-              onPress={handleChatPress}
-              activeOpacity={0.85}
-            >
-              <Ionicons name="chatbubble-ellipses" size={18} color={Colors.dark} />
-              <Text style={styles.chatActionText}>Send Host a Message</Text>
-            </TouchableOpacity>
 
             <View style={styles.dividerLine} />
-            <Text style={styles.fleetHeader}>Available Fleet ({vehicles.length})</Text>
+            <Text style={styles.fleetHeader}>Fleet Listings ({vehicles.length})</Text>
           </View>
         }
         ListEmptyComponent={
@@ -217,7 +254,7 @@ export default function OperatorProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8F9FA",
+    backgroundColor: Colors.white,
   },
   headerBar: {
     flexDirection: "row",
@@ -246,83 +283,116 @@ const styles = StyleSheet.create({
     marginHorizontal: Spacing.sm,
   },
   listContent: {
-    padding: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
     paddingBottom: 40,
   },
-  profileHero: {
-    backgroundColor: Colors.white,
-    borderRadius: 20,
-    padding: Spacing.lg,
-    marginBottom: Spacing.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
+  profileHeaderSection: {
+    marginBottom: Spacing.md,
+    marginTop: Spacing.sm,
   },
-  identityRow: {
+  coverAccent: {
+    height: 90,
+    backgroundColor: Colors.primary,
+    borderRadius: 20,
+    position: "relative",
+    overflow: "hidden",
+    justifyContent: "center",
+  },
+  accentCircleOne: {
+    position: "absolute",
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: "rgba(255, 255, 255, 0.22)",
+    top: -40,
+    right: -20,
+  },
+  accentCircleTwo: {
+    position: "absolute",
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    bottom: -20,
+    left: 20,
+  },
+  avatarRowWrapper: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.md,
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    marginTop: -38,
+    paddingHorizontal: Spacing.md,
   },
   avatarWrap: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: Colors.logoBackground,
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: Colors.white,
     justifyContent: "center",
     alignItems: "center",
+    overflow: "hidden",
+    borderWidth: 3,
+    borderColor: Colors.white,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  nameVerifiedRow: {
+  avatarImg: {
+    width: "100%",
+    height: "100%",
+  },
+  verifiedBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+    backgroundColor: "#ECFDF5",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    marginBottom: 4,
+  },
+  verifiedText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 12,
+    color: "#065F46",
+  },
+  detailsBlock: {
+    marginTop: Spacing.sm,
+    paddingHorizontal: 4,
   },
   businessTitle: {
     fontFamily: FontFamily.bold,
-    fontSize: 18,
+    fontSize: 22,
     color: Colors.dark,
-    flex: 1,
   },
   ownerText: {
-    fontFamily: FontFamily.regular,
-    fontSize: 12,
-    color: Colors.secondary,
-    marginTop: 1,
-  },
-  addressText: {
-    fontFamily: FontFamily.regular,
-    fontSize: 11,
+    fontFamily: FontFamily.medium,
+    fontSize: 13,
     color: Colors.secondary,
     marginTop: 2,
   },
-  metricsBar: {
+  addressContainer: {
     flexDirection: "row",
-    justifyContent: "space-around",
     alignItems: "center",
-    backgroundColor: Colors.inputBackground,
-    borderRadius: 14,
-    paddingVertical: 10,
-    marginTop: Spacing.md,
+    gap: 5,
+    marginTop: 6,
   },
-  metricItem: {
-    alignItems: "center",
+  addressText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 13,
+    color: Colors.dark,
     flex: 1,
   },
-  metricNumber: {
-    fontFamily: FontFamily.bold,
-    fontSize: 15,
-    color: Colors.dark,
-  },
-  metricLabel: {
-    fontFamily: FontFamily.regular,
-    fontSize: 11,
-    color: Colors.secondary,
-    marginTop: 1,
-  },
-  metricDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: Colors.border,
+  actionButtonsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: Spacing.md,
   },
   chatAction: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -330,12 +400,56 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 12,
     gap: 8,
-    marginTop: Spacing.md,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   chatActionText: {
     fontFamily: FontFamily.bold,
     fontSize: 14,
+    color: Colors.white,
+  },
+  contactBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: Colors.inputBackground,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 14,
+  },
+  contactText: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 12,
     color: Colors.dark,
+  },
+  statsRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: Spacing.md,
+  },
+  statPill: {
+    flex: 1,
+    backgroundColor: Colors.white,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  statNumber: {
+    fontFamily: FontFamily.bold,
+    fontSize: 14,
+    color: Colors.dark,
+  },
+  statLabel: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11,
+    color: Colors.secondary,
+    marginTop: 2,
   },
   dividerLine: {
     height: 1,
@@ -344,7 +458,7 @@ const styles = StyleSheet.create({
   },
   fleetHeader: {
     fontFamily: FontFamily.bold,
-    fontSize: 16,
+    fontSize: 17,
     color: Colors.dark,
   },
   emptyWrap: {

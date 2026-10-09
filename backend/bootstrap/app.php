@@ -16,6 +16,11 @@ return Application::configure(basePath: dirname(__DIR__))
         __DIR__.'/../app/Console/Commands',
     ])
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->redirectTo(
+            guests: '/admin/login',
+            users: '/admin/dashboard',
+        );
+
         $middleware->alias([
             'admin' => \App\Http\Middleware\AdminMiddleware::class,
             'admin.web' => \App\Http\Middleware\AdminWebMiddleware::class,
