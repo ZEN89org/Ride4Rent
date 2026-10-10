@@ -67,8 +67,13 @@ class ProductionDataSeeder extends Seeder
                 continue;
             }
 
-            $rows = $data[$table];
-            foreach (array_chunk($rows, 100) as $chunk) {
+            $columns = Schema::getColumnListing($table);
+            $columnMap = array_flip($columns);
+            $filteredRows = array_map(function ($row) use ($columnMap) {
+                return array_intersect_key($row, $columnMap);
+            }, $data[$table]);
+
+            foreach (array_chunk($filteredRows, 100) as $chunk) {
                 DB::table($table)->insert($chunk);
             }
 
