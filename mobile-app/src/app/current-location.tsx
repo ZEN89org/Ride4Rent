@@ -4,13 +4,11 @@ import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
 
 import { Colors } from "@/constants/colors";
@@ -32,8 +30,7 @@ type AddressData = {
   formattedAddress?: string | null;
 };
 
-// Default center: Oriental Mindoro (Calapan / Central Mindoro)
-const DEFAULT_COORDS: LocationData = {
+const DEFAULT_MINDORO_COORDS: LocationData = {
   latitude: 13.4115,
   longitude: 121.1803,
 };
@@ -42,20 +39,15 @@ export default function CurrentLocation() {
   const webViewRef = useRef<WebView>(null);
 
   const [activeLayer, setActiveLayer] = useState<"streets" | "satellite">("streets");
-  const [selectedCoords, setSelectedCoords] = useState<LocationData>(DEFAULT_COORDS);
+  const [region, setRegion] = useState<LocationData | null>(null);
+  const [mapInitialRegion, setMapInitialRegion] = useState<LocationData | null>(null);
   const [address, setAddress] = useState<AddressData | null>(null);
-  const [locating, setLocating] = useState(false);
-  const [geocoding, setGeocoding] = useState(false);
-  const [hasResolvedGps, setHasResolvedGps] = useState(false);
-
-  useEffect(() => {
-    // Start locating immediately on mount
-    fetchCurrentLocation(false);
-  }, []);
+  const [loading, setLoading] = useState(true);
+  const [locationError, setLocationError] = useState(false);
+  const [recenterLoading, setRecenterLoading] = useState(false);
 
   const reverseGeocode = async (latitude: number, longitude: number) => {
     try {
-      setGeocoding(true);
       const result = await Location.reverseGeocodeAsync({
         latitude,
         longitude,
@@ -86,79 +78,93 @@ export default function CurrentLocation() {
       }
     } catch (error) {
       console.log("Reverse geocode error:", error);
-    } finally {
-      setGeocoding(false);
     }
   };
 
   const updateSelectedLocation = async (latitude: number, longitude: number) => {
-    const newCoords = { latitude, longitude };
-    setSelectedCoords(newCoords);
+    const newLocation = { latitude, longitude };
+    setRegion(newLocation);
     await reverseGeocode(latitude, longitude);
   };
 
-  const fetchCurrentLocation = async (animateToMap = true) => {
+  const getCurrentLocation = async (shouldRecenterMap = false) => {
     try {
-      setLocating(true);
+      if (shouldRecenterMap) {
+        setRecenterLoading(true);
+      } else {
+        setLoading(true);
+      }
+
+      setLocationError(false);
 
       const permission = await Location.getForegroundPermissionsAsync();
       if (permission.status !== "granted") {
-        const requested = await Location.requestForegroundPermissionsAsync();
-        if (requested.status !== "granted") {
-          // If denied, reverse geocode the default coordinates
-          await reverseGeocode(selectedCoords.latitude, selectedCoords.longitude);
-          setLocating(false);
+        const requestedPermission = await Location.requestForegroundPermissionsAsync();
+        if (requestedPermission.status !== "granted") {
+          // Fall back gracefully to default Mindoro coordinates so map still works
+          const fallback = DEFAULT_MINDORO_COORDS;
+          setMapInitialRegion(fallback);
+          setRegion(fallback);
+          reverseGeocode(fallback.latitude, fallback.longitude);
+          setLoading(false);
+          setRecenterLoading(false);
           return;
         }
       }
 
-      // Check last known position first for instant responsiveness
+      // 1. Try last known position for instant loading
       const lastKnown = await Location.getLastKnownPositionAsync();
-      if (lastKnown && !hasResolvedGps) {
-        const lastCoords = {
+      if (lastKnown && !shouldRecenterMap) {
+        const fastLoc = {
           latitude: lastKnown.coords.latitude,
           longitude: lastKnown.coords.longitude,
         };
-        setSelectedCoords(lastCoords);
-        reverseGeocode(lastCoords.latitude, lastCoords.longitude);
-        if (animateToMap) {
-          sendLocationToMap(lastCoords.latitude, lastCoords.longitude);
-        }
+        setMapInitialRegion(fastLoc);
+        setRegion(fastLoc);
+        reverseGeocode(fastLoc.latitude, fastLoc.longitude);
+        setLoading(false);
       }
 
-      // Then fetch precise current GPS
+      // 2. Query accurate current GPS position
       const current = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
 
-      const preciseCoords = {
-        latitude: current.coords.latitude,
-        longitude: current.coords.longitude,
-      };
+      const latitude = current.coords.latitude;
+      const longitude = current.coords.longitude;
+      const newLocation = { latitude, longitude };
 
-      setSelectedCoords(preciseCoords);
-      setHasResolvedGps(true);
-      await reverseGeocode(preciseCoords.latitude, preciseCoords.longitude);
-      sendLocationToMap(preciseCoords.latitude, preciseCoords.longitude);
-    } catch (error) {
-      console.log("GPS Location error:", error);
-      // Ensure we have address for default coordinates
-      if (!address) {
-        reverseGeocode(selectedCoords.latitude, selectedCoords.longitude);
+      if (!shouldRecenterMap) {
+        setMapInitialRegion(newLocation);
       }
-    } finally {
-      setLocating(false);
-    }
-  };
 
-  const sendLocationToMap = (lat: number, lng: number) => {
-    webViewRef.current?.postMessage(
-      JSON.stringify({
-        type: "RECENTER_TO_LOCATION",
-        latitude: lat,
-        longitude: lng,
-      })
-    );
+      setRegion(newLocation);
+      await reverseGeocode(latitude, longitude);
+
+      if (shouldRecenterMap && webViewRef.current) {
+        webViewRef.current.postMessage(
+          JSON.stringify({
+            type: "RECENTER_TO_LOCATION",
+            latitude,
+            longitude,
+          })
+        );
+      }
+
+      setLoading(false);
+      setRecenterLoading(false);
+    } catch (error) {
+      console.log("Current location error:", error);
+      // If we don't have a region yet, fall back to default coordinates
+      if (!region) {
+        const fallback = DEFAULT_MINDORO_COORDS;
+        setMapInitialRegion(fallback);
+        setRegion(fallback);
+        reverseGeocode(fallback.latitude, fallback.longitude);
+      }
+      setLoading(false);
+      setRecenterLoading(false);
+    }
   };
 
   const handleMapMessage = async (event: WebViewMessageEvent) => {
@@ -167,7 +173,7 @@ export default function CurrentLocation() {
         ? JSON.parse(event.nativeEvent.data)
         : event.nativeEvent.data;
 
-      if (data.type === "MAP_MOVED" || data.type === "LOCATION_SELECTED") {
+      if (data.type === "MAP_MOVED") {
         const latitude = Number(data.latitude);
         const longitude = Number(data.longitude);
 
@@ -180,43 +186,48 @@ export default function CurrentLocation() {
     }
   };
 
-  const handleLayerSwitch = (mode: "streets" | "satellite") => {
-    setActiveLayer(mode);
-    webViewRef.current?.injectJavaScript(`switchLayer('${mode}'); true;`);
-  };
-
-  const getPrimaryAddress = () => {
-    if (geocoding) return "Locating address...";
-    if (!address) return "Oriental Mindoro";
+  const getAddressText = () => {
+    if (!address) {
+      return "Locating address...";
+    }
 
     const street = [address.streetNumber, address.street].filter(Boolean).join(" ");
-    if (street) return street;
+    if (street) {
+      return street;
+    }
 
-    const district = address.district || address.subregion;
-    if (district) return district;
+    if (address.district) {
+      return address.district;
+    }
 
     if (address.formattedAddress) {
       return address.formattedAddress.split(",")[0];
     }
 
-    return "Selected Location";
+    return "Selected location";
   };
 
-  const getSecondaryAddress = () => {
-    if (!address) return "MIMAROPA, Philippines";
-
-    const parts = [address.district, address.city, address.region].filter(Boolean);
-    if (parts.length > 0) {
-      return parts.slice(1).join(", ") || parts[0];
+  const getCityText = () => {
+    if (!address) {
+      return "";
     }
-    return "Oriental Mindoro, Philippines";
+
+    return [address.city, address.district, address.subregion, address.region]
+      .filter(Boolean)
+      .join(", ");
   };
 
-  const handleConfirmLocation = () => {
-    router.replace("/(tabs)/home");
+  const handleLayerSwitch = (mode: "streets" | "satellite") => {
+    setActiveLayer(mode);
+    webViewRef.current?.injectJavaScript(`switchLayer('${mode}'); true;`);
   };
 
-  const mapHtml = `
+  const createMapHtml = () => {
+    if (!mapInitialRegion) {
+      return "";
+    }
+
+    return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -235,93 +246,76 @@ export default function CurrentLocation() {
       user-select: none;
       -webkit-user-select: none;
     }
+    .leaflet-control-attribution { display: none !important; }
+    .leaflet-control-zoom { display: none !important; }
 
-    /* Fixed Center Pin that hovers over map center */
-    .center-pin-container {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -100%);
-      z-index: 1000;
-      pointer-events: none;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-
-    .marker-wrap {
+    /* Center Marker Pin with Golden Pulse */
+    .location-marker-wrapper {
       position: relative;
-      width: 52px;
-      height: 52px;
+      width: 64px;
+      height: 64px;
       display: flex;
       align-items: center;
       justify-content: center;
+      pointer-events: none;
     }
-
-    .marker-pulse {
+    .location-glow {
       position: absolute;
-      width: 50px;
-      height: 50px;
+      width: 58px;
+      height: 58px;
       border-radius: 50%;
-      background: rgba(254, 193, 3, 0.45);
-      animation: pinPulse 2s cubic-bezier(0.2, 0.9, 0.3, 1) infinite;
+      background: rgba(254, 193, 3, 0.16);
+      animation: locationPulse 2.2s cubic-bezier(0.2, 0.9, 0.3, 1) infinite;
     }
-
-    @keyframes pinPulse {
-      0% { transform: scale(0.6); opacity: 0.95; }
-      75% { transform: scale(1.35); opacity: 0.1; }
-      100% { transform: scale(1.4); opacity: 0; }
+    .location-glow-inner {
+      position: absolute;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: rgba(254, 193, 3, 0.32);
+      animation: locationPulseInner 2.2s cubic-bezier(0.2, 0.9, 0.3, 1) infinite;
     }
-
-    .marker-pin {
+    .location-marker {
       position: relative;
-      width: 42px;
-      height: 42px;
+      width: 24px;
+      height: 24px;
       border-radius: 50%;
       background: #FEC103;
       border: 3px solid #1A1A1A;
-      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
       z-index: 10;
     }
-
-    .pin-shadow {
-      width: 16px;
+    .location-marker::after {
+      content: "";
+      position: absolute;
+      width: 6px;
       height: 6px;
-      background: rgba(0, 0, 0, 0.3);
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
       border-radius: 50%;
-      margin-top: 2px;
-      filter: blur(1px);
+      background: #1A1A1A;
     }
-
-    /* Attribution & Zoom */
-    .leaflet-control-attribution { display: none !important; }
-    .leaflet-control-zoom { display: none !important; }
+    @keyframes locationPulse {
+      0% { transform: scale(0.6); opacity: 0.9; }
+      75% { transform: scale(1.3); opacity: 0.1; }
+      100% { transform: scale(1.35); opacity: 0; }
+    }
+    @keyframes locationPulseInner {
+      0% { transform: scale(0.7); opacity: 0.8; }
+      60% { transform: scale(1.15); opacity: 0; }
+      100% { transform: scale(1.2); opacity: 0; }
+    }
   </style>
 </head>
 <body>
   <div id="map"></div>
 
-  <div class="center-pin-container">
-    <div class="marker-wrap">
-      <div class="marker-pulse"></div>
-      <div class="marker-pin">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
-          <circle cx="12" cy="10" r="3"/>
-        </svg>
-      </div>
-    </div>
-    <div class="pin-shadow"></div>
-  </div>
-
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    const initLat = ${selectedCoords.latitude};
-    const initLng = ${selectedCoords.longitude};
-    let currentMode = "streets";
+    const initialLatitude = ${mapInitialRegion.latitude};
+    const initialLongitude = ${mapInitialRegion.longitude};
+    let currentMode = "${activeLayer}";
 
     const map = L.map("map", {
       zoomControl: false,
@@ -330,16 +324,16 @@ export default function CurrentLocation() {
       touchZoom: true,
       doubleClickZoom: true,
       scrollWheelZoom: true,
-    }).setView([initLat, initLng], 16);
+    }).setView([initialLatitude, initialLongitude], 16);
 
-    // 1. Watermark-free, official Esri World Street Map (high-definition streets, barangays, POIs)
+    // 1. Watermark-free, official Esri World Street Map
     const streetsLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
       maxZoom: 19,
       minZoom: 3,
       keepBuffer: 6,
     });
 
-    // 2. High-Resolution Google Hybrid Satellite with Roads & Place Labels
+    // 2. High-Resolution Google Hybrid Satellite with Roads & Labels
     const satelliteLayer = L.tileLayer("https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", {
       subdomains: ["mt0", "mt1", "mt2", "mt3"],
       maxZoom: 20,
@@ -347,7 +341,11 @@ export default function CurrentLocation() {
       keepBuffer: 6,
     });
 
-    streetsLayer.addTo(map);
+    if (currentMode === "satellite") {
+      satelliteLayer.addTo(map);
+    } else {
+      streetsLayer.addTo(map);
+    }
 
     function switchLayer(mode) {
       currentMode = mode;
@@ -358,16 +356,41 @@ export default function CurrentLocation() {
         map.removeLayer(streetsLayer);
         satelliteLayer.addTo(map);
       }
-      setTimeout(function() {
-        map.invalidateSize();
-      }, 100);
+      setTimeout(function() { if (map) map.invalidateSize(); }, 100);
     }
 
-    let moveTimeout = null;
+    const markerIcon = L.divIcon({
+      className: "",
+      html: '<div class="location-marker-wrapper"><div class="location-glow"></div><div class="location-glow-inner"></div><div class="location-marker"></div></div>',
+      iconSize: [64, 64],
+      iconAnchor: [32, 32],
+    });
+
+    const marker = L.marker([initialLatitude, initialLongitude], {
+      icon: markerIcon,
+      interactive: false,
+      keyboard: false,
+    }).addTo(map);
+
+    let moveTimer = null;
+    let isRecentering = false;
+
+    map.on("move", function() {
+      const center = map.getCenter();
+      marker.setLatLng([center.lat, center.lng]);
+    });
+
     map.on("moveend", function() {
-      clearTimeout(moveTimeout);
-      moveTimeout = setTimeout(function() {
-        const center = map.getCenter();
+      const center = map.getCenter();
+      marker.setLatLng([center.lat, center.lng]);
+
+      if (isRecentering) {
+        isRecentering = false;
+        return;
+      }
+
+      clearTimeout(moveTimer);
+      moveTimer = setTimeout(function() {
         if (window.ReactNativeWebView) {
           window.ReactNativeWebView.postMessage(JSON.stringify({
             type: "MAP_MOVED",
@@ -375,13 +398,13 @@ export default function CurrentLocation() {
             longitude: center.lng,
           }));
         }
-      }, 150);
+      }, 100);
     });
 
-    map.on("click", function(e) {
-      map.flyTo([e.latlng.lat, e.latlng.lng], map.getZoom(), {
+    map.on("click", function(event) {
+      map.flyTo([event.latlng.lat, event.latlng.lng], map.getZoom(), {
         animate: true,
-        duration: 0.5,
+        duration: 0.45,
       });
     });
 
@@ -392,7 +415,9 @@ export default function CurrentLocation() {
           const lat = Number(data.latitude);
           const lng = Number(data.longitude);
           if (Number.isFinite(lat) && Number.isFinite(lng)) {
-            map.flyTo([lat, lng], 16, {
+            isRecentering = true;
+            marker.setLatLng([lat, lng]);
+            map.flyTo([lat, lng], 17, {
               animate: true,
               duration: 0.8,
             });
@@ -401,7 +426,7 @@ export default function CurrentLocation() {
           switchLayer(data.mode);
         }
       } catch (e) {
-        console.error("Leaflet message error:", e);
+        console.error("Message error:", e);
       }
     }
 
@@ -409,30 +434,47 @@ export default function CurrentLocation() {
     window.addEventListener("message", handleReactNativeMessage);
 
     setTimeout(function() {
-      if (map) {
-        map.invalidateSize();
-      }
+      if (map) map.invalidateSize();
     }, 200);
   </script>
 </body>
 </html>
-  `;
+    `;
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      getCurrentLocation();
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handleRecenter = () => {
+    getCurrentLocation(true);
+  };
+
+  const handleRetry = () => {
+    getCurrentLocation();
+  };
+
+  const handleConfirmLocation = () => {
+    router.replace("/(tabs)/home");
+  };
 
   return (
-    <SafeAreaView edges={["top"]} style={styles.safeContainer}>
-      {/* Top Header */}
+    <View style={styles.container}>
       <View style={styles.header}>
-        <View style={styles.headerTextGroup}>
-          <Text style={styles.title}>Current Location</Text>
-          <Text style={styles.subtitle}>
-            Pan or tap the map to choose your rental search area
-          </Text>
-        </View>
+        <Text style={styles.title}>Current Location</Text>
 
-        {/* Dual Layer Switcher (Streets & Satellite) */}
-        <View style={styles.layerBar}>
+        <Text style={styles.description}>
+          Allow Ride4Rent to use your current location to find vehicles near you.
+        </Text>
+
+        {/* Street and Satellite view toggle under title and submessage */}
+        <View style={styles.layerSelector}>
           <TouchableOpacity
-            style={[styles.layerPill, activeLayer === "streets" && styles.layerPillActive]}
+            style={[styles.layerButton, activeLayer === "streets" && styles.layerButtonActive]}
             onPress={() => handleLayerSwitch("streets")}
             activeOpacity={0.8}
           >
@@ -443,8 +485,8 @@ export default function CurrentLocation() {
             />
             <Text
               style={[
-                styles.layerPillText,
-                activeLayer === "streets" && styles.layerPillTextActive,
+                styles.layerButtonText,
+                activeLayer === "streets" && styles.layerButtonTextActive,
               ]}
             >
               Streets
@@ -452,7 +494,7 @@ export default function CurrentLocation() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.layerPill, activeLayer === "satellite" && styles.layerPillActive]}
+            style={[styles.layerButton, activeLayer === "satellite" && styles.layerButtonActive]}
             onPress={() => handleLayerSwitch("satellite")}
             activeOpacity={0.8}
           >
@@ -463,8 +505,8 @@ export default function CurrentLocation() {
             />
             <Text
               style={[
-                styles.layerPillText,
-                activeLayer === "satellite" && styles.layerPillTextActive,
+                styles.layerButtonText,
+                activeLayer === "satellite" && styles.layerButtonTextActive,
               ]}
             >
               Satellite
@@ -473,242 +515,332 @@ export default function CurrentLocation() {
         </View>
       </View>
 
-      {/* Map Area */}
       <View style={styles.mapContainer}>
-        <WebView
-          ref={webViewRef}
-          source={{ html: mapHtml }}
-          style={styles.map}
-          originWhitelist={["*"]}
-          javaScriptEnabled
-          domStorageEnabled
-          onMessage={handleMapMessage}
-          scrollEnabled={false}
-          bounces={false}
-        />
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+            <Text style={styles.loadingText}>Finding your location...</Text>
+          </View>
+        ) : locationError ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorTitle}>Unable to get your location</Text>
 
-        {/* Floating Instruction Badge */}
-        <View style={styles.mapBadge} pointerEvents="none">
-          <Ionicons name="finger-print-outline" size={14} color={Colors.white} />
-          <Text style={styles.mapBadgeText}>Drag map to adjust location pin</Text>
-        </View>
+            <Text style={styles.errorText}>
+              Please allow location access so Ride4Rent can find your current location.
+            </Text>
 
-        {/* Floating My Location (Recenter) Button */}
-        <TouchableOpacity
-          style={styles.recenterButton}
-          onPress={() => fetchCurrentLocation(true)}
-          disabled={locating}
-          activeOpacity={0.85}
-        >
-          {locating ? (
-            <ActivityIndicator size="small" color={Colors.dark} />
-          ) : (
-            <Ionicons name="locate" size={22} color={Colors.dark} />
-          )}
-        </TouchableOpacity>
+            <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
+              <Text style={styles.retryText}>Try Again</Text>
+            </TouchableOpacity>
+          </View>
+        ) : region ? (
+          <WebView
+            ref={webViewRef}
+            source={{
+              html: createMapHtml(),
+            }}
+            style={styles.map}
+            originWhitelist={["*"]}
+            javaScriptEnabled
+            domStorageEnabled
+            onMessage={handleMapMessage}
+            geolocationEnabled
+            scrollEnabled={false}
+          />
+        ) : null}
+
+        {!loading && !locationError && region && (
+          <>
+            <View pointerEvents="none" style={styles.mapInstruction}>
+              <Text style={styles.mapInstructionText}>
+                Move the map or tap to choose a location
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.myLocationButton}
+              onPress={handleRecenter}
+              disabled={recenterLoading}
+            >
+              {recenterLoading ? (
+                <ActivityIndicator size="small" color={Colors.dark} />
+              ) : (
+                <View style={styles.myLocationIcon}>
+                  <View style={styles.myLocationDot} />
+                </View>
+              )}
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
-      {/* Bottom Sheet Card */}
-      <View style={styles.bottomCard}>
-        <View style={styles.handle} />
+      <View style={styles.bottomSheet}>
+        <View style={styles.sheetHandle} />
 
-        <View style={styles.addressSection}>
-          <View style={styles.addressIconWrap}>
-            <Ionicons name="location" size={22} color={Colors.primary} />
-          </View>
-          <View style={styles.addressInfo}>
-            <Text style={styles.addressPrimary} numberOfLines={1}>
-              {getPrimaryAddress()}
-            </Text>
-            <Text style={styles.addressSecondary} numberOfLines={1}>
-              {getSecondaryAddress()}
-            </Text>
-          </View>
-        </View>
+        <Text style={styles.locationTitle}>Your selected location</Text>
+
+        <Text style={styles.addressText}>{getAddressText()}</Text>
+
+        {getCityText() !== "" && (
+          <Text style={styles.locationText}>{getCityText()}</Text>
+        )}
 
         <TouchableOpacity
-          style={styles.confirmButton}
+          style={[styles.confirmButton, !region && styles.disabledButton]}
+          disabled={!region}
           onPress={handleConfirmLocation}
-          activeOpacity={0.85}
         >
-          <Text style={styles.confirmButtonText}>Confirm Location</Text>
-          <Ionicons name="arrow-forward" size={18} color={Colors.dark} />
+          <Text style={styles.confirmText}>Confirm Location</Text>
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeContainer: {
+  container: {
     flex: 1,
     backgroundColor: Colors.white,
   },
+
   header: {
     paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.sm,
+    paddingTop: 60,
     paddingBottom: Spacing.md,
-    backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.divider,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
   },
-  headerTextGroup: {
-    flex: 1,
-    marginRight: Spacing.sm,
-  },
+
   title: {
     fontFamily: FontFamily.bold,
     fontSize: FontSize.heading,
     color: Colors.dark,
   },
-  subtitle: {
+
+  description: {
+    marginTop: Spacing.xs,
     fontFamily: FontFamily.regular,
-    fontSize: 12,
+    fontSize: FontSize.body,
     color: Colors.secondary,
-    marginTop: 2,
+    lineHeight: 22,
   },
-  layerBar: {
+
+  layerSelector: {
     flexDirection: "row",
     backgroundColor: "#F1F5F9",
     borderRadius: Radius.full,
     padding: 3,
-    gap: 3,
+    marginTop: Spacing.sm,
+    alignSelf: "flex-start",
+    gap: 4,
   },
-  layerPill: {
+
+  layerButton: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 5,
     paddingVertical: 5,
-    paddingHorizontal: 9,
+    paddingHorizontal: 11,
     borderRadius: Radius.full,
   },
-  layerPillActive: {
+
+  layerButtonActive: {
     backgroundColor: Colors.dark,
   },
-  layerPillText: {
+
+  layerButtonText: {
     fontFamily: FontFamily.semiBold,
-    fontSize: 11,
+    fontSize: 11.5,
     color: Colors.secondary,
   },
-  layerPillTextActive: {
+
+  layerButtonTextActive: {
     color: Colors.white,
   },
+
   mapContainer: {
     flex: 1,
-    position: "relative",
-    backgroundColor: "#E8E6DF",
+    overflow: "hidden",
   },
+
   map: {
-    flex: 1,
+    width: "100%",
+    height: "100%",
   },
-  mapBadge: {
+
+  mapInstruction: {
     position: "absolute",
-    top: 14,
-    alignSelf: "center",
-    backgroundColor: "rgba(15, 23, 42, 0.8)",
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: Radius.full,
-    flexDirection: "row",
+    top: Spacing.md,
+    left: Spacing.lg,
+    right: Spacing.lg,
     alignItems: "center",
-    gap: 6,
-    zIndex: 50,
   },
-  mapBadgeText: {
+
+  mapInstructionText: {
+    backgroundColor: "rgba(255,255,255,0.96)",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: 18,
     fontFamily: FontFamily.medium,
-    fontSize: 11.5,
-    color: Colors.white,
+    fontSize: 12,
+    color: Colors.dark,
+    overflow: "hidden",
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
   },
-  recenterButton: {
+
+  myLocationButton: {
     position: "absolute",
-    right: 16,
-    bottom: 16,
+    right: Spacing.lg,
+    bottom: Spacing.lg,
     width: 48,
     height: 48,
     borderRadius: 24,
     backgroundColor: Colors.white,
-    justifyContent: "center",
     alignItems: "center",
-    shadowColor: Colors.dark,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
+    justifyContent: "center",
     elevation: 6,
-    zIndex: 50,
-    borderWidth: 1.5,
-    borderColor: "#E2E8F0",
-  },
-  bottomCard: {
-    backgroundColor: Colors.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.md,
-    paddingBottom: Platform.OS === "ios" ? Spacing.xl + 8 : Spacing.xl,
-    shadowColor: Colors.dark,
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    backgroundColor: "#CBD5E1",
-    borderRadius: 2,
-    alignSelf: "center",
-    marginBottom: Spacing.md,
-  },
-  addressSection: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: Spacing.lg,
-  },
-  addressIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#FFFBEB",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#FEF3C7",
-  },
-  addressInfo: {
-    flex: 1,
-  },
-  addressPrimary: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.title,
-    color: Colors.dark,
-  },
-  addressSecondary: {
-    fontFamily: FontFamily.regular,
-    fontSize: 12,
-    color: Colors.secondary,
-    marginTop: 2,
-  },
-  confirmButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    backgroundColor: Colors.primary,
-    borderRadius: Radius.full,
-    paddingVertical: 14,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.15,
     shadowRadius: 6,
-    elevation: 3,
   },
-  confirmButtonText: {
+
+  myLocationIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: Colors.dark,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  myLocationDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.primary,
+  },
+
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  loadingText: {
+    marginTop: Spacing.md,
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.body,
+    color: Colors.secondary,
+  },
+
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: Spacing.xl,
+  },
+
+  errorTitle: {
     fontFamily: FontFamily.bold,
     fontSize: FontSize.body,
     color: Colors.dark,
+    textAlign: "center",
+  },
+
+  errorText: {
+    marginTop: Spacing.sm,
+    fontFamily: FontFamily.regular,
+    fontSize: 14,
+    color: Colors.secondary,
+    textAlign: "center",
+    lineHeight: 21,
+  },
+
+  retryButton: {
+    marginTop: Spacing.lg,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    borderRadius: 25,
+  },
+
+  retryText: {
+    fontFamily: FontFamily.bold,
+    color: Colors.dark,
+  },
+
+  sheetHandle: {
+    alignSelf: "center",
+    width: 42,
+    height: 4,
+    borderRadius: 10,
+    backgroundColor: "#D9D9D9",
+    marginBottom: Spacing.md,
+  },
+
+  bottomSheet: {
+    backgroundColor: Colors.white,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.xl,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: -3,
+    },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+  },
+
+  locationTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.body,
+    color: Colors.dark,
+  },
+
+  addressText: {
+    marginTop: 4,
+    fontFamily: FontFamily.medium,
+    fontSize: 15,
+    color: Colors.dark,
+  },
+
+  locationText: {
+    marginTop: 3,
+    fontFamily: FontFamily.regular,
+    fontSize: 13,
+    color: Colors.secondary,
+  },
+
+  confirmButton: {
+    marginTop: Spacing.md,
+    backgroundColor: Colors.primary,
+    paddingVertical: Spacing.md,
+    borderRadius: 25,
+    alignItems: "center",
+  },
+
+  disabledButton: {
+    opacity: 0.5,
+  },
+
+  confirmText: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.body,
+    color: Colors.white,
   },
 });
