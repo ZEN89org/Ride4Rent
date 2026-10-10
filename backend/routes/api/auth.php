@@ -13,20 +13,21 @@ Route::prefix('v1')->group(function () {
             $username = config("mail.mailers.{$mailer}.username");
             $hasPassword = !empty(config("mail.mailers.{$mailer}.password"));
 
-            $start = microtime(true);
-            \Illuminate\Support\Facades\Mail::raw('Test from Railway', function ($m) {
-                $m->to('ride4rentph@gmail.com')->subject('Railway Test');
-            });
-            $duration = microtime(true) - $start;
+            $results = [];
+            foreach ([587, 465, 2525] as $p) {
+                $t0 = microtime(true);
+                $fp = @fsockopen('smtp.gmail.com', $p, $errNo, $errStr, 3);
+                $results["port_{$p}"] = [
+                    'connected' => $fp !== false,
+                    'error' => $errStr,
+                    'time' => round(microtime(true) - $t0, 3),
+                ];
+                if ($fp) fclose($fp);
+            }
 
             return response()->json([
-                'status' => 'success',
-                'duration' => $duration,
-                'mailer' => $mailer,
-                'host' => $host,
-                'port' => $port,
-                'username' => $username,
-                'has_password' => $hasPassword,
+                'sockets' => $results,
+                'mailer' => config('mail.default'),
             ]);
         } catch (\Throwable $e) {
             return response()->json([
