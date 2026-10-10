@@ -47,15 +47,17 @@ class ProductionDataSeeder extends Seeder
             'admin_audit_logs',
         ];
 
+        $existingTables = array_filter($tables, fn($t) => Schema::hasTable($t));
+
         if ($driver === 'pgsql') {
-            $truncateList = implode(', ', $tables);
-            DB::statement("TRUNCATE TABLE {$truncateList} RESTART IDENTITY CASCADE");
+            if (!empty($existingTables)) {
+                $truncateList = implode(', ', $existingTables);
+                DB::statement("TRUNCATE TABLE {$truncateList} RESTART IDENTITY CASCADE");
+            }
         } else {
             Schema::disableForeignKeyConstraints();
-            foreach ($tables as $table) {
-                if (Schema::hasTable($table)) {
-                    DB::table($table)->truncate();
-                }
+            foreach ($existingTables as $table) {
+                DB::table($table)->truncate();
             }
             Schema::enableForeignKeyConstraints();
         }
