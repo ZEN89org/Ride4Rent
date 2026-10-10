@@ -18,8 +18,8 @@ const getApiBaseUrl = () => {
     }
   }
 
-  // 3. Ngrok URL for universal tunnel connectivity across any network
-  return "https://lily-unhearing-spectrum.ngrok-free.dev/api/v1";
+  // 3. Cloud production URL for universal connectivity across any network
+  return "https://ride4rent-production.up.railway.app/api/v1";
 };
 
 export const API_BASE_URL = getApiBaseUrl();
