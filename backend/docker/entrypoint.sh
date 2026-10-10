@@ -48,6 +48,12 @@ if [ "$RUN_MIGRATIONS" != "false" ]; then
     php artisan migrate --force || true
 fi
 
+# Sync initial database records if data_dump.json is present
+if [ -f "database/data_dump.json" ]; then
+    echo "Syncing database records..."
+    php artisan db:seed --class="Database\\Seeders\\ProductionDataSeeder" --force || true
+fi
+
 # Ensure strictly only mpm_prefork is active for PHP
 rm -f /etc/apache2/mods-enabled/mpm_event.* /etc/apache2/mods-enabled/mpm_worker.* 2>/dev/null || true
 a2enmod mpm_prefork 2>/dev/null || true

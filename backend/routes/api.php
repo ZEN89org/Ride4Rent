@@ -47,3 +47,26 @@ Route::get('/v1/run-migrations', function () {
         ], 500);
     }
 });
+
+Route::get('/v1/sync-database', function () {
+    try {
+        \Illuminate\Support\Facades\Artisan::call('db:seed', [
+            '--class' => 'Database\\Seeders\\ProductionDataSeeder',
+            '--force' => true,
+        ]);
+        return response()->json([
+            'status' => 'success',
+            'message' => 'All local database records synced to production PostgreSQL successfully!',
+            'users_count' => \App\Models\User::count(),
+            'vehicles_count' => \App\Models\Vehicle::count(),
+            'bookings_count' => \App\Models\Booking::count(),
+            'admin_users' => \App\Models\User::where('role', 'admin')->get(['id', 'email', 'first_name', 'last_name']),
+            'output' => \Illuminate\Support\Facades\Artisan::output(),
+        ]);
+    } catch (\Throwable $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => $e->getMessage(),
+        ], 500);
+    }
+});
