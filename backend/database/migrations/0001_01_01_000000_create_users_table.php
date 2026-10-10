@@ -36,11 +36,7 @@ return new class extends Migration
             'admin',
         ])->default('customer');
 
-        $table->enum('account_status', [
-            'pending',
-            'active',
-            'rejected',
-        ])->default('active');
+        $table->string('account_status')->default('active');
 
         $table->timestamp('last_login_at')->nullable();
 

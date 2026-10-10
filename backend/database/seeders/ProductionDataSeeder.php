@@ -54,6 +54,9 @@ class ProductionDataSeeder extends Seeder
                 $truncateList = implode(', ', $existingTables);
                 DB::statement("TRUNCATE TABLE {$truncateList} RESTART IDENTITY CASCADE");
             }
+            try {
+                DB::statement("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_account_status_check");
+            } catch (\Throwable $e) {}
         } else {
             Schema::disableForeignKeyConstraints();
             foreach ($existingTables as $table) {
