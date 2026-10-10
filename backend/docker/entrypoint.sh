@@ -51,5 +51,9 @@ php artisan config:cache || true
 php artisan route:cache || true
 php artisan view:cache || true
 
+# Ensure strictly only mpm_prefork is active for PHP
+rm -f /etc/apache2/mods-enabled/mpm_event.* /etc/apache2/mods-enabled/mpm_worker.* 2>/dev/null || true
+a2enmod mpm_prefork 2>/dev/null || true
+
 echo "Starting Apache on port ${PORT} (and 80/8080)..."
 exec apache2-foreground

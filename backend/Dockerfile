@@ -15,8 +15,8 @@ RUN apt-get update && apt-get install -y \
 # Install PHP extensions required by Laravel & PostgreSQL
 RUN docker-php-ext-install pdo pdo_pgsql mbstring exif pcntl bcmath gd
 
-# Enable Apache mod_rewrite for Laravel routing
-RUN a2enmod rewrite
+# Enable Apache mod_rewrite for Laravel routing and ensure only mpm_prefork is loaded
+RUN a2enmod rewrite && (a2dismod mpm_event mpm_worker || true) && (a2enmod mpm_prefork || true)
 
 # Configure Apache DocumentRoot to point to Laravel's public directory
 ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
