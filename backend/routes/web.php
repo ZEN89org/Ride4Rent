@@ -10,60 +10,6 @@ Route::get('/', function () {
 // Fallback named route for authentication redirects
 Route::get('/login', fn () => redirect()->route('admin.login'))->name('login');
 
-Route::get('/db-test', function () {
-    try {
-        \Illuminate\Support\Facades\DB::connection()->getPdo();
-        $tables = \Illuminate\Support\Facades\DB::select("SELECT table_name FROM information_schema.tables WHERE table_schema='public'");
-        return response()->json([
-            'status' => 'connected',
-            'database' => \Illuminate\Support\Facades\DB::connection()->getDatabaseName(),
-            'tables_count' => count($tables),
-            'tables' => array_map(fn($t) => $t->table_name, $tables),
-        ]);
-    } catch (\Throwable $e) {
-        return response()->json([
-            'status' => 'error',
-            'message' => $e->getMessage(),
-            'database_url_set' => !empty(env('DATABASE_URL')),
-            'db_connection' => config('database.default'),
-        ], 500);
-    }
-});
-
-Route::get('/run-migrations', function () {
-    try {
-        \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
-        return response()->json([
-            'status' => 'migrated',
-            'output' => \Illuminate\Support\Facades\Artisan::output(),
-        ]);
-    } catch (\Throwable $e) {
-        return response()->json([
-            'status' => 'error',
-            'message' => $e->getMessage(),
-        ], 500);
-    }
-});
-
-Route::get('/setup-admin', function () {
-    $existing = \App\Models\User::where('role', 'admin')->first();
-    if ($existing) {
-        return response()->json(['message' => 'Admin account already exists', 'email' => $existing->email]);
-    }
-    $admin = \App\Models\User::create([
-        'first_name' => 'System',
-        'last_name' => 'Admin',
-        'date_of_birth' => '1990-01-01',
-        'sex' => 'Male',
-        'email' => 'admin@ride4rent.ph',
-        'password' => \Illuminate\Support\Facades\Hash::make('Admin12345678!'),
-        'role' => 'admin',
-        'account_status' => 'active',
-        'email_verified_at' => now(),
-    ]);
-    return response()->json(['message' => 'Admin created successfully', 'email' => $admin->email]);
-});
-
 Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('/', fn () => redirect()->route('admin.dashboard'));
     Route::get('/login', [AdminWebController::class, 'loginForm'])->name('login');
