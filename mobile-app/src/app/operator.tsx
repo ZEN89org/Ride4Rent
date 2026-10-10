@@ -39,6 +39,7 @@ export default function OperatorRegistration() {
     useState<VerificationData | null>(null);
 
   const [showOtpModal, setShowOtpModal] = useState(false);
+  const [devOtp, setDevOtp] = useState<string | undefined>(undefined);
 
   const [showSuccessSheet, setShowSuccessSheet] =
     useState(false);
@@ -84,7 +85,10 @@ export default function OperatorRegistration() {
     setIsSubmitting(true);
 
     try {
-      await sendVerificationOtp(businessInfo.businessEmail.trim().toLowerCase());
+      const res = await sendVerificationOtp(businessInfo.businessEmail.trim().toLowerCase());
+      if (res?.dev_otp) {
+        setDevOtp(res.dev_otp);
+      }
       setShowOtpModal(true);
     } catch (error: any) {
       console.log("Operator OTP send error:", error.message, error.response?.data);
@@ -96,7 +100,7 @@ export default function OperatorRegistration() {
       } else if (error.message === "Network Error") {
         showModal(
           "Connection Error",
-          "Could not reach backend server. Please verify php artisan serve --host=0.0.0.0 is running.",
+          "Unable to connect to the server. Please check your internet connection and try again.",
           [{ text: "OK" }],
           "error"
         );
@@ -226,6 +230,7 @@ export default function OperatorRegistration() {
       <OtpVerificationModal
         visible={showOtpModal}
         email={businessInfo?.businessEmail || ""}
+        initialOtp={devOtp}
         onClose={() => setShowOtpModal(false)}
         onVerified={handleVerifiedOtp}
       />

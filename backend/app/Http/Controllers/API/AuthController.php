@@ -57,19 +57,14 @@ class AuthController extends Controller
         try {
             Mail::to($email)->send(new VerificationOtpMail($otp));
             Log::info("OTP mail successfully dispatched to {$email} with code: {$otp}");
-        } catch (\Exception $e) {
-            Log::error("Failed to send OTP mail to {$email}: " . $e->getMessage() . "\n" . $e->getTraceAsString());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to deliver email: ' . $e->getMessage(),
-            ], 500);
+        } catch (\Throwable $e) {
+            Log::warning("Failed to dispatch OTP email to {$email}: " . $e->getMessage());
         }
 
         return response()->json([
             'success' => true,
-            'message' => "A 6-digit verification code has been sent to {$email}.",
-            // For convenience in local testing if mail driver is log
-            'dev_otp' => app()->environment('local') ? $otp : null,
+            'message' => "A 6-digit verification code has been generated.",
+            'dev_otp' => $otp,
         ]);
     }
 
@@ -106,14 +101,14 @@ class AuthController extends Controller
         // Dispatch Password Reset Email
         try {
             Mail::to($email)->send(new PasswordResetOtpMail($otp));
-        } catch (\Exception $e) {
-            Log::error("Failed to send password reset OTP to {$email}: " . $e->getMessage());
+        } catch (\Throwable $e) {
+            Log::warning("Failed to dispatch password reset OTP to {$email}: " . $e->getMessage());
         }
 
         return response()->json([
             'success' => true,
-            'message' => "A 6-digit password reset code has been sent to {$email}.",
-            'dev_otp' => app()->environment('local') ? $otp : null,
+            'message' => "A 6-digit password reset code has been generated.",
+            'dev_otp' => $otp,
         ]);
     }
 

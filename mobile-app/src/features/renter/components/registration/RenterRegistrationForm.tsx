@@ -276,7 +276,7 @@ export default function RenterRegistrationForm({
       } else if (error.message === "Network Error") {
         showModal(
           "Connection Error",
-          "Could not reach backend server. Please verify php artisan serve --host=0.0.0.0 is running.",
+          "Unable to connect to the server. Please check your internet connection and try again.",
           [{ text: "OK" }],
           "error"
         );

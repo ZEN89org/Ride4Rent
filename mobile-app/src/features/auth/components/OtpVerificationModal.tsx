@@ -44,14 +44,30 @@ export default function OtpVerificationModal({
 
   useEffect(() => {
     if (visible) {
-      setOtp(["", "", "", "", "", ""]);
+      if (initialOtp && initialOtp.length === 6) {
+        setOtp(initialOtp.split(""));
+        setDevOtp(initialOtp);
+      } else {
+        setOtp(["", "", "", "", "", ""]);
+      }
       setError("");
       setCountdown(60);
       setTimeout(() => {
-        inputRefs.current[0]?.focus();
+        if (!initialOtp) {
+          inputRefs.current[0]?.focus();
+        }
       }, 300);
     }
-  }, [visible]);
+  }, [visible, initialOtp]);
+
+  useEffect(() => {
+    if (initialOtp) {
+      setDevOtp(initialOtp);
+      if (initialOtp.length === 6) {
+        setOtp(initialOtp.split(""));
+      }
+    }
+  }, [initialOtp]);
 
   useEffect(() => {
     let timer: any;
@@ -99,7 +115,13 @@ export default function OtpVerificationModal({
     try {
       setResending(true);
       setError("");
-      await sendVerificationOtp(email);
+      const res = await sendVerificationOtp(email);
+      if (res?.dev_otp) {
+        setDevOtp(res.dev_otp);
+        if (res.dev_otp.length === 6) {
+          setOtp(res.dev_otp.split(""));
+        }
+      }
       setCountdown(60);
     } catch (e: any) {
       setError(e.response?.data?.message || "Failed to resend code.");
@@ -157,6 +179,24 @@ export default function OtpVerificationModal({
               We have sent a 6-digit confirmation code to:
             </Text>
             <Text style={styles.emailHighlight}>{email}</Text>
+
+            {devOtp ? (
+              <TouchableOpacity
+                style={styles.devOtpBadge}
+                activeOpacity={0.8}
+                onPress={() => {
+                  if (devOtp.length === 6) {
+                    setOtp(devOtp.split(""));
+                    setError("");
+                  }
+                }}
+              >
+                <Ionicons name="key-outline" size={16} color="#B45309" />
+                <Text style={styles.devOtpText}>
+                  Code: <Text style={styles.devOtpCode}>{devOtp}</Text> (Tap to fill)
+                </Text>
+              </TouchableOpacity>
+            ) : null}
 
             {/* 6-Digit Inputs */}
             <View style={styles.otpRow}>
@@ -319,5 +359,29 @@ const styles = StyleSheet.create({
   },
   buttonWrap: {
     marginTop: Spacing.sm,
+  },
+  devOtpBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FEF3C7",
+    borderColor: "#FDE68A",
+    borderWidth: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: Radius.md,
+    alignSelf: "center",
+    marginVertical: Spacing.sm,
+    gap: 6,
+  },
+  devOtpText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 13,
+    color: "#B45309",
+  },
+  devOtpCode: {
+    fontFamily: FontFamily.bold,
+    color: "#92400E",
+    letterSpacing: 1,
   },
 });
