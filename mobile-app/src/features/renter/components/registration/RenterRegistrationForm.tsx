@@ -356,7 +356,8 @@ export default function RenterRegistrationForm({
     <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
       >
         <View style={styles.container}>
           <RegistrationHeader
@@ -372,6 +373,7 @@ export default function RenterRegistrationForm({
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={true}
         >
           <Text style={styles.title}>
             Personal Information
@@ -1014,8 +1016,9 @@ const styles = StyleSheet.create({
   },
 
   scrollContent: {
+    flexGrow: 1,
     paddingTop: Spacing.md,
-    paddingBottom: Spacing.lg,
+    paddingBottom: 160,
   },
 
   title: {

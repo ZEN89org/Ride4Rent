@@ -231,7 +231,7 @@ export default function ForgotPasswordModal({
     <Modal visible={visible} transparent animationType="slide" statusBarTranslucent={true} onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={styles.overlay}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
       >
         <View style={styles.card}>
@@ -239,6 +239,7 @@ export default function ForgotPasswordModal({
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.scrollContent}
+            automaticallyAdjustKeyboardInsets={true}
             bounces={false}
           >
             {/* Header */}

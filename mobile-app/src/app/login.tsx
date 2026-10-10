@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -39,11 +40,25 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   const [loginError, setLoginError] = useState("");
 
   const { login: signIn } = useAuth();
   const { showSuccess } = useAppToast();
+
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+    const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // Animation values for smooth entrance slide
   const sheetTranslateY = useRef(new Animated.Value(SCREEN_HEIGHT * 0.7)).current;
@@ -145,24 +160,33 @@ export default function Login() {
       <SafeAreaView edges={["top"]} style={styles.safeTop}>
         <KeyboardAvoidingView
           style={styles.keyboardAvoid}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
         >
           {/* Top Primary Background Section with Welcome Animation */}
           <Animated.View
             style={[
               styles.topBanner,
+              keyboardVisible && styles.topBannerCompact,
               {
                 opacity: headerOpacity,
                 transform: [{ translateY: headerTranslateY }],
               },
             ]}
           >
-            <Text style={styles.welcomeTitle}>
-              Welcome{`\n`}Back
+            <Text
+              style={[
+                styles.welcomeTitle,
+                keyboardVisible && styles.welcomeTitleCompact,
+              ]}
+            >
+              {keyboardVisible ? "Welcome Back" : `Welcome\nBack`}
             </Text>
-            <Text style={styles.welcomeSubtitle}>
-              Please sign in to continue
-            </Text>
+            {!keyboardVisible && (
+              <Text style={styles.welcomeSubtitle}>
+                Please sign in to continue
+              </Text>
+            )}
           </Animated.View>
 
           {/* Bottom Sheet Card sliding up from bottom with integrated footer */}
@@ -180,6 +204,7 @@ export default function Login() {
               keyboardDismissMode="on-drag"
               nestedScrollEnabled={true}
               showsVerticalScrollIndicator={false}
+              automaticallyAdjustKeyboardInsets={true}
               bounces={false}
             >
               <View style={styles.sheetHandle} />
@@ -296,11 +321,21 @@ const styles = StyleSheet.create({
     paddingBottom: 25,
   },
 
+  topBannerCompact: {
+    paddingTop: Platform.OS === "ios" ? 8 : 10,
+    paddingBottom: 10,
+  },
+
   welcomeTitle: {
     color: Colors.white,
     fontFamily: FontFamily.bold,
     fontSize: 34,
     lineHeight: 38,
+  },
+
+  welcomeTitleCompact: {
+    fontSize: 22,
+    lineHeight: 26,
   },
 
   welcomeSubtitle: {
@@ -328,9 +363,8 @@ const styles = StyleSheet.create({
   sheetScrollContent: {
     paddingHorizontal: Spacing.xl,
     paddingTop: 16,
-    paddingBottom: Platform.OS === "ios" ? 24 : 16,
+    paddingBottom: Platform.OS === "ios" ? 40 : 130,
     flexGrow: 1,
-    justifyContent: "space-between",
   },
 
   sheetHandle: {

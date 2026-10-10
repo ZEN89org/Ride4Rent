@@ -1,43 +1,27 @@
 import { Platform } from "react-native";
 import { router } from "expo-router";
-import Constants, { ExecutionEnvironment } from "expo-constants";
+import * as Notifications from "expo-notifications";
 
-// Check if running inside the Expo Go sandbox client app
-const isExpoGo =
-  Constants.executionEnvironment === ExecutionEnvironment.StoreClient ||
-  (Constants as any).appOwnership === "expo";
-
-// Safely obtain expo-notifications native module only when supported (non-Expo Go standalone/dev builds)
-let Notifications: any = null;
-
-if (!isExpoGo) {
-  try {
-    Notifications = require("expo-notifications");
-    if (Notifications && typeof Notifications.setNotificationHandler === "function") {
-      Notifications.setNotificationHandler({
-        handleNotification: async () => ({
-          shouldShowAlert: true,
-          shouldPlaySound: true,
-          shouldSetBadge: true,
-          shouldShowBanner: true,
-          shouldShowList: true,
-        }),
-      });
-    }
-  } catch (e) {
-    // expo-notifications not available or restricted
-    Notifications = null;
+try {
+  if (typeof Notifications.setNotificationHandler === "function") {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
   }
+} catch (e) {
+  // silent
 }
 
 /**
  * Initialize high priority channel for Android Lock Screen & Status Bar heads-up banners
  */
 export const setupNotificationChannel = async (): Promise<void> => {
-  if (isExpoGo || !Notifications) {
-    return;
-  }
-
   try {
     if (Platform.OS === "android" && typeof Notifications.setNotificationChannelAsync === "function") {
       await Notifications.setNotificationChannelAsync("ride4rent_alerts", {
@@ -71,7 +55,7 @@ export const setupNotificationChannel = async (): Promise<void> => {
  * Request OS device notification permission explicitly (Android 13+ POST_NOTIFICATIONS & iOS)
  */
 export const requestDeviceNotificationPermission = async (): Promise<boolean> => {
-  if (isExpoGo || !Notifications || typeof Notifications.getPermissionsAsync !== "function") {
+  if (!Notifications || typeof Notifications.getPermissionsAsync !== "function") {
     return true;
   }
 
@@ -104,7 +88,7 @@ export const triggerDeviceNotification = async (
   body: string,
   data?: Record<string, any>
 ): Promise<void> => {
-  if (isExpoGo || !Notifications || typeof Notifications.scheduleNotificationAsync !== "function") {
+  if (!Notifications || typeof Notifications.scheduleNotificationAsync !== "function") {
     return;
   }
 
@@ -132,7 +116,7 @@ export const triggerDeviceNotification = async (
  * Send a test device notification to verify push alert on physical phone
  */
 export const testPushNotification = async (): Promise<boolean> => {
-  if (isExpoGo || !Notifications) {
+  if (!Notifications) {
     return true;
   }
 
@@ -153,7 +137,7 @@ export const testPushNotification = async (): Promise<boolean> => {
  * Attach listener for when user taps the phone notification to navigate to target screen
  */
 export const registerNotificationTapListener = () => {
-  if (isExpoGo || !Notifications || typeof Notifications.addNotificationResponseReceivedListener !== "function") {
+  if (!Notifications || typeof Notifications.addNotificationResponseReceivedListener !== "function") {
     return () => {};
   }
 

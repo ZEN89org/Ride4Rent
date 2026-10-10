@@ -1236,7 +1236,8 @@ export default function Bookings() {
               <ScrollView
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
-                contentContainerStyle={{ paddingBottom: 16 }}
+                automaticallyAdjustKeyboardInsets={true}
+                contentContainerStyle={{ paddingBottom: 60 }}
               >
                 {/* 1. HERO AMOUNT (Clean, Focused, Zero Clutter) */}
                 <View style={{ alignItems: "center", marginBottom: 22 }}>

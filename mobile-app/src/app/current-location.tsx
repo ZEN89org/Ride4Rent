@@ -1,24 +1,20 @@
+import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { router } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import {
-  WebView,
-  WebViewMessageEvent,
-} from "react-native-webview";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { WebView, WebViewMessageEvent } from "react-native-webview";
 
 import { Colors } from "@/constants/colors";
-import {
-  FontFamily,
-  FontSize,
-  Spacing,
-} from "@/constants/theme";
+import { FontFamily, FontSize, Radius, Spacing } from "@/constants/theme";
 
 type LocationData = {
   latitude: number;
@@ -36,1713 +32,683 @@ type AddressData = {
   formattedAddress?: string | null;
 };
 
+// Default center: Oriental Mindoro (Calapan / Central Mindoro)
+const DEFAULT_COORDS: LocationData = {
+  latitude: 13.4115,
+  longitude: 121.1803,
+};
+
 export default function CurrentLocation() {
   const webViewRef = useRef<WebView>(null);
 
-  const [region, setRegion] =
-    useState<LocationData | null>(null);
+  const [activeLayer, setActiveLayer] = useState<"streets" | "satellite">("streets");
+  const [selectedCoords, setSelectedCoords] = useState<LocationData>(DEFAULT_COORDS);
+  const [address, setAddress] = useState<AddressData | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
+  const [hasResolvedGps, setHasResolvedGps] = useState(false);
 
-  const [mapInitialRegion, setMapInitialRegion] =
-    useState<LocationData | null>(null);
+  useEffect(() => {
+    // Start locating immediately on mount
+    fetchCurrentLocation(false);
+  }, []);
 
-  const [address, setAddress] =
-    useState<AddressData | null>(null);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [locationError, setLocationError] =
-    useState(false);
-
-  const [recenterLoading, setRecenterLoading] =
-    useState(false);
-
-  const reverseGeocode = async (
-    latitude: number,
-    longitude: number
-  ) => {
+  const reverseGeocode = async (latitude: number, longitude: number) => {
     try {
-      const result =
-        await Location.reverseGeocodeAsync({
-          latitude,
-          longitude,
-        });
+      setGeocoding(true);
+      const result = await Location.reverseGeocodeAsync({
+        latitude,
+        longitude,
+      });
 
-      console.log(
-        "REVERSE GEOCODE RESULT:",
-        result
-      );
-
-      if (result.length > 0) {
+      if (result && result.length > 0) {
         setAddress(result[0]);
+      } else {
+        // Fallback to nominatim if expo reverse geocode returns empty
+        try {
+          const resp = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
+            { headers: { "User-Agent": "Ride4Rent-App" } }
+          );
+          const data = await resp.json();
+          if (data?.address) {
+            setAddress({
+              street: data.address.road || data.address.pedestrian || null,
+              district: data.address.suburb || data.address.neighbourhood || data.address.village || null,
+              city: data.address.city || data.address.town || data.address.municipality || "Oriental Mindoro",
+              region: data.address.state || "MIMAROPA",
+              formattedAddress: data.display_name || null,
+            });
+          }
+        } catch {
+          // silent fallback
+        }
       }
     } catch (error) {
-      console.log(
-        "REVERSE GEOCODE ERROR:",
-        error
-      );
+      console.log("Reverse geocode error:", error);
+    } finally {
+      setGeocoding(false);
     }
   };
 
-  const updateSelectedLocation = async (
-    latitude: number,
-    longitude: number
-  ) => {
-    const newLocation = {
-      latitude,
-      longitude,
-    };
-
-    setRegion(newLocation);
-
-    await reverseGeocode(
-      latitude,
-      longitude
-    );
+  const updateSelectedLocation = async (latitude: number, longitude: number) => {
+    const newCoords = { latitude, longitude };
+    setSelectedCoords(newCoords);
+    await reverseGeocode(latitude, longitude);
   };
 
-  const getCurrentLocation = async (
-    shouldRecenterMap = false
-  ) => {
+  const fetchCurrentLocation = async (animateToMap = true) => {
     try {
-      if (shouldRecenterMap) {
-        setRecenterLoading(true);
-      } else {
-        setLoading(true);
-      }
+      setLocating(true);
 
-      setLocationError(false);
-
-      const permission =
-        await Location.getForegroundPermissionsAsync();
-
-      console.log(
-        "LOCATION PERMISSION BEFORE:",
-        permission
-      );
-
-      if (
-        permission.status !== "granted"
-      ) {
-        const requestedPermission =
-          await Location.requestForegroundPermissionsAsync();
-
-        console.log(
-          "LOCATION PERMISSION AFTER:",
-          requestedPermission
-        );
-
-        if (
-          requestedPermission.status !==
-          "granted"
-        ) {
-          setLocationError(true);
-          setLoading(false);
-          setRecenterLoading(false);
+      const permission = await Location.getForegroundPermissionsAsync();
+      if (permission.status !== "granted") {
+        const requested = await Location.requestForegroundPermissionsAsync();
+        if (requested.status !== "granted") {
+          // If denied, reverse geocode the default coordinates
+          await reverseGeocode(selectedCoords.latitude, selectedCoords.longitude);
+          setLocating(false);
           return;
         }
       }
 
-      const servicesEnabled =
-        await Location.hasServicesEnabledAsync();
-
-      console.log(
-        "LOCATION SERVICES ENABLED:",
-        servicesEnabled
-      );
-
-      if (!servicesEnabled) {
-        setLocationError(true);
-        setLoading(false);
-        setRecenterLoading(false);
-        return;
+      // Check last known position first for instant responsiveness
+      const lastKnown = await Location.getLastKnownPositionAsync();
+      if (lastKnown && !hasResolvedGps) {
+        const lastCoords = {
+          latitude: lastKnown.coords.latitude,
+          longitude: lastKnown.coords.longitude,
+        };
+        setSelectedCoords(lastCoords);
+        reverseGeocode(lastCoords.latitude, lastCoords.longitude);
+        if (animateToMap) {
+          sendLocationToMap(lastCoords.latitude, lastCoords.longitude);
+        }
       }
 
-      const current =
-        await Location.getCurrentPositionAsync({
-          accuracy:
-            Location.Accuracy.High,
-          mayShowUserSettingsDialog: true,
-        });
+      // Then fetch precise current GPS
+      const current = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
 
-      console.log(
-        "CURRENT LOCATION:",
-        current
-      );
-
-      const latitude =
-        current.coords.latitude;
-
-      const longitude =
-        current.coords.longitude;
-
-      const newLocation = {
-        latitude,
-        longitude,
+      const preciseCoords = {
+        latitude: current.coords.latitude,
+        longitude: current.coords.longitude,
       };
 
-      console.log(
-        "NEW GPS LOCATION:",
-        newLocation
-      );
-
-      if (!shouldRecenterMap) {
-        setMapInitialRegion(
-          newLocation
-        );
-      }
-
-      setRegion(newLocation);
-
-      await reverseGeocode(
-        latitude,
-        longitude
-      );
-
-      if (
-        shouldRecenterMap &&
-        webViewRef.current
-      ) {
-        webViewRef.current.postMessage(
-          JSON.stringify({
-            type:
-              "RECENTER_TO_LOCATION",
-            latitude,
-            longitude,
-          })
-        );
-      }
-
-      console.log(
-        "LOCATION UPDATED:",
-        newLocation
-      );
-
-      setLoading(false);
-      setRecenterLoading(false);
+      setSelectedCoords(preciseCoords);
+      setHasResolvedGps(true);
+      await reverseGeocode(preciseCoords.latitude, preciseCoords.longitude);
+      sendLocationToMap(preciseCoords.latitude, preciseCoords.longitude);
     } catch (error) {
-      console.log(
-        "CURRENT LOCATION ERROR:",
-        error
-      );
-
-      if (!shouldRecenterMap) {
-        setLocationError(true);
+      console.log("GPS Location error:", error);
+      // Ensure we have address for default coordinates
+      if (!address) {
+        reverseGeocode(selectedCoords.latitude, selectedCoords.longitude);
       }
-
-      setLoading(false);
-      setRecenterLoading(false);
+    } finally {
+      setLocating(false);
     }
   };
 
-  const handleMapMessage = async (
-    event: WebViewMessageEvent
-  ) => {
+  const sendLocationToMap = (lat: number, lng: number) => {
+    webViewRef.current?.postMessage(
+      JSON.stringify({
+        type: "RECENTER_TO_LOCATION",
+        latitude: lat,
+        longitude: lng,
+      })
+    );
+  };
+
+  const handleMapMessage = async (event: WebViewMessageEvent) => {
     try {
-      const data =
-        JSON.parse(
-          event.nativeEvent.data
-        );
+      const data = typeof event.nativeEvent.data === "string"
+        ? JSON.parse(event.nativeEvent.data)
+        : event.nativeEvent.data;
 
-      if (
-        data.type === "MAP_MOVED"
-      ) {
-        const latitude =
-          Number(data.latitude);
+      if (data.type === "MAP_MOVED" || data.type === "LOCATION_SELECTED") {
+        const latitude = Number(data.latitude);
+        const longitude = Number(data.longitude);
 
-        const longitude =
-          Number(data.longitude);
-
-        if (
-          Number.isFinite(latitude) &&
-          Number.isFinite(longitude)
-        ) {
-          await updateSelectedLocation(
-            latitude,
-            longitude
-          );
+        if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+          await updateSelectedLocation(latitude, longitude);
         }
       }
     } catch (error) {
-      console.log(
-        "MAP MESSAGE ERROR:",
-        error
-      );
+      console.log("Map message error:", error);
     }
   };
 
-  const getAddressText = () => {
-    if (!address) {
-      return "Locating address...";
-    }
+  const handleLayerSwitch = (mode: "streets" | "satellite") => {
+    setActiveLayer(mode);
+    webViewRef.current?.injectJavaScript(`switchLayer('${mode}'); true;`);
+  };
 
-    const street = [
-      address.streetNumber,
-      address.street,
-    ]
-      .filter(Boolean)
-      .join(" ");
+  const getPrimaryAddress = () => {
+    if (geocoding) return "Locating address...";
+    if (!address) return "Oriental Mindoro";
 
-    if (street) {
-      return street;
-    }
+    const street = [address.streetNumber, address.street].filter(Boolean).join(" ");
+    if (street) return street;
+
+    const district = address.district || address.subregion;
+    if (district) return district;
 
     if (address.formattedAddress) {
-      return address.formattedAddress;
+      return address.formattedAddress.split(",")[0];
     }
 
-    return "Selected location";
+    return "Selected Location";
   };
 
-  const getCityText = () => {
-    if (!address) {
-      return "";
+  const getSecondaryAddress = () => {
+    if (!address) return "MIMAROPA, Philippines";
+
+    const parts = [address.district, address.city, address.region].filter(Boolean);
+    if (parts.length > 0) {
+      return parts.slice(1).join(", ") || parts[0];
     }
-
-    return [
-      address.city,
-      address.district,
-      address.subregion,
-      address.region,
-    ]
-      .filter(Boolean)
-      .join(", ");
-  };
-
-  const createMapHtml = () => {
-    if (!mapInitialRegion) {
-      return "";
-    }
-
-    return `
-<!DOCTYPE html>
-<html>
-
-<head>
-
-<meta
-  name="viewport"
-  content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-/>
-
-<link
-  rel="stylesheet"
-  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-/>
-
-<style>
-
-html,
-body,
-#map {
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  padding: 0;
-}
-
-html,
-body {
-  overflow: hidden;
-  overscroll-behavior: none;
-  background: #ffffff;
-}
-
-body {
-  position: fixed;
-  inset: 0;
-  touch-action: none;
-}
-
-.leaflet-container {
-  width: 100%;
-  height: 100%;
-  background: #fdfbf7;
-
-  font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
-
-  touch-action: none;
-
-  cursor: grab;
-}
-
-.leaflet-container:active {
-  cursor: grabbing;
-}
-
-.leaflet-control-zoom {
-  display: none !important;
-}
-
-.leaflet-container .leaflet-tile {
-  image-rendering: auto;
-}
-
-.leaflet-control-attribution {
-  font-size: 7px;
-
-  color: #999999;
-
-  background:
-    rgba(255,255,255,0.72);
-
-  border-radius: 5px;
-
-  padding: 2px 4px;
-}
-
-
-
-.location-marker-wrapper {
-  position: relative;
-
-  width: 76px;
-  height: 76px;
-
-  display: flex;
-
-  align-items: center;
-  justify-content: center;
-
-  pointer-events: none;
-}
-
-.location-glow {
-  position: absolute;
-
-  width: 70px;
-  height: 70px;
-
-  border-radius: 50%;
-
-  background:
-    rgba(254,193,3,0.08);
-
-  animation:
-    locationPulse 2.4s
-    cubic-bezier(0.22, 1, 0.36, 1)
-    infinite;
-}
-
-.location-glow-inner {
-  position: absolute;
-
-  width: 46px;
-  height: 46px;
-
-  border-radius: 50%;
-
-  background:
-    rgba(254,193,3,0.14);
-
-  animation:
-    locationPulseInner 2.4s
-    cubic-bezier(0.22, 1, 0.36, 1)
-    infinite;
-}
-
-.location-marker {
-  position: relative;
-
-  width: 24px;
-  height: 24px;
-
-  border-radius: 50%;
-
-  background: #FEC103;
-
-  border: 2px solid #FFFFFF;
-
-  box-sizing: border-box;
-
-  z-index: 10;
-
-  box-shadow:
-    0 2px 8px
-    rgba(0,0,0,0.16),
-
-    0 0 0 2px
-    rgba(254,193,3,0.28);
-}
-
-.location-marker::after {
-  content: "";
-
-  position: absolute;
-
-  width: 7px;
-  height: 7px;
-
-  left: 50%;
-  top: 50%;
-
-  transform:
-    translate(-50%, -50%);
-
-  border-radius: 50%;
-}
-
-@keyframes locationPulse {
-
-  0% {
-    transform: scale(0.55);
-    opacity: 0.72;
-  }
-
-  70% {
-    transform: scale(1.38);
-    opacity: 0;
-  }
-
-  100% {
-    transform: scale(1.38);
-    opacity: 0;
-  }
-
-}
-
-@keyframes locationPulseInner {
-
-  0% {
-    transform: scale(0.65);
-    opacity: 0.58;
-  }
-
-  60% {
-    transform: scale(1.2);
-    opacity: 0;
-  }
-
-  100% {
-    transform: scale(1.2);
-    opacity: 0;
-  }
-
-}
-
-
-
-.leaflet-fade-anim .leaflet-tile {
-  transition:
-    opacity 0.2s ease;
-}
-
-.leaflet-zoom-anim
-.leaflet-zoom-animated {
-  transition:
-    transform 0.35s
-    cubic-bezier(
-      0.22,
-      1,
-      0.36,
-      1
-    );
-}
-
-</style>
-
-</head>
-
-<body>
-
-<div id="map"></div>
-
-<script
-src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
-</script>
-
-<script>
-
-const initialLatitude =
-  ${mapInitialRegion.latitude};
-
-const initialLongitude =
-  ${mapInitialRegion.longitude};
-
-const map = L.map(
-  "map",
-  {
-
-    zoomControl: false,
-
-    attributionControl: true,
-
-    zoomAnimation: true,
-
-    fadeAnimation: true,
-
-    markerZoomAnimation: true,
-
-    dragging: true,
-
-    touchZoom: true,
-
-    doubleClickZoom: true,
-
-    boxZoom: false,
-
-    keyboard: false,
-
-    scrollWheelZoom: false,
-
-    zoomSnap: 0.25,
-
-    zoomDelta: 0.5,
-
-    wheelDebounceTime: 30,
-
-    wheelPxPerZoomLevel: 80,
-
-    inertia: true,
-
-    inertiaDeceleration: 2800,
-
-    inertiaMaxSpeed: 1500,
-
-    easeLinearity: 0.15
-
-  }
-
-).setView(
-
-  [
-    initialLatitude,
-    initialLongitude
-  ],
-
-  17,
-
-  {
-    animate: false
-  }
-
-);
-
-
-
-L.tileLayer(
-  "https://tile.openstreetmap.org/{z}/{y}/{x}.png",
-  {
-    maxZoom: 19,
-    minZoom: 3,
-    attribution: '&copy; OpenStreetMap contributors',
-    keepBuffer: 6,
-    updateWhenZooming: false,
-    updateWhenIdle: true,
-    updateInterval: 150,
-  }
-).addTo(map);
-
-
-const markerIcon =
-  L.divIcon({
-
-    className: "",
-
-    html: \`
-
-      <div
-        class="location-marker-wrapper"
-      >
-
-        <div
-          class="location-glow"
-        ></div>
-
-        <div
-          class="location-glow-inner"
-        ></div>
-
-        <div
-          class="location-marker"
-        ></div>
-
-      </div>
-
-    \`,
-
-    iconSize: [
-      76,
-      76
-    ],
-
-    iconAnchor: [
-      38,
-      38
-    ]
-
-  });
-
-const marker =
-  L.marker(
-
-    [
-      initialLatitude,
-      initialLongitude
-    ],
-
-    {
-
-      icon:
-        markerIcon,
-
-      interactive:
-        false,
-
-      keyboard:
-        false
-
-    }
-
-  ).addTo(map);
-
-let lastSentLatitude =
-  initialLatitude;
-
-let lastSentLongitude =
-  initialLongitude;
-
-let moveTimer = null;
-
-let isRecentering =
-  false;
-
-map.on(
-  "move",
-  function() {
-
-    const center =
-      map.getCenter();
-
-    marker.setLatLng([
-      center.lat,
-      center.lng
-    ]);
-
-  }
-);
-
-map.on(
-  "moveend",
-  function() {
-
-    const center =
-      map.getCenter();
-
-    marker.setLatLng([
-      center.lat,
-      center.lng
-    ]);
-
-    if (isRecentering) {
-
-      isRecentering =
-        false;
-
-      lastSentLatitude =
-        center.lat;
-
-      lastSentLongitude =
-        center.lng;
-
-      return;
-    }
-
-    const distance =
-      Math.abs(
-        center.lat -
-        lastSentLatitude
-      ) +
-      Math.abs(
-        center.lng -
-        lastSentLongitude
-      );
-
-    if (distance < 0.000001) {
-      return;
-    }
-
-    lastSentLatitude =
-      center.lat;
-
-    lastSentLongitude =
-      center.lng;
-
-    clearTimeout(
-      moveTimer
-    );
-
-    moveTimer =
-      setTimeout(
-        function() {
-
-          window.ReactNativeWebView.postMessage(
-
-            JSON.stringify({
-
-              type:
-                "MAP_MOVED",
-
-              latitude:
-                center.lat,
-
-              longitude:
-                center.lng
-
-            })
-
-          );
-
-        },
-        80
-      );
-
-  }
-);
-
-map.on(
-  "click",
-  function(event) {
-
-    const latitude =
-      event.latlng.lat;
-
-    const longitude =
-      event.latlng.lng;
-
-    map.flyTo(
-
-      [
-        latitude,
-        longitude
-      ],
-
-      map.getZoom(),
-
-      {
-
-        animate: true,
-
-        duration: 0.45,
-
-        easeLinearity: 0.15
-
-      }
-
-    );
-
-  }
-);
-
-let wheelTimeout = null;
-
-map.getContainer()
-  .addEventListener(
-
-    "wheel",
-
-    function(event) {
-
-      event.preventDefault();
-      event.stopPropagation();
-
-      const rect =
-        map.getContainer()
-          .getBoundingClientRect();
-
-      const point =
-        L.point(
-
-          event.clientX -
-          rect.left,
-
-          event.clientY -
-          rect.top
-
-        );
-
-      const currentZoom =
-        map.getZoom();
-
-      const direction =
-        event.deltaY < 0
-          ? 1
-          : -1;
-
-      let zoomChange;
-
-      if (
-        Math.abs(event.deltaY) > 80
-      ) {
-
-        zoomChange =
-          direction * 0.5;
-
-      } else {
-
-        zoomChange =
-          direction * 0.25;
-
-      }
-
-      const targetZoom =
-        Math.max(
-
-          3,
-
-          Math.min(
-
-            20,
-
-            currentZoom +
-            zoomChange
-
-          )
-
-        );
-
-      clearTimeout(
-        wheelTimeout
-      );
-
-      wheelTimeout =
-        setTimeout(
-          function() {
-
-            map.setZoomAround(
-
-              point,
-
-              targetZoom,
-
-              {
-                animate: true
-              }
-
-            );
-
-          },
-          10
-        );
-
-    },
-
-    {
-      passive: false
-    }
-
-  );
-
-
-document.addEventListener(
-
-  "wheel",
-
-  function(event) {
-
-    event.preventDefault();
-
-  },
-
-  {
-    passive: false
-  }
-
-);
-
-document.addEventListener(
-
-  "touchmove",
-
-  function(event) {
-
-    event.preventDefault();
-
-  },
-
-  {
-    passive: false
-  }
-
-);
-
-
-document.addEventListener(
-  "message",
-  handleReactNativeMessage
-);
-
-window.addEventListener(
-  "message",
-  handleReactNativeMessage
-);
-
-function handleReactNativeMessage(event) {
-
-  try {
-
-    const data =
-      typeof event.data === "string"
-        ? JSON.parse(event.data)
-        : event.data;
-
-    if (
-      data.type ===
-      "RECENTER_TO_LOCATION"
-    ) {
-
-      const latitude =
-        Number(
-          data.latitude
-        );
-
-      const longitude =
-        Number(
-          data.longitude
-        );
-
-      if (
-        !Number.isFinite(
-          latitude
-        ) ||
-        !Number.isFinite(
-          longitude
-        )
-      ) {
-
-        return;
-
-      }
-
-      isRecentering =
-        true;
-
-      clearTimeout(
-        moveTimer
-      );
-
-      lastSentLatitude =
-        latitude;
-
-      lastSentLongitude =
-        longitude;
-
-      marker.setLatLng([
-        latitude,
-        longitude
-      ]);
-
-      map.flyTo(
-
-        [
-          latitude,
-          longitude
-        ],
-
-        17,
-
-        {
-
-          animate: true,
-
-          duration: 0.9,
-
-          easeLinearity: 0.15
-
-        }
-
-      );
-
-    }
-
-  } catch (error) {
-
-    console.log(
-      "REACT NATIVE MESSAGE ERROR:",
-      error
-    );
-
-  }
-
-}
-
-</script>
-
-</body>
-
-</html>
-`;
-  };
-
-  useEffect(() => {
-    const timer =
-      setTimeout(() => {
-        getCurrentLocation();
-      }, 0);
-
-    return () =>
-      clearTimeout(timer);
-  }, []);
-
-  const handleRecenter = () => {
-    getCurrentLocation(true);
-  };
-
-  const handleRetry = () => {
-    getCurrentLocation();
+    return "Oriental Mindoro, Philippines";
   };
 
   const handleConfirmLocation = () => {
-    router.replace(
-      "/(tabs)/home"
-    );
+    router.replace("/(tabs)/home");
   };
 
-  return (
-    <View style={styles.container}>
+  const mapHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #map {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #E8E6DF;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+    }
 
-      <View style={styles.header}>
+    /* Fixed Center Pin that hovers over map center */
+    .center-pin-container {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -100%);
+      z-index: 1000;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
 
-        <Text style={styles.title}>
-          Current Location
-        </Text>
+    .marker-wrap {
+      position: relative;
+      width: 52px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
 
-        <Text style={styles.description}>
-          Allow Ride4Rent to use your
-          current location to find
-          vehicles near you.
-        </Text>
+    .marker-pulse {
+      position: absolute;
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: rgba(254, 193, 3, 0.45);
+      animation: pinPulse 2s cubic-bezier(0.2, 0.9, 0.3, 1) infinite;
+    }
 
-      </View>
+    @keyframes pinPulse {
+      0% { transform: scale(0.6); opacity: 0.95; }
+      75% { transform: scale(1.35); opacity: 0.1; }
+      100% { transform: scale(1.4); opacity: 0; }
+    }
 
-      <View style={styles.mapContainer}>
+    .marker-pin {
+      position: relative;
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: #FEC103;
+      border: 3px solid #1A1A1A;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+    }
 
-        {loading ? (
+    .pin-shadow {
+      width: 16px;
+      height: 6px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 50%;
+      margin-top: 2px;
+      filter: blur(1px);
+    }
 
-          <View
-            style={
-              styles.loadingContainer
-            }
-          >
+    /* Attribution & Zoom */
+    .leaflet-control-attribution { display: none !important; }
+    .leaflet-control-zoom { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
 
-            <ActivityIndicator
-              size="large"
-              color={
-                Colors.primary
-              }
-            />
+  <div class="center-pin-container">
+    <div class="marker-wrap">
+      <div class="marker-pulse"></div>
+      <div class="marker-pin">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
+          <circle cx="12" cy="10" r="3"/>
+        </svg>
+      </div>
+    </div>
+    <div class="pin-shadow"></div>
+  </div>
 
-            <Text
-              style={
-                styles.loadingText
-              }
-            >
-              Finding your location...
-            </Text>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const initLat = ${selectedCoords.latitude};
+    const initLng = ${selectedCoords.longitude};
+    let currentMode = "streets";
 
-          </View>
+    const map = L.map("map", {
+      zoomControl: false,
+      attributionControl: false,
+      dragging: true,
+      touchZoom: true,
+      doubleClickZoom: true,
+      scrollWheelZoom: true,
+    }).setView([initLat, initLng], 16);
 
-        ) : locationError ? (
+    // 1. Watermark-free, official Esri World Street Map (high-definition streets, barangays, POIs)
+    const streetsLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
+      maxZoom: 19,
+      minZoom: 3,
+      keepBuffer: 6,
+    });
 
-          <View
-            style={
-              styles.errorContainer
-            }
-          >
+    // 2. High-Resolution Google Hybrid Satellite with Roads & Place Labels
+    const satelliteLayer = L.tileLayer("https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", {
+      subdomains: ["mt0", "mt1", "mt2", "mt3"],
+      maxZoom: 20,
+      minZoom: 3,
+      keepBuffer: 6,
+    });
 
-            <Text
-              style={
-                styles.errorTitle
-              }
-            >
-              Unable to get your
-              location
-            </Text>
+    streetsLayer.addTo(map);
 
-            <Text
-              style={
-                styles.errorText
-              }
-            >
-              Please allow location
-              access so Ride4Rent can
-              find your current
-              location.
-            </Text>
+    function switchLayer(mode) {
+      currentMode = mode;
+      if (mode === "streets") {
+        map.removeLayer(satelliteLayer);
+        if (!map.hasLayer(streetsLayer)) streetsLayer.addTo(map);
+      } else if (mode === "satellite") {
+        map.removeLayer(streetsLayer);
+        satelliteLayer.addTo(map);
+      }
+      setTimeout(function() {
+        map.invalidateSize();
+      }, 100);
+    }
 
-            <TouchableOpacity
-              style={
-                styles.retryButton
-              }
-              onPress={
-                handleRetry
-              }
-            >
-
-              <Text
-                style={
-                  styles.retryText
-                }
-              >
-                Try Again
-              </Text>
-
-            </TouchableOpacity>
-
-          </View>
-
-        ) : region ? (
-
-          <WebView
-            ref={webViewRef}
-            source={{
-              html:
-                createMapHtml(),
-            }}
-            style={styles.map}
-            originWhitelist={[
-              "*",
-            ]}
-            javaScriptEnabled
-            domStorageEnabled
-            onMessage={
-              handleMapMessage
-            }
-            geolocationEnabled
-            scrollEnabled={false}
-          />
-
-        ) : null}
-
-        {!loading &&
-          !locationError &&
-          region && (
-
-            <>
-
-              <View
-                pointerEvents="none"
-                style={
-                  styles.mapInstruction
-                }
-              >
-
-                <Text
-                  style={
-                    styles.mapInstructionText
-                  }
-                >
-                  Move the map or tap
-                  to choose a location
-                </Text>
-
-              </View>
-
-              <TouchableOpacity
-                activeOpacity={0.8}
-                style={
-                  styles.myLocationButton
-                }
-                onPress={
-                  handleRecenter
-                }
-                disabled={
-                  recenterLoading
-                }
-              >
-
-                {recenterLoading ? (
-
-                  <ActivityIndicator
-                    size="small"
-                    color={
-                      Colors.dark
-                    }
-                  />
-
-                ) : (
-
-                  <View
-                    style={
-                      styles.myLocationIcon
-                    }
-                  >
-
-                    <View
-                      style={
-                        styles.myLocationDot
-                      }
-                    />
-
-                  </View>
-
-                )}
-
-              </TouchableOpacity>
-
-            </>
-
-          )}
-
-      </View>
-
-      <View
-        style={
-          styles.bottomSheet
+    let moveTimeout = null;
+    map.on("moveend", function() {
+      clearTimeout(moveTimeout);
+      moveTimeout = setTimeout(function() {
+        const center = map.getCenter();
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: "MAP_MOVED",
+            latitude: center.lat,
+            longitude: center.lng,
+          }));
         }
-      >
+      }, 150);
+    });
 
-        <View
-          style={
-            styles.sheetHandle
+    map.on("click", function(e) {
+      map.flyTo([e.latlng.lat, e.latlng.lng], map.getZoom(), {
+        animate: true,
+        duration: 0.5,
+      });
+    });
+
+    function handleReactNativeMessage(event) {
+      try {
+        const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+        if (data.type === "RECENTER_TO_LOCATION") {
+          const lat = Number(data.latitude);
+          const lng = Number(data.longitude);
+          if (Number.isFinite(lat) && Number.isFinite(lng)) {
+            map.flyTo([lat, lng], 16, {
+              animate: true,
+              duration: 0.8,
+            });
           }
+        } else if (data.type === "SWITCH_LAYER") {
+          switchLayer(data.mode);
+        }
+      } catch (e) {
+        console.error("Leaflet message error:", e);
+      }
+    }
+
+    document.addEventListener("message", handleReactNativeMessage);
+    window.addEventListener("message", handleReactNativeMessage);
+
+    setTimeout(function() {
+      if (map) {
+        map.invalidateSize();
+      }
+    }, 200);
+  </script>
+</body>
+</html>
+  `;
+
+  return (
+    <SafeAreaView edges={["top"]} style={styles.safeContainer}>
+      {/* Top Header */}
+      <View style={styles.header}>
+        <View style={styles.headerTextGroup}>
+          <Text style={styles.title}>Current Location</Text>
+          <Text style={styles.subtitle}>
+            Pan or tap the map to choose your rental search area
+          </Text>
+        </View>
+
+        {/* Dual Layer Switcher (Streets & Satellite) */}
+        <View style={styles.layerBar}>
+          <TouchableOpacity
+            style={[styles.layerPill, activeLayer === "streets" && styles.layerPillActive]}
+            onPress={() => handleLayerSwitch("streets")}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name="map"
+              size={13}
+              color={activeLayer === "streets" ? Colors.white : Colors.secondary}
+            />
+            <Text
+              style={[
+                styles.layerPillText,
+                activeLayer === "streets" && styles.layerPillTextActive,
+              ]}
+            >
+              Streets
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.layerPill, activeLayer === "satellite" && styles.layerPillActive]}
+            onPress={() => handleLayerSwitch("satellite")}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name="earth"
+              size={13}
+              color={activeLayer === "satellite" ? Colors.white : Colors.secondary}
+            />
+            <Text
+              style={[
+                styles.layerPillText,
+                activeLayer === "satellite" && styles.layerPillTextActive,
+              ]}
+            >
+              Satellite
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Map Area */}
+      <View style={styles.mapContainer}>
+        <WebView
+          ref={webViewRef}
+          source={{ html: mapHtml }}
+          style={styles.map}
+          originWhitelist={["*"]}
+          javaScriptEnabled
+          domStorageEnabled
+          onMessage={handleMapMessage}
+          scrollEnabled={false}
+          bounces={false}
         />
 
-        <Text
-          style={
-            styles.locationTitle
-          }
-        >
-          Your selected location
-        </Text>
+        {/* Floating Instruction Badge */}
+        <View style={styles.mapBadge} pointerEvents="none">
+          <Ionicons name="finger-print-outline" size={14} color={Colors.white} />
+          <Text style={styles.mapBadgeText}>Drag map to adjust location pin</Text>
+        </View>
 
-        <Text
-          style={
-            styles.addressText
-          }
-        >
-          {getAddressText()}
-        </Text>
-
-        {getCityText() !== "" && (
-
-          <Text
-            style={
-              styles.locationText
-            }
-          >
-            {getCityText()}
-          </Text>
-
-        )}
-
+        {/* Floating My Location (Recenter) Button */}
         <TouchableOpacity
-          style={[
-            styles.confirmButton,
-            !region &&
-              styles.disabledButton,
-          ]}
-          disabled={!region}
-          onPress={
-            handleConfirmLocation
-          }
+          style={styles.recenterButton}
+          onPress={() => fetchCurrentLocation(true)}
+          disabled={locating}
+          activeOpacity={0.85}
         >
-
-          <Text
-            style={
-              styles.confirmText
-            }
-          >
-            Confirm Location
-          </Text>
-
+          {locating ? (
+            <ActivityIndicator size="small" color={Colors.dark} />
+          ) : (
+            <Ionicons name="locate" size={22} color={Colors.dark} />
+          )}
         </TouchableOpacity>
-
       </View>
 
-    </View>
+      {/* Bottom Sheet Card */}
+      <View style={styles.bottomCard}>
+        <View style={styles.handle} />
+
+        <View style={styles.addressSection}>
+          <View style={styles.addressIconWrap}>
+            <Ionicons name="location" size={22} color={Colors.primary} />
+          </View>
+          <View style={styles.addressInfo}>
+            <Text style={styles.addressPrimary} numberOfLines={1}>
+              {getPrimaryAddress()}
+            </Text>
+            <Text style={styles.addressSecondary} numberOfLines={1}>
+              {getSecondaryAddress()}
+            </Text>
+          </View>
+        </View>
+
+        <TouchableOpacity
+          style={styles.confirmButton}
+          onPress={handleConfirmLocation}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.confirmButtonText}>Confirm Location</Text>
+          <Ionicons name="arrow-forward" size={18} color={Colors.dark} />
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-
-  container: {
+  safeContainer: {
     flex: 1,
-    backgroundColor:
-      Colors.white,
+    backgroundColor: Colors.white,
   },
-
   header: {
-    paddingHorizontal:
-      Spacing.lg,
-
-    paddingTop: 60,
-
-    paddingBottom:
-      Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.md,
+    backgroundColor: Colors.white,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
-
+  headerTextGroup: {
+    flex: 1,
+    marginRight: Spacing.sm,
+  },
   title: {
-    fontFamily:
-      FontFamily.bold,
-
-    fontSize:
-      FontSize.heading,
-
-    color:
-      Colors.dark,
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.heading,
+    color: Colors.dark,
   },
-
-  description: {
-    marginTop:
-      Spacing.xs,
-
-    fontFamily:
-      FontFamily.regular,
-
-    fontSize:
-      FontSize.body,
-
-    color:
-      Colors.secondary,
-
-    lineHeight: 22,
+  subtitle: {
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    color: Colors.secondary,
+    marginTop: 2,
   },
-
+  layerBar: {
+    flexDirection: "row",
+    backgroundColor: "#F1F5F9",
+    borderRadius: Radius.full,
+    padding: 3,
+    gap: 3,
+  },
+  layerPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    borderRadius: Radius.full,
+  },
+  layerPillActive: {
+    backgroundColor: Colors.dark,
+  },
+  layerPillText: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 11,
+    color: Colors.secondary,
+  },
+  layerPillTextActive: {
+    color: Colors.white,
+  },
   mapContainer: {
     flex: 1,
-    overflow: "hidden",
+    position: "relative",
+    backgroundColor: "#E8E6DF",
   },
-
   map: {
-    width: "100%",
-    height: "100%",
+    flex: 1,
   },
-
-  mapInstruction: {
+  mapBadge: {
     position: "absolute",
-
-    top:
-      Spacing.md,
-
-    left:
-      Spacing.lg,
-
-    right:
-      Spacing.lg,
-
-    alignItems:
-      "center",
+    top: 14,
+    alignSelf: "center",
+    backgroundColor: "rgba(15, 23, 42, 0.8)",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: Radius.full,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    zIndex: 50,
   },
-
-  mapInstructionText: {
-    backgroundColor:
-      "rgba(255,255,255,0.96)",
-
-    paddingHorizontal:
-      Spacing.md,
-
-    paddingVertical:
-      Spacing.sm,
-
-    borderRadius: 18,
-
-    fontFamily:
-      FontFamily.medium,
-
-    fontSize: 12,
-
-    color:
-      Colors.dark,
-
-    overflow:
-      "hidden",
-
-    elevation: 3,
-
-    shadowColor:
-      "#000",
-
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-
-    shadowOpacity:
-      0.08,
-
-    shadowRadius: 4,
+  mapBadgeText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 11.5,
+    color: Colors.white,
   },
-
-  myLocationButton: {
+  recenterButton: {
     position: "absolute",
-
-    right:
-      Spacing.lg,
-
-    bottom:
-      Spacing.lg,
-
+    right: 16,
+    bottom: 16,
     width: 48,
     height: 48,
-
     borderRadius: 24,
-
-    backgroundColor:
-      Colors.white,
-
-    alignItems:
-      "center",
-
-    justifyContent:
-      "center",
-
-    elevation: 6,
-
-    shadowColor:
-      "#000",
-
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-
-    shadowOpacity:
-      0.15,
-
+    backgroundColor: Colors.white,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: Colors.dark,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
     shadowRadius: 6,
+    elevation: 6,
+    zIndex: 50,
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
   },
-
-  myLocationIcon: {
-    width: 22,
-    height: 22,
-
-    borderRadius: 11,
-
-    borderWidth: 2,
-
-    borderColor:
-      Colors.dark,
-
-    alignItems:
-      "center",
-
-    justifyContent:
-      "center",
-  },
-
-  myLocationDot: {
-    width: 8,
-    height: 8,
-
-    borderRadius: 4,
-
-    backgroundColor:
-      Colors.primary,
-  },
-
-  loadingContainer: {
-    flex: 1,
-
-    justifyContent:
-      "center",
-
-    alignItems:
-      "center",
-  },
-
-  loadingText: {
-    marginTop:
-      Spacing.md,
-
-    fontFamily:
-      FontFamily.regular,
-
-    fontSize:
-      FontSize.body,
-
-    color:
-      Colors.secondary,
-  },
-
-  errorContainer: {
-    flex: 1,
-
-    justifyContent:
-      "center",
-
-    alignItems:
-      "center",
-
-    paddingHorizontal:
-      Spacing.xl,
-  },
-
-  errorTitle: {
-    fontFamily:
-      FontFamily.bold,
-
-    fontSize:
-      FontSize.body,
-
-    color:
-      Colors.dark,
-
-    textAlign:
-      "center",
-  },
-
-  errorText: {
-    marginTop:
-      Spacing.sm,
-
-    fontFamily:
-      FontFamily.regular,
-
-    fontSize: 14,
-
-    color:
-      Colors.secondary,
-
-    textAlign:
-      "center",
-
-    lineHeight: 21,
-  },
-
-  retryButton: {
-    marginTop:
-      Spacing.lg,
-
-    backgroundColor:
-      Colors.primary,
-
-    paddingHorizontal:
-      Spacing.xl,
-
-    paddingVertical:
-      Spacing.md,
-
-    borderRadius: 25,
-  },
-
-  retryText: {
-    fontFamily:
-      FontFamily.bold,
-
-    color:
-      Colors.dark,
-  },
-
-  sheetHandle: {
-    alignSelf:
-      "center",
-
-    width: 42,
-    height: 4,
-
-    borderRadius: 10,
-
-    backgroundColor:
-      "#D9D9D9",
-
-    marginBottom:
-      Spacing.md,
-  },
-
-  bottomSheet: {
-    backgroundColor:
-      Colors.white,
-
-    paddingHorizontal:
-      Spacing.lg,
-
-    paddingTop:
-      Spacing.md,
-
-    paddingBottom:
-      Spacing.xl,
-
-    borderTopLeftRadius:
-      24,
-
-    borderTopRightRadius:
-      24,
-
-    elevation: 10,
-
-    shadowColor:
-      "#000",
-
-    shadowOffset: {
-      width: 0,
-      height: -3,
-    },
-
-    shadowOpacity:
-      0.08,
-
+  bottomCard: {
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.md,
+    paddingBottom: Platform.OS === "ios" ? Spacing.xl + 8 : Spacing.xl,
+    shadowColor: Colors.dark,
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.1,
     shadowRadius: 10,
+    elevation: 10,
   },
-
-  locationTitle: {
-    fontFamily:
-      FontFamily.bold,
-
-    fontSize:
-      FontSize.body,
-
-    color:
-      Colors.dark,
+  handle: {
+    width: 36,
+    height: 4,
+    backgroundColor: "#CBD5E1",
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: Spacing.md,
   },
-
-  addressText: {
-    marginTop: 4,
-
-    fontFamily:
-      FontFamily.medium,
-
-    fontSize: 15,
-
-    color:
-      Colors.dark,
+  addressSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: Spacing.lg,
   },
-
-  locationText: {
-    marginTop: 3,
-
-    fontFamily:
-      FontFamily.regular,
-
-    fontSize: 13,
-
-    color:
-      Colors.secondary,
+  addressIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#FFFBEB",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#FEF3C7",
   },
-
+  addressInfo: {
+    flex: 1,
+  },
+  addressPrimary: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.title,
+    color: Colors.dark,
+  },
+  addressSecondary: {
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    color: Colors.secondary,
+    marginTop: 2,
+  },
   confirmButton: {
-    marginTop:
-      Spacing.md,
-
-    backgroundColor:
-      Colors.primary,
-
-    paddingVertical:
-      Spacing.md,
-
-    borderRadius: 25,
-
-    alignItems:
-      "center",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: Colors.primary,
+    borderRadius: Radius.full,
+    paddingVertical: 14,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
   },
-
-  disabledButton: {
-    opacity: 0.5,
+  confirmButtonText: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.body,
+    color: Colors.dark,
   },
-
-  confirmText: {
-    fontFamily:
-      FontFamily.bold,
-
-    fontSize:
-      FontSize.body,
-
-    color:
-      Colors.white,
-  },
-
 });
