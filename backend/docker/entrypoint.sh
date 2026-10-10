@@ -37,19 +37,16 @@ chmod -R 775 storage bootstrap/cache
 # Create storage symlink
 php artisan storage:link || true
 
+# Clear cached configuration so runtime environment variables are read dynamically
+php artisan config:clear || true
+php artisan route:clear || true
+php artisan view:clear || true
+
 # Run database migrations in production
 if [ "$RUN_MIGRATIONS" != "false" ]; then
     echo "Running migrations..."
     php artisan migrate --force || true
 fi
-
-# Clear and optimize cache
-php artisan config:clear || true
-php artisan route:clear || true
-php artisan view:clear || true
-php artisan config:cache || true
-php artisan route:cache || true
-php artisan view:cache || true
 
 # Ensure strictly only mpm_prefork is active for PHP
 rm -f /etc/apache2/mods-enabled/mpm_event.* /etc/apache2/mods-enabled/mpm_worker.* 2>/dev/null || true

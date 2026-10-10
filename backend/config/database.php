@@ -3,6 +3,12 @@
 use Illuminate\Support\Str;
 use Pdo\Mysql;
 
+$rawPgUrl = env('DATABASE_URL', env('DB_URL'));
+if ($rawPgUrl && preg_match('#(postgres(?:ql)?://[^\s}]+)#', $rawPgUrl, $pgMatches)) {
+    $rawPgUrl = $pgMatches[1];
+}
+$pgParts = $rawPgUrl ? parse_url($rawPgUrl) : [];
+
 return [
 
     /*
@@ -86,12 +92,12 @@ return [
 
         'pgsql' => [
             'driver' => 'pgsql',
-            'url' => env('DB_URL', env('DATABASE_URL')),
-            'host' => env('DB_HOST', env('PGHOST', '127.0.0.1')),
-            'port' => env('DB_PORT', env('PGPORT', '5432')),
-            'database' => env('DB_DATABASE', env('PGDATABASE', 'laravel')),
-            'username' => env('DB_USERNAME', env('PGUSER', 'root')),
-            'password' => env('DB_PASSWORD', env('PGPASSWORD', '')),
+            'url' => $rawPgUrl,
+            'host' => $pgParts['host'] ?? env('DB_HOST', env('PGHOST', '127.0.0.1')),
+            'port' => isset($pgParts['port']) ? (string)$pgParts['port'] : env('DB_PORT', env('PGPORT', '5432')),
+            'database' => isset($pgParts['path']) ? ltrim($pgParts['path'], '/') : env('DB_DATABASE', env('PGDATABASE', 'laravel')),
+            'username' => $pgParts['user'] ?? env('DB_USERNAME', env('PGUSER', 'root')),
+            'password' => $pgParts['pass'] ?? env('DB_PASSWORD', env('PGPASSWORD', '')),
             'charset' => env('DB_CHARSET', 'utf8'),
             'prefix' => '',
             'prefix_indexes' => true,
