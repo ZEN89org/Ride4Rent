@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import {
   FlatList,
   Image,
+  Linking,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -13,6 +14,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ProCardSkeleton, Skeleton } from "@/components/common/Skeleton";
 import { Colors } from "@/constants/colors";
+import {
+  MUNICIPALITY_COORDINATES,
+  resolveCoordinatesFromAddress,
+} from "@/constants/orientalMindoroLocations";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";
 import { useFavorites } from "@/context/FavoritesContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
@@ -29,15 +34,19 @@ export default function OperatorProfileScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !/^\d+$/.test(String(id))) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     getOperatorFleet(id)
       .then((res) => {
-        setOperator(res.operator);
-        setVehicles(res.vehicles);
+        setOperator(res?.operator || null);
+        setVehicles(Array.isArray(res?.vehicles) ? res.vehicles : []);
       })
       .catch((err) => {
-        console.error("Failed to load operator fleet:", err);
+        console.log("Could not load operator fleet:", err?.message || err);
+        setVehicles([]);
       })
       .finally(() => {
         setLoading(false);
@@ -80,6 +89,32 @@ export default function OperatorProfileScreen() {
     );
   }
 
+  if (!operator) {
+    return (
+      <SafeAreaView edges={["top", "bottom"]} style={styles.container}>
+        <View style={styles.headerBar}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={22} color={Colors.dark} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Host Profile</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={[styles.emptyWrap, { paddingHorizontal: Spacing.xl, marginTop: 40 }]}>
+          <Ionicons name="person-circle-outline" size={60} color={Colors.secondary} />
+          <Text style={[styles.emptyText, { fontFamily: FontFamily.bold, fontSize: 16, marginTop: 12 }]}>
+            Host Profile Unavailable
+          </Text>
+          <Text style={styles.emptySubtext}>
+            This host does not have any active public profile details or listings yet.
+          </Text>
+          <TouchableOpacity style={styles.backBtnAction} onPress={() => router.back()}>
+            <Text style={styles.backBtnText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   const businessName = operator?.business_name || operator?.name || "Verified Operator";
   const addressParts = [
     operator?.street_address,
@@ -88,6 +123,53 @@ export default function OperatorProfileScreen() {
   ].filter(Boolean);
   const fullAddress = addressParts.length > 0 ? addressParts.join(", ") : operator?.address || null;
   const profilePhoto = operator?.profile_photo;
+
+  const vehicleWithCoords = vehicles.find(
+    (v) => v.pickup_latitude && v.pickup_longitude && Number(v.pickup_latitude) !== 0
+  );
+  const effectiveAddress =
+    vehicleWithCoords?.pickup_address ||
+    vehicles[0]?.pickup_address ||
+    fullAddress ||
+    "Calapan City, Oriental Mindoro";
+
+  const fallbackGeocoded = resolveCoordinatesFromAddress(effectiveAddress);
+
+  // Unify coordinate resolution with vehicle details view
+  const rawLat =
+    vehicleWithCoords?.pickup_latitude ||
+    operator?.latitude ||
+    (vehicles[0] as any)?.pickup_latitude;
+  const rawLng =
+    vehicleWithCoords?.pickup_longitude ||
+    operator?.longitude ||
+    (vehicles[0] as any)?.pickup_longitude;
+
+  const finalLat =
+    rawLat && Number(rawLat) !== 0 && !isNaN(Number(rawLat))
+      ? Number(rawLat)
+      : fallbackGeocoded.latitude;
+  const finalLng =
+    rawLng && Number(rawLng) !== 0 && !isNaN(Number(rawLng))
+      ? Number(rawLng)
+      : fallbackGeocoded.longitude;
+
+  const handleViewLocationInApp = () => {
+    router.push({
+      pathname: "/live-tracking",
+      params: {
+        type: "pickup",
+        mode: "pickup",
+        title: "Pickup & Garage Location",
+        vehicleName: businessName,
+        address: effectiveAddress,
+        latitude: String(finalLat),
+        longitude: String(finalLng),
+        lat: String(finalLat),
+        lng: String(finalLng),
+      },
+    } as any);
+  };
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.container}>
@@ -184,9 +266,38 @@ export default function OperatorProfileScreen() {
                 </View>
 
                 <View style={styles.statPill}>
-                  <Text style={styles.statNumber}>5.0 ★</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+                    <Text style={styles.statNumber}>5.0</Text>
+                    <Ionicons name="star" size={13} color={Colors.primary} />
+                  </View>
                   <Text style={styles.statLabel}>Host Rating</Text>
                 </View>
+              </View>
+
+              {/* Pickup & Garage Location - Exactly matching vehicle details card */}
+              <View style={styles.sectionDivider} />
+              <Text style={styles.sectionHeading}>Pickup & Garage Location</Text>
+              <View style={styles.locationCard}>
+                <View style={styles.locationInfoRow}>
+                  <Ionicons name="location-sharp" size={22} color={Colors.primary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.locationTitle}>
+                      {effectiveAddress}
+                    </Text>
+                    <Text style={styles.locationSubtitle}>
+                      Official garage & vehicle meetup point for this host.
+                    </Text>
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.directionsButton}
+                  onPress={handleViewLocationInApp}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="map-outline" size={16} color={Colors.dark} />
+                  <Text style={styles.directionsButtonText}>View Location on Map</Text>
+                </TouchableOpacity>
               </View>
             </View>
 
@@ -196,8 +307,9 @@ export default function OperatorProfileScreen() {
         }
         ListEmptyComponent={
           <View style={styles.emptyWrap}>
-            <Ionicons name="car-outline" size={44} color={Colors.secondary} />
-            <Text style={styles.emptyText}>No vehicles currently listed.</Text>
+            <Ionicons name="car-outline" size={48} color={Colors.secondary} />
+            <Text style={styles.emptyText}>No vehicles currently listed</Text>
+            <Text style={styles.emptySubtext}>This host has no active vehicle listings available at the moment.</Text>
           </View>
         }
         renderItem={({ item }) => {
@@ -451,6 +563,57 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
     marginTop: 2,
   },
+  sectionDivider: {
+    height: 1,
+    backgroundColor: Colors.divider,
+    marginVertical: Spacing.md,
+  },
+  sectionHeading: {
+    fontFamily: FontFamily.bold,
+    fontSize: 15,
+    color: Colors.dark,
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  locationCard: {
+    backgroundColor: Colors.inputBackground,
+    borderRadius: 16,
+    padding: Spacing.md,
+    marginTop: 4,
+    gap: 12,
+  },
+  locationInfoRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  locationTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 13,
+    color: Colors.dark,
+  },
+  locationSubtitle: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11,
+    color: Colors.secondary,
+    marginTop: 2,
+  },
+  directionsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.logoBackground,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 6,
+  },
+  directionsButtonText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 12,
+    color: Colors.dark,
+  },
   dividerLine: {
     height: 1,
     backgroundColor: Colors.divider,
@@ -470,6 +633,27 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.secondary,
     marginTop: 8,
+  },
+  emptySubtext: {
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    color: Colors.secondary,
+    textAlign: "center",
+    marginTop: 4,
+    paddingHorizontal: 24,
+    lineHeight: 18,
+  },
+  backBtnAction: {
+    marginTop: 18,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+  },
+  backBtnText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 13,
+    color: Colors.white,
   },
   vehicleCard: {
     flexDirection: "row",

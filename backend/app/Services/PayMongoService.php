@@ -261,7 +261,7 @@ class PayMongoService
         // Notify Host & Renter
         Notification::create([
             'user_id' => $booking->operator_id,
-            'title' => '💳 GCash Reservation Paid',
+            'title' => 'GCash Reservation Paid',
             'message' => "Renter {$refundName} paid ₱" . number_format($booking->reservation_fee, 2) . " via GCash (Ref: {$paymentRef}). Please verify & approve booking #{$booking->id}.",
             'type' => 'success',
             'action_url' => '/operator-bookings',
@@ -269,7 +269,7 @@ class PayMongoService
 
         Notification::create([
             'user_id' => $booking->renter_id,
-            'title' => '✅ Reservation Payment Received',
+            'title' => 'Reservation Payment Received',
             'message' => "Your GCash payment of ₱" . number_format($booking->reservation_fee, 2) . " was verified. Host was notified to approve your trip schedule.",
             'type' => 'success',
             'action_url' => '/(tabs)/bookings',

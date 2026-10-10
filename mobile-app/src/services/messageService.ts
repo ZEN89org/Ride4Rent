@@ -2,6 +2,7 @@ import api from "@/services/api";
 
 export interface BookingContext {
   id: number;
+  vehicle_id?: number;
   vehicle_name: string;
   vehicle_image?: string | null;
   start_date?: string | null;

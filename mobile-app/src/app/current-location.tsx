@@ -625,26 +625,11 @@ const map = L.map(
 
 
 L.tileLayer(
-  "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+  "https://tile.openstreetmap.org/{z}/{y}/{x}.png",
   {
-    maxNativeZoom: 16,
     maxZoom: 19,
     minZoom: 3,
-    attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
-    keepBuffer: 6,
-    updateWhenZooming: false,
-    updateWhenIdle: true,
-    updateInterval: 150,
-  }
-).addTo(map);
-
-// Add clear street labels layer on top
-L.tileLayer(
-  "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
-  {
-    maxNativeZoom: 16,
-    maxZoom: 19,
-    minZoom: 3,
+    attribution: '&copy; OpenStreetMap contributors',
     keepBuffer: 6,
     updateWhenZooming: false,
     updateWhenIdle: true,

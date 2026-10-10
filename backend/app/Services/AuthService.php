@@ -115,6 +115,8 @@ if (
         'street_address' => $data['street_address'],
         'barangay' => $data['barangay'] ?? null,
         'municipality' => $data['municipality'],
+        'latitude' => isset($data['latitude']) && is_numeric($data['latitude']) ? (float) $data['latitude'] : null,
+        'longitude' => isset($data['longitude']) && is_numeric($data['longitude']) ? (float) $data['longitude'] : null,
 
         'government_id_front' => $governmentIdFront,
         'government_id_back' => $governmentIdBack,

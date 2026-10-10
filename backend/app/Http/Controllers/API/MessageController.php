@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Message;
 use App\Models\User;
+use App\Models\Vehicle;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -49,7 +50,7 @@ class MessageController extends Controller
 
             $displayMsg = $lastMsg?->message;
             if (!$displayMsg && $lastMsg?->image_url) {
-                $displayMsg = '📷 Sent a photo';
+                $displayMsg = 'Sent a photo';
             }
 
             $conversations[] = [
@@ -75,8 +76,16 @@ class MessageController extends Controller
     /**
      * Get chat messages between current user and target user
      */
-    public function thread(Request $request, int $otherUserId): JsonResponse
+    public function thread(Request $request, $otherUserId): JsonResponse
     {
+        if (!is_numeric($otherUserId)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid user ID.',
+            ], 404);
+        }
+
+        $otherUserId = (int) $otherUserId;
         $userId = $request->user()->id;
         $host = $request->getSchemeAndHttpHost();
 
@@ -129,6 +138,7 @@ class MessageController extends Controller
         if ($booking) {
             $bookingContext = [
                 'id' => $booking->id,
+                'vehicle_id' => $booking->vehicle_id,
                 'vehicle_name' => $booking->vehicle?->name ?? 'Vehicle',
                 'vehicle_image' => $booking->vehicle?->cover_photo ? (str_starts_with($booking->vehicle->cover_photo, 'http') ? $booking->vehicle->cover_photo : $host . '/storage/' . $booking->vehicle->cover_photo) : null,
                 'start_date' => $booking->start_date ? $booking->start_date->format('Y-m-d') : null,
@@ -169,7 +179,7 @@ class MessageController extends Controller
             'message' => ['nullable', 'string', 'max:1500'],
             'image' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:10240'],
             'image_base64' => ['nullable', 'string'],
-            'vehicle_id' => ['nullable', 'exists:vehicles,id'],
+            'vehicle_id' => ['nullable'],
         ]);
 
         if (empty($validated['message']) && !$request->hasFile('image') && empty($validated['image_base64'])) {
@@ -192,10 +202,18 @@ class MessageController extends Controller
             }
         }
 
+        // Gracefully resolve vehicle_id only if valid
+        $vehicleId = null;
+        if (!empty($validated['vehicle_id']) && is_numeric($validated['vehicle_id'])) {
+            if (Vehicle::where('id', (int) $validated['vehicle_id'])->exists()) {
+                $vehicleId = (int) $validated['vehicle_id'];
+            }
+        }
+
         $msg = Message::create([
             'sender_id' => $request->user()->id,
             'receiver_id' => $validated['receiver_id'],
-            'vehicle_id' => $validated['vehicle_id'] ?? null,
+            'vehicle_id' => $vehicleId,
             'message' => $validated['message'] ?? '',
             'image_url' => $imagePath,
             'is_read' => false,

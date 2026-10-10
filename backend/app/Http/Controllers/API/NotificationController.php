@@ -9,9 +9,25 @@ use Illuminate\Http\Request;
 
 class NotificationController extends Controller
 {
+    protected array $excludedTitles = [
+        'Welcome Back',
+        'Copied',
+        'Test Alert Sent',
+        'Invalid Number',
+        'Daily Rate Required',
+        'Photos Required',
+        'Upload Failed',
+        'Message Error',
+        'Success',
+        'Deleted',
+        'Payment Setup Saved',
+        'HELLO!',
+    ];
+
     public function index(Request $request): JsonResponse
     {
         $notifications = Notification::where('user_id', $request->user()->id)
+            ->whereNotIn('title', $this->excludedTitles)
             ->latest()
             ->take(50)
             ->get()
@@ -47,6 +63,14 @@ class NotificationController extends Controller
         $title = $validated['title'];
         $message = $validated['message'] ?? $validated['title'];
         $type = $validated['type'] ?? 'info';
+
+        // Do not persist trivial toasts or UI action errors
+        if (in_array($title, $this->excludedTitles)) {
+            return response()->json([
+                'success' => true,
+                'data' => null,
+            ], 200);
+        }
 
         // Deduplicate within 5 seconds for the same user & title
         $existing = Notification::where('user_id', $userId)
@@ -97,6 +121,7 @@ class NotificationController extends Controller
     public function unreadCount(Request $request): JsonResponse
     {
         $count = Notification::where('user_id', $request->user()->id)
+            ->whereNotIn('title', $this->excludedTitles)
             ->where('is_read', false)
             ->count();
 

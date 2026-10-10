@@ -48,6 +48,14 @@ class AdminController extends Controller
             'reviewed_at' => now(),
         ]);
 
+        \App\Models\Notification::create([
+            'user_id' => $user->id,
+            'title' => 'Operator Account Approved',
+            'message' => 'Congratulations! Your operator account and business permits have been verified and activated.',
+            'type' => 'success',
+            'action_url' => '/operator-profile',
+        ]);
+
         return response()->json([
             'success' => true,
             'message' => 'Operator approved successfully.',
@@ -73,6 +81,14 @@ class AdminController extends Controller
         $user->operatorProfile?->update([
             'rejection_reason' => $validated['rejection_reason'],
             'reviewed_at' => now(),
+        ]);
+
+        \App\Models\Notification::create([
+            'user_id' => $user->id,
+            'title' => 'Operator Application Rejected',
+            'message' => 'Your operator application was not approved: ' . $validated['rejection_reason'],
+            'type' => 'error',
+            'action_url' => '/operator-profile',
         ]);
 
         return response()->json([
@@ -118,7 +134,7 @@ class AdminController extends Controller
 
         \App\Models\Notification::create([
             'user_id' => $user->id,
-            'title' => "Driver's License Approved 🎉",
+            'title' => "Driver's License Approved",
             'message' => 'Your driver\'s license has been verified by the Admin. You now have full booking privileges!',
             'type' => 'success',
             'action_url' => '/profile',

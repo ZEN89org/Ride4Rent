@@ -14,6 +14,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import AppBottomSheet from "@/components/common/AppBottomSheet";
+import BirthdatePicker from "@/components/common/BirthdatePicker";
 import PrimaryButton from "@/components/common/PrimaryButton";
 import { Colors } from "@/constants/colors";
 import {
@@ -119,6 +121,23 @@ export default function OperatorOwnerInfo({
     );
   };
 
+  const validateAge = () => {
+    if (!dateMonth || !dateDay || !dateYear) {
+      return false;
+    }
+
+    const y = Number(dateYear);
+    const m = Number(dateMonth);
+    const d = Number(dateDay);
+    const today = new Date();
+    let age = today.getFullYear() - y;
+    const mDiff = today.getMonth() + 1 - m;
+    if (mDiff < 0 || (mDiff === 0 && today.getDate() < d)) {
+      age--;
+    }
+    return age >= 18;
+  };
+
   const formatDate = () => {
     if (!validateDate()) {
       return "";
@@ -184,6 +203,9 @@ export default function OperatorOwnerInfo({
     } else if (!validateDate()) {
       validationErrors.dateOfBirth =
         "Please select a valid date of birth.";
+    } else if (!validateAge()) {
+      validationErrors.dateOfBirth =
+        "You must be at least 18 years old to register.";
     }
 
     if (!gender) {
@@ -221,11 +243,7 @@ export default function OperatorOwnerInfo({
 
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
-        behavior={
-          Platform.OS === "ios"
-            ? "padding"
-            : "height"
-        }
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
           style={styles.scroll}
@@ -283,18 +301,19 @@ export default function OperatorOwnerInfo({
           </View>
 
           <View style={styles.row}>
-            <DropdownField
-              label="Date of Birth"
-              value={
-                formatDate() ||
-                "Select your birth date"
-              }
-              onPress={() => {
-                clearError("dateOfBirth");
-                setShowDatePicker(true);
-              }}
-              error={errors.dateOfBirth}
-            />
+            <View style={{ flex: 1 }}>
+              <BirthdatePicker
+                label="Date of Birth"
+                value={formatDate()}
+                onChange={(_, parts) => {
+                  setDateYear(parts.year);
+                  setDateMonth(parts.month);
+                  setDateDay(parts.day);
+                  clearError("dateOfBirth");
+                }}
+                error={errors.dateOfBirth}
+              />
+            </View>
 
             <DropdownField
               label="Gender"
@@ -318,27 +337,6 @@ export default function OperatorOwnerInfo({
           <View style={styles.bottomSpacing} />
         </ScrollView>
       </KeyboardAvoidingView>
-
-      <DatePickerModal
-        visible={showDatePicker}
-        month={dateMonth}
-        day={dateDay}
-        year={dateYear}
-        onClose={() =>
-          setShowDatePicker(false)
-        }
-        onConfirm={(
-          month,
-          day,
-          year
-        ) => {
-          setDateMonth(month);
-          setDateDay(day);
-          setDateYear(year);
-          setShowDatePicker(false);
-          clearError("dateOfBirth");
-        }}
-      />
 
       <GenderPickerModal
         visible={showGenderPicker}
@@ -666,76 +664,63 @@ function GenderPickerModal({
   onSelect,
 }: GenderPickerModalProps) {
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      statusBarTranslucent={true}
-      onRequestClose={onClose}
-    >
-      <View style={styles.modalContainer}>
-        <Pressable
-          style={styles.modalBackdrop}
-          onPress={onClose}
-        />
+    <AppBottomSheet visible={visible} onClose={onClose}>
+      <View style={{ paddingBottom: 16 }}>
+        <Text style={styles.pickerTitle}>
+          Select Gender
+        </Text>
 
-        <View style={styles.genderCard}>
-          <Text style={styles.pickerTitle}>
-            Select Gender
-          </Text>
+        <Text style={styles.pickerSubtitle}>
+          Choose the option that best
+          describes you.
+        </Text>
 
-          <Text style={styles.pickerSubtitle}>
-            Choose the option that best
-            describes you.
-          </Text>
-
-          {genders.map((item) => (
-            <Pressable
-              key={item}
-              style={[
-                styles.genderOption,
-                item === value &&
-                  styles.genderOptionActive,
-              ]}
-              onPress={() =>
-                onSelect(item)
-              }
-            >
-              <Text
-                style={[
-                  styles.genderText,
-                  item === value &&
-                    styles.genderTextActive,
-                ]}
-              >
-                {item}
-              </Text>
-
-              {item === value && (
-                <Ionicons
-                  name="checkmark"
-                  size={20}
-                  color={Colors.primary}
-                />
-              )}
-            </Pressable>
-          ))}
-
+        {genders.map((item) => (
           <Pressable
-            style={styles.modalCancel}
-            onPress={onClose}
+            key={item}
+            style={[
+              styles.genderOption,
+              item === value &&
+                styles.genderOptionActive,
+            ]}
+            onPress={() =>
+              onSelect(item)
+            }
           >
             <Text
-              style={
-                styles.modalCancelText
-              }
+              style={[
+                styles.genderText,
+                item === value &&
+                  styles.genderTextActive,
+              ]}
             >
-              Cancel
+              {item}
             </Text>
+
+            {item === value && (
+              <Ionicons
+                name="checkmark"
+                size={20}
+                color={Colors.primary}
+              />
+            )}
           </Pressable>
-        </View>
+        ))}
+
+        <Pressable
+          style={styles.modalCancel}
+          onPress={onClose}
+        >
+          <Text
+            style={
+              styles.modalCancelText
+            }
+          >
+            Cancel
+          </Text>
+        </Pressable>
       </View>
-    </Modal>
+    </AppBottomSheet>
   );
 }
 

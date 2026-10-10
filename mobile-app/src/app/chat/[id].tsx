@@ -5,9 +5,9 @@ import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -19,10 +19,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { AppBottomSheet } from "@/components/common/AppBottomSheet";
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";
 import { useAppToast } from "@/context/ToastContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import { copyToClipboard } from "@/utils/clipboard";
 import {
   BookingContext,
   ChatThreadMessage,
@@ -34,7 +36,7 @@ import {
 export default function ChatThreadScreen() {
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
   const { user } = useAuth();
-  const { showSuccess, showError } = useAppToast();
+  const { showError } = useAppToast();
 
   const [chatUser, setChatUser] = useState<any>(null);
   const [bookingContext, setBookingContext] = useState<BookingContext | null>(null);
@@ -44,6 +46,7 @@ export default function ChatThreadScreen() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [selectedViewerImage, setSelectedViewerImage] = useState<string | null>(null);
+  const [selectedMessageForAction, setSelectedMessageForAction] = useState<ChatThreadMessage | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
 
@@ -123,7 +126,7 @@ export default function ChatThreadScreen() {
         receiver_id: id,
         message: textToSend || undefined,
         image_base64: base64Img,
-        vehicle_id: bookingContext?.id,
+        vehicle_id: bookingContext?.vehicle_id,
       });
 
       setMessages((prev) =>
@@ -137,6 +140,7 @@ export default function ChatThreadScreen() {
     }
   };
 
+  // Multiple Image Selection (Messenger Inspiration)
   const handlePickImage = async () => {
     try {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -147,16 +151,57 @@ export default function ChatThreadScreen() {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
+        allowsMultipleSelection: true,
+        selectionLimit: 10,
         quality: 0.7,
         base64: true,
       });
 
-      if (!result.canceled && result.assets[0]?.base64) {
-        handleSendMessage("", result.assets[0].base64);
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        handleSendMultipleImages(result.assets);
       }
     } catch (e) {
       showError("Error", "Could not pick image.");
+    }
+  };
+
+  const handleSendMultipleImages = async (assets: ImagePicker.ImagePickerAsset[]) => {
+    if (!assets || assets.length === 0) return;
+    const textToSend = inputMessage.trim();
+    setInputMessage("");
+
+    for (let i = 0; i < assets.length; i++) {
+      const asset = assets[i];
+      if (!asset.base64) continue;
+
+      const tempId = `temp_img_${Date.now()}_${i}`;
+      const caption = i === 0 && textToSend ? textToSend : "";
+
+      const optimisticMsg: ChatThreadMessage = {
+        id: tempId,
+        sender: "user",
+        text: caption,
+        image_url: `data:image/jpeg;base64,${asset.base64}`,
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        created_at: new Date().toISOString(),
+      };
+
+      setMessages((prev) => [...prev, optimisticMsg]);
+
+      // Fire off message send
+      sendMessage({
+        receiver_id: id,
+        message: caption || undefined,
+        image_base64: asset.base64,
+        vehicle_id: bookingContext?.vehicle_id,
+      })
+        .then((res) => {
+          setMessages((prev) => prev.map((m) => (m.id === tempId ? res : m)));
+        })
+        .catch((err) => {
+          console.log("Image send failed:", err);
+          setMessages((prev) => prev.filter((m) => m.id !== tempId));
+        });
     }
   };
 
@@ -182,30 +227,28 @@ export default function ChatThreadScreen() {
     }
   };
 
-  const handleDeleteMessage = (msg: ChatThreadMessage) => {
-    if (msg.sender !== "user") return;
+  // Messenger-style subtle unsend logic (no annoying success modals)
+  const handleUnsendMessage = async () => {
+    if (!selectedMessageForAction) return;
+    const targetMsg = selectedMessageForAction;
+    setSelectedMessageForAction(null);
 
-    Alert.alert(
-      "Delete Message",
-      "Are you sure you want to delete this message?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setMessages((prev) => prev.filter((m) => m.id !== msg.id));
-              await deleteMessage(msg.id);
-              showSuccess("Message Deleted", "Your message was removed.");
-            } catch (e: any) {
-              showError("Error", e.response?.data?.message || "Could not delete message.");
-              loadThreadSilent();
-            }
-          },
-        },
-      ]
-    );
+    // Optimistically remove from list immediately
+    setMessages((prev) => prev.filter((m) => m.id !== targetMsg.id));
+
+    try {
+      await deleteMessage(targetMsg.id);
+    } catch (e: any) {
+      console.log("Could not delete message:", e);
+      loadThreadSilent();
+    }
+  };
+
+  const handleCopyMessage = async () => {
+    if (selectedMessageForAction?.text) {
+      await copyToClipboard(selectedMessageForAction.text);
+    }
+    setSelectedMessageForAction(null);
   };
 
   const displayName =
@@ -214,53 +257,80 @@ export default function ChatThreadScreen() {
     name ||
     (user?.role === "operator" ? "Customer" : "Vehicle Host");
 
+  const operatorPhone = chatUser?.business_contact_number || chatUser?.mobile_number;
   const paymentInfo = bookingContext?.operator_payment_info;
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.container}>
-      {/* Header */}
+      {/* Modern Messenger-Inspired Header */}
       <View style={styles.headerBar}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+          activeOpacity={0.7}
+        >
           <Ionicons name="arrow-back" size={22} color={Colors.dark} />
         </TouchableOpacity>
 
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {displayName}
-          </Text>
-          <View style={styles.onlineStatusRow}>
-            <View style={styles.onlineDot} />
-            <Text style={styles.onlineStatusText}>
-              {chatUser?.role === "operator" ? "Verified Host" : "Direct Message"}
-            </Text>
+        <TouchableOpacity
+          style={styles.headerCenter}
+          onPress={() => chatUser?.role === "operator" && router.push(`/operator/${id}` as any)}
+          activeOpacity={chatUser?.role === "operator" ? 0.75 : 1}
+        >
+          {/* Avatar with Online Badge */}
+          <View style={styles.avatarWrapper}>
+            {chatUser?.profile_photo ? (
+              <Image source={{ uri: chatUser.profile_photo }} style={styles.headerAvatar} contentFit="cover" />
+            ) : (
+              <View style={styles.avatarFallback}>
+                <Text style={styles.avatarInitial}>
+                  {(displayName || "U")[0]?.toUpperCase()}
+                </Text>
+              </View>
+            )}
+            <View style={styles.onlineBadge} />
           </View>
-        </View>
 
-        {chatUser?.role === "operator" ? (
-          <TouchableOpacity
-            style={styles.profileButton}
-            onPress={() => router.push(`/operator/${id}` as any)}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="information-circle-outline" size={24} color={Colors.dark} />
-          </TouchableOpacity>
-        ) : (
-          <View style={{ width: 40 }} />
-        )}
+          <View style={styles.headerTextWrap}>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {displayName}
+            </Text>
+            <View style={styles.statusRow}>
+              <Text style={styles.headerSubtitle} numberOfLines={1}>
+                {chatUser?.role === "operator" ? "Verified Host • Operator" : "Active now"}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        {/* Right Header Actions */}
+        <View style={styles.headerActionsRow}>
+          {operatorPhone ? (
+            <TouchableOpacity
+              style={styles.headerIconBtn}
+              onPress={() => Linking.openURL(`tel:${operatorPhone}`)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="call" size={18} color={Colors.dark} />
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: 8 }} />
+          )}
+        </View>
       </View>
 
-      {/* Booking & Operator Payment Details Banner */}
+      {/* Active Booking & Payment Context Card (collapsible) */}
       {bookingContext && (
         <View style={styles.contextBanner}>
           <TouchableOpacity
             style={styles.contextHeader}
-            onPress={() => setShowBookingBanner((prev) => !prev)}
+            onPress={() => setShowBookingBanner(!showBookingBanner)}
             activeOpacity={0.8}
           >
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1 }}>
-              <Ionicons name="receipt-outline" size={17} color="#854D0E" />
+              <Ionicons name="car-sport" size={17} color="#854D0E" />
               <Text style={styles.contextTitle} numberOfLines={1}>
-                Booking #{bookingContext.id}: {bookingContext.vehicle_name}
+                {bookingContext.vehicle_name}
               </Text>
             </View>
             <Ionicons
@@ -272,53 +342,50 @@ export default function ChatThreadScreen() {
 
           {showBookingBanner && (
             <View style={styles.contextBody}>
-              {/* Amounts Breakdown */}
               <View style={styles.amountsRow}>
                 <View style={styles.amountItem}>
                   <Text style={styles.amountLabel}>Total Rental</Text>
-                  <Text style={styles.amountVal}>₱{Number(bookingContext.total_price).toLocaleString()}</Text>
+                  <Text style={styles.amountVal}>₱{bookingContext.total_price.toLocaleString()}</Text>
                 </View>
                 <View style={styles.amountDivider} />
                 <View style={styles.amountItem}>
-                  <Text style={styles.amountLabel}>Deposit Due</Text>
-                  <Text style={[styles.amountVal, { color: "#D97706" }]}>
-                    ₱{Number(bookingContext.reservation_fee).toLocaleString()}
+                  <Text style={styles.amountLabel}>Downpayment</Text>
+                  <Text style={[styles.amountVal, { color: "#16A34A" }]}>
+                    ₱{bookingContext.reservation_fee.toLocaleString()}
                   </Text>
                 </View>
                 <View style={styles.amountDivider} />
                 <View style={styles.amountItem}>
-                  <Text style={styles.amountLabel}>Handover Balance</Text>
-                  <Text style={[styles.amountVal, { color: "#16A34A" }]}>
-                    ₱{Number(bookingContext.balance_due).toLocaleString()}
+                  <Text style={styles.amountLabel}>Balance Due</Text>
+                  <Text style={[styles.amountVal, { color: "#DC2626" }]}>
+                    ₱{bookingContext.balance_due.toLocaleString()}
                   </Text>
                 </View>
               </View>
 
-              {/* Operator Payment Setup Card */}
-              {paymentInfo && (paymentInfo.account_number || paymentInfo.account_name) && (
+              {paymentInfo && (
                 <View style={styles.paymentInfoCard}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                    <Ionicons name="card" size={15} color="#166534" />
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 4 }}>
+                    <Ionicons name="shield-checkmark" size={14} color="#166534" />
                     <Text style={styles.paymentInfoTitle}>
-                      Host Payment Details (Settle Here)
+                      Host Payment Details ({paymentInfo.business_name || "Verified"})
                     </Text>
                   </View>
 
-                  {paymentInfo.account_name ? (
+                  {paymentInfo.account_name && (
                     <View style={styles.infoRow}>
                       <Text style={styles.infoLabel}>Account Name:</Text>
                       <Text style={styles.infoValue}>{paymentInfo.account_name}</Text>
                     </View>
-                  ) : null}
-
-                  {paymentInfo.account_number ? (
+                  )}
+                  {paymentInfo.account_number && (
                     <View style={styles.infoRow}>
-                      <Text style={styles.infoLabel}>Account / Mobile:</Text>
-                      <Text style={[styles.infoValue, { color: "#166534", fontFamily: FontFamily.bold }]}>
+                      <Text style={styles.infoLabel}>GCash / Bank No:</Text>
+                      <Text style={[styles.infoValue, { fontFamily: FontFamily.bold }]}>
                         {paymentInfo.account_number}
                       </Text>
                     </View>
-                  ) : null}
+                  )}
 
                   {paymentInfo.qr_code_url ? (
                     <TouchableOpacity
@@ -326,17 +393,13 @@ export default function ChatThreadScreen() {
                       onPress={() => setSelectedViewerImage(paymentInfo.qr_code_url || null)}
                       activeOpacity={0.8}
                     >
-                      <Image
-                        source={{ uri: paymentInfo.qr_code_url }}
-                        style={styles.qrThumb}
-                        contentFit="contain"
-                      />
+                      <Image source={{ uri: paymentInfo.qr_code_url }} style={styles.qrThumb} />
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontFamily: FontFamily.bold, fontSize: 12, color: "#0F172A" }}>
-                          Tap to view & scan Host QR Code
+                        <Text style={[styles.infoLabel, { fontFamily: FontFamily.medium }]}>
+                          Payment QR Code attached
                         </Text>
-                        <Text style={{ fontFamily: FontFamily.regular, fontSize: 11, color: "#64748B" }}>
-                          GCash / Maya / Bank payment QR
+                        <Text style={{ fontSize: 10, color: Colors.secondary }}>
+                          Tap to view & scan QR
                         </Text>
                       </View>
                       <Ionicons name="expand-outline" size={16} color="#0F172A" />
@@ -351,7 +414,7 @@ export default function ChatThreadScreen() {
 
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
       >
         {loading ? (
@@ -393,7 +456,8 @@ export default function ChatThreadScreen() {
                       styles.messageBubble,
                       isUser ? styles.userBubble : styles.operatorBubble,
                     ]}
-                    onLongPress={() => isUser && handleDeleteMessage(item)}
+                    onLongPress={() => setSelectedMessageForAction(item)}
+                    delayLongPress={220}
                     activeOpacity={0.92}
                   >
                     {/* Image Attachment in Chat */}
@@ -423,17 +487,8 @@ export default function ChatThreadScreen() {
                       </Text>
                     ) : null}
 
-                    {/* Time & Delete */}
+                    {/* Time & Delivery Status Indicator */}
                     <View style={styles.bubbleFooter}>
-                      {isUser && (
-                        <TouchableOpacity
-                          onPress={() => handleDeleteMessage(item)}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          style={{ marginRight: 6 }}
-                        >
-                          <Ionicons name="trash-outline" size={12} color="rgba(255,255,255,0.75)" />
-                        </TouchableOpacity>
-                      )}
                       <Text
                         style={[
                           styles.timeText,
@@ -442,6 +497,14 @@ export default function ChatThreadScreen() {
                       >
                         {item.time}
                       </Text>
+                      {isUser && (
+                        <Ionicons
+                          name="checkmark-done"
+                          size={13}
+                          color="#FEC103"
+                          style={{ marginLeft: 4 }}
+                        />
+                      )}
                     </View>
                   </TouchableOpacity>
                 </View>
@@ -457,9 +520,9 @@ export default function ChatThreadScreen() {
             <Ionicons name="camera-outline" size={22} color={Colors.dark} />
           </TouchableOpacity>
 
-          {/* Gallery Button */}
+          {/* Multiple Gallery Photos Button */}
           <TouchableOpacity style={styles.attachButton} onPress={handlePickImage} activeOpacity={0.7}>
-            <Ionicons name="image-outline" size={22} color={Colors.dark} />
+            <Ionicons name="images-outline" size={21} color={Colors.dark} />
           </TouchableOpacity>
 
           <TextInput
@@ -492,6 +555,78 @@ export default function ChatThreadScreen() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Messenger-Inspired Message Action Sheet (Delete / Unsend & Copy) */}
+      <AppBottomSheet
+        visible={!!selectedMessageForAction}
+        onClose={() => setSelectedMessageForAction(null)}
+        position="bottom"
+        showHandle={true}
+        sheetStyle={styles.actionSheet}
+      >
+        <View style={styles.actionSheetContent}>
+          {selectedMessageForAction?.text ? (
+            <View style={styles.actionPreviewWrap}>
+              <Text style={styles.actionPreviewText} numberOfLines={2}>
+                "{selectedMessageForAction.text}"
+              </Text>
+            </View>
+          ) : null}
+
+          {selectedMessageForAction?.text ? (
+            <TouchableOpacity
+              style={styles.actionItem}
+              onPress={handleCopyMessage}
+              activeOpacity={0.7}
+            >
+              <View style={styles.actionIcon}>
+                <Ionicons name="copy-outline" size={19} color={Colors.dark} />
+              </View>
+              <Text style={styles.actionLabel}>Copy Text</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {selectedMessageForAction?.image_url ? (
+            <TouchableOpacity
+              style={styles.actionItem}
+              onPress={() => {
+                const img = selectedMessageForAction.image_url;
+                setSelectedMessageForAction(null);
+                setSelectedViewerImage(img || null);
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.actionIcon}>
+                <Ionicons name="expand-outline" size={19} color={Colors.dark} />
+              </View>
+              <Text style={styles.actionLabel}>View Photo</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {selectedMessageForAction?.sender === "user" ? (
+            <TouchableOpacity
+              style={[styles.actionItem, { borderBottomWidth: 0 }]}
+              onPress={handleUnsendMessage}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.actionIcon, { backgroundColor: "#FEE2E2" }]}>
+                <Ionicons name="trash-outline" size={19} color="#EF4444" />
+              </View>
+              <Text style={[styles.actionLabel, { color: "#EF4444" }]}>
+                Unsend for Everyone
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+
+          <TouchableOpacity
+            style={styles.actionCancelButton}
+            onPress={() => setSelectedMessageForAction(null)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.actionCancelLabel}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </AppBottomSheet>
 
       {/* Fullscreen Image Viewer Modal */}
       <Modal
@@ -532,54 +667,94 @@ const styles = StyleSheet.create({
   headerBar: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
     backgroundColor: Colors.white,
     borderBottomWidth: 1,
     borderBottomColor: Colors.divider,
+    gap: 10,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: Colors.inputBackground,
     justifyContent: "center",
     alignItems: "center",
   },
   headerCenter: {
     flex: 1,
-    alignItems: "center",
-    marginHorizontal: Spacing.sm,
-  },
-  headerTitle: {
-    fontFamily: FontFamily.bold,
-    fontSize: 16,
-    color: Colors.dark,
-  },
-  onlineStatusRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    marginTop: 2,
+    gap: 10,
   },
-  onlineDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: "#10B981",
+  avatarWrapper: {
+    position: "relative",
   },
-  onlineStatusText: {
-    fontFamily: FontFamily.regular,
-    fontSize: 11,
-    color: Colors.secondary,
-  },
-  profileButton: {
+  headerAvatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    justifyContent: "center",
+    backgroundColor: "#F1F5F9",
+  },
+  avatarFallback: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#1A1A1A",
     alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarInitial: {
+    fontFamily: FontFamily.bold,
+    fontSize: 16,
+    color: "#FEC103",
+  },
+  onlineBadge: {
+    position: "absolute",
+    bottom: -1,
+    right: -1,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#10B981",
+    borderWidth: 2,
+    borderColor: Colors.white,
+  },
+  headerTextWrap: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  headerTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 15.5,
+    color: Colors.dark,
+    letterSpacing: -0.2,
+  },
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 1,
+  },
+  headerSubtitle: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11.5,
+    color: Colors.secondary,
+  },
+  headerActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  headerIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#F8FAFC",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   contextBanner: {
     backgroundColor: "#FEF9C3",
@@ -710,7 +885,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   messageBubbleWrap: {
-    marginVertical: 5,
+    marginVertical: 4,
     maxWidth: "82%",
   },
   userBubbleWrap: {
@@ -720,24 +895,34 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   messageBubble: {
-    borderRadius: 18,
-    paddingHorizontal: 12,
+    paddingHorizontal: 13,
     paddingVertical: 9,
   },
   userBubble: {
-    backgroundColor: Colors.primary,
+    backgroundColor: "#1A1A1A",
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    borderBottomLeftRadius: 18,
     borderBottomRightRadius: 4,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    elevation: 2,
   },
   operatorBubble: {
-    backgroundColor: Colors.white,
+    backgroundColor: "#F1F5F9",
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
     borderBottomLeftRadius: 4,
+    borderBottomRightRadius: 18,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: "#E2E8F0",
   },
   chatImage: {
-    width: 210,
-    height: 160,
-    borderRadius: 12,
+    width: 220,
+    height: 165,
+    borderRadius: 14,
     backgroundColor: "#E2E8F0",
   },
   messageText: {
@@ -746,10 +931,10 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   userMessageText: {
-    color: Colors.white,
+    color: "#FFFFFF",
   },
   operatorMessageText: {
-    color: Colors.dark,
+    color: "#0F172A",
   },
   bubbleFooter: {
     flexDirection: "row",
@@ -762,10 +947,10 @@ const styles = StyleSheet.create({
     fontSize: 10,
   },
   userTimeText: {
-    color: "rgba(255, 255, 255, 0.8)",
+    color: "rgba(255, 255, 255, 0.65)",
   },
   operatorTimeText: {
-    color: Colors.secondary,
+    color: "#64748B",
   },
   inputContainer: {
     flexDirection: "row",
@@ -778,9 +963,9 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   attachButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: "#F1F5F9",
     alignItems: "center",
     justifyContent: "center",
@@ -804,10 +989,65 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   sendButtonActive: {
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.dark,
   },
   sendButtonDisabled: {
     backgroundColor: Colors.inputBackground,
+  },
+  actionSheet: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+  },
+  actionSheetContent: {
+    width: "100%",
+  },
+  actionPreviewWrap: {
+    backgroundColor: "#F8FAFC",
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  actionPreviewText: {
+    fontFamily: FontFamily.regular,
+    fontSize: 13,
+    color: "#475569",
+    fontStyle: "italic",
+  },
+  actionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+    gap: 12,
+  },
+  actionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actionLabel: {
+    fontFamily: FontFamily.medium,
+    fontSize: 14.5,
+    color: Colors.dark,
+  },
+  actionCancelButton: {
+    marginTop: 12,
+    backgroundColor: "#F1F5F9",
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actionCancelLabel: {
+    fontFamily: FontFamily.bold,
+    fontSize: 14,
+    color: "#475569",
   },
   imageViewerOverlay: {
     flex: 1,

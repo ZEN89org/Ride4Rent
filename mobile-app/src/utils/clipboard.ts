@@ -5,16 +5,16 @@ import { Platform, Share } from "react-native";
  * Gracefully falls back if native clipboard modules (e.g. ExpoClipboard)
  * are not linked in the current binary build, preventing app crashes.
  */
-export async function copyToClipboard(text: string): Promise<boolean> {
+export async function copyToClipboard(text: string, cleanSpaces = false): Promise<boolean> {
   if (!text) return false;
-  const cleanText = text.replace(/\s+/g, "");
+  const content = cleanSpaces ? text.replace(/\s+/g, "") : text;
 
   // 1. Try expo-clipboard lazily with safe catch
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const ExpoClipboard = require("expo-clipboard");
     if (ExpoClipboard && typeof ExpoClipboard.setStringAsync === "function") {
-      await ExpoClipboard.setStringAsync(cleanText);
+      await ExpoClipboard.setStringAsync(content);
       return true;
     }
   } catch {
@@ -24,7 +24,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
   // 2. Try Web / DOM navigator.clipboard if running in web context
   try {
     if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(cleanText);
+      await navigator.clipboard.writeText(content);
       return true;
     }
   } catch {
@@ -36,7 +36,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const RN = require("react-native");
     if (RN.Clipboard && typeof RN.Clipboard.setString === "function") {
-      RN.Clipboard.setString(cleanText);
+      RN.Clipboard.setString(content);
       return true;
     }
   } catch {
@@ -46,8 +46,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
   // 4. Universal Fallback: Use native Share sheet which allows copying to clipboard on all Android & iOS devices
   try {
     await Share.share({
-      message: cleanText,
-      title: "Host Contact Number",
+      message: content,
     });
     return true;
   } catch {

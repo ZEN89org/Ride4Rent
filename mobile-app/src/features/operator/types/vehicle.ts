@@ -100,8 +100,9 @@ export interface VehicleFormData {
   pet_policy: string;
   additional_driver_policy: string;
   other_policies: string;
-  pickup_latitude: string;
-  pickup_longitude: string;
+  pickup_address?: string;
+  pickup_latitude?: string;
+  pickup_longitude?: string;
   features?: string[];
   description: string;
   imageUri?: string;

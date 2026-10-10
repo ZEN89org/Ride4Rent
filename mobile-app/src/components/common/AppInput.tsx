@@ -105,6 +105,8 @@ const styles = StyleSheet.create({
 
   errorInput: {
 
+    borderWidth: 1,
+
     borderColor: "#ff4d4f",
 
   },

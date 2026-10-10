@@ -1,9 +1,11 @@
 import {
   createContext,
   ReactNode,
+  useCallback,
   useEffect,
   useState,
 } from "react";
+import { AppState } from "react-native";
 
 import {
   clearAuth,
@@ -151,20 +153,67 @@ const initializeAuth = async () => {
     setUser(mergedUser);
   };
 
-  const refreshUser = async () => {
+  const refreshUser = useCallback(async () => {
     try {
       const response = await authService.getCurrentUser();
       const currentUser = response?.data ?? response?.user;
       if (currentUser) {
-        await saveUser(currentUser);
-        setUser(currentUser);
+        setUser((prevUser: any) => {
+          if (
+            prevUser &&
+            prevUser.id === currentUser.id &&
+            prevUser.account_status === currentUser.account_status &&
+            prevUser.license_verification_status === currentUser.license_verification_status &&
+            prevUser.role === currentUser.role &&
+            prevUser.first_name === currentUser.first_name &&
+            prevUser.last_name === currentUser.last_name &&
+            prevUser.profile_photo === currentUser.profile_photo &&
+            JSON.stringify(prevUser.operatorProfile || prevUser.operator_profile || {}) ===
+              JSON.stringify(currentUser.operatorProfile || currentUser.operator_profile || {})
+          ) {
+            return prevUser;
+          }
+          saveUser(currentUser).catch(() => {});
+          return currentUser;
+        });
         return currentUser;
       }
     } catch (error) {
       console.log("Failed to refresh user:", error);
     }
     return null;
-  };
+  }, []);
+
+  // Proactive background polling when account or driver license is pending moderation
+  useEffect(() => {
+    const isPending =
+      !!token &&
+      (user?.account_status === "pending" ||
+        user?.license_verification_status === "pending");
+
+    if (!isPending) return;
+
+    const intervalId = setInterval(() => {
+      refreshUser().catch(() => {});
+    }, 10000);
+
+    return () => clearInterval(intervalId);
+  }, [token, user?.account_status, user?.license_verification_status, refreshUser]);
+
+  // Sync latest user standing whenever app returns to foreground/active
+  useEffect(() => {
+    if (!token) return;
+
+    const subscription = AppState.addEventListener("change", (nextAppState) => {
+      if (nextAppState === "active") {
+        refreshUser().catch(() => {});
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [token]);
 
   const isAuthenticated = !!token;
   const isGuest = !token;

@@ -166,7 +166,7 @@ class PaymentController extends Controller
             </button>
 
             <div class="secure-badge">
-                🔒 256-Bit Encrypted & Verified Server-to-Server
+                256-Bit Encrypted & Verified Server-to-Server
             </div>
         </div>
 

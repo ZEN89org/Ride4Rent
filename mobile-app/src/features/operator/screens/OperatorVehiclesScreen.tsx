@@ -20,11 +20,13 @@ import {
 } from "react-native";
 
 export default function OperatorVehiclesScreen() {
-  const { isOperatorPending } = useAuth();
+  const { user, isOperatorPending } = useAuth();
   const { showModal } = useAppToast();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  const profile = (user as any)?.operatorProfile ?? (user as any)?.operator_profile;
 
   const handleAddCar = () => {
     if (isOperatorPending) {
@@ -36,6 +38,26 @@ export default function OperatorVehiclesScreen() {
       );
       return;
     }
+
+    const hasPaymentSetup = Boolean(
+      profile?.account_number && String(profile.account_number).trim()
+    );
+    if (!hasPaymentSetup) {
+      showModal(
+        "Payment Setup Required",
+        "Please set up your GCash rental payment details first before listing a vehicle, so renters know where to send reservation fees.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Set Up Now",
+            onPress: () => router.push("/operator-profile" as any),
+          },
+        ],
+        "warning"
+      );
+      return;
+    }
+
     router.push("/operator-vehicle-upload" as any);
   };
 
@@ -85,6 +107,25 @@ export default function OperatorVehiclesScreen() {
               Your account is currently under review by the Admin. Vehicle listing will be enabled once your documents are approved.
             </Text>
           </View>
+        )}
+
+        {!Boolean(profile?.account_number && String(profile.account_number).trim()) && (
+          <TouchableOpacity
+            style={styles.paymentNoticeBanner}
+            onPress={() => router.push("/operator-profile" as any)}
+            activeOpacity={0.85}
+          >
+            <View style={styles.paymentNoticeIconCircle}>
+              <Ionicons name="card" size={16} color="#B45309" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.paymentNoticeTitle}>Rental Payment Not Set Up</Text>
+              <Text style={styles.paymentNoticeText}>
+                Set up your GCash details so you can list vehicles and receive reservation fees. Tap to configure.
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#B45309" />
+          </TouchableOpacity>
         )}
 
         {loading && !refreshing ? (
@@ -360,5 +401,36 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
     color: "#92400E",
+  },
+  paymentNoticeBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    backgroundColor: "#FFFBEB",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  paymentNoticeIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#FEF3C7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  paymentNoticeTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 13,
+    color: "#92400E",
+  },
+  paymentNoticeText: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11,
+    lineHeight: 15,
+    color: "#B45309",
+    marginTop: 2,
   },
 });

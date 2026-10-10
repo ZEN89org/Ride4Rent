@@ -31,7 +31,7 @@ class AuthenticationTest extends TestCase
             ->assertJsonPath('data.user.role', 'customer')
             ->assertJsonPath('data.user.mobile_number', '09171234567')
             ->assertJsonMissingPath('data.user.phone_number')
-            ->assertJsonMissingPath('data.user.profile_photo');
+            ->assertJsonPath('data.user.profile_photo', null);
 
         $this->assertDatabaseHas('users', [
             'email' => 'rina@example.com',
@@ -236,6 +236,8 @@ class AuthenticationTest extends TestCase
             'street_address' => '1 Test Street',
             'barangay' => 'Test Barangay',
             'municipality' => 'Test City',
+            'account_name' => 'Test Operator',
+            'account_number' => '09171111111',
         ]);
 
         return $operator;

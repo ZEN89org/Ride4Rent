@@ -90,6 +90,12 @@ export const registerOperator = async (
   formData.append("street_address", data.street_address);
   formData.append("barangay", data.barangay);
   formData.append("municipality", data.municipality);
+  if (data.latitude !== undefined && data.latitude !== null) {
+    formData.append("latitude", String(data.latitude));
+  }
+  if (data.longitude !== undefined && data.longitude !== null) {
+    formData.append("longitude", String(data.longitude));
+  }
 
   if (data.government_id_front) {
     formData.append("government_id_front", {

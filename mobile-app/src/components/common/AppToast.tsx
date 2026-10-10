@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useRef } from "react";
 import {
   Animated,
+  Modal,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -86,34 +87,53 @@ export function AppToast({
   };
 
   return (
-    <Animated.View
-      style={[
-        styles.container,
-        {
-          transform: [{ translateY }],
-          opacity,
-        },
-      ]}
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      statusBarTranslucent
+      navigationBarTranslucent
+      onRequestClose={handleDismiss}
     >
-      <View style={styles.iconWrap}>{getIcon()}</View>
-      <View style={styles.textWrap}>
-        <Text style={styles.title}>{title}</Text>
-        {message ? <Text style={styles.message}>{message}</Text> : null}
+      <View style={styles.modalOverlay} pointerEvents="box-none">
+        <Animated.View
+          style={[
+            styles.container,
+            {
+              transform: [{ translateY }],
+              opacity,
+            },
+          ]}
+        >
+          <View style={styles.iconWrap}>{getIcon()}</View>
+          <View style={styles.textWrap}>
+            <Text style={styles.title}>{title}</Text>
+            {message ? <Text style={styles.message}>{message}</Text> : null}
+          </View>
+          <TouchableOpacity onPress={handleDismiss} style={styles.closeBtn}>
+            <Ionicons name="close" size={18} color={Colors.secondary} />
+          </TouchableOpacity>
+        </Animated.View>
       </View>
-      <TouchableOpacity onPress={handleDismiss} style={styles.closeBtn}>
-        <Ionicons name="close" size={18} color={Colors.secondary} />
-      </TouchableOpacity>
-    </Animated.View>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  modalOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 999999,
+  },
   container: {
     position: "absolute",
     top: 50,
     left: 20,
     right: 20,
-    zIndex: 9999,
+    zIndex: 999999,
     backgroundColor: Colors.white,
     borderRadius: 16,
     padding: Spacing.md,
@@ -123,7 +143,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 10,
-    elevation: 8,
+    elevation: 999,
     borderWidth: 1,
     borderColor: Colors.border,
   },

@@ -93,10 +93,22 @@ return new class extends Migration
             $table->decimal('pickup_longitude', 10, 7)->nullable();
             $table->timestamps();
         });
+
+        if (! Schema::hasTable('vehicle_images')) {
+            Schema::create('vehicle_images', function (Blueprint $table) {
+                $table->id();
+                $table->foreignId('vehicle_id')->constrained('vehicles')->cascadeOnDelete();
+                $table->string('image_path');
+                $table->boolean('is_cover')->default(false);
+                $table->unsignedInteger('sort_order')->default(0);
+                $table->timestamps();
+            });
+        }
     }
 
     public function down(): void
     {
+        Schema::dropIfExists('vehicle_images');
         Schema::dropIfExists('vehicles');
     }
 };

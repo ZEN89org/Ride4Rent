@@ -128,6 +128,8 @@ export default function OperatorRegistration() {
         street_address: businessInfo.streetAddress,
         barangay: businessInfo.barangay,
         municipality: businessInfo.municipality,
+        latitude: businessInfo.latitude ?? undefined,
+        longitude: businessInfo.longitude ?? undefined,
         business_contact_number: businessInfo.businessContactNumber,
         business_email: businessInfo.businessEmail.trim().toLowerCase(),
         email: businessInfo.businessEmail.trim().toLowerCase(),

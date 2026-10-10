@@ -40,12 +40,10 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const [emailError, setEmailError] = useState("");
-  const [passwordError, setPasswordError] = useState("");
   const [loginError, setLoginError] = useState("");
 
   const { login: signIn } = useAuth();
-  const { showSuccess, showError } = useAppToast();
+  const { showSuccess } = useAppToast();
 
   // Animation values for smooth entrance slide
   const sheetTranslateY = useRef(new Animated.Value(SCREEN_HEIGHT * 0.7)).current;
@@ -76,34 +74,30 @@ export default function Login() {
 
   const handleEmailChange = (value: string) => {
     setEmail(value);
-    setEmailError("");
     setLoginError("");
   };
 
   const handlePasswordChange = (value: string) => {
     setPassword(value);
-    setPasswordError("");
     setLoginError("");
   };
 
   const handleLogin = async () => {
-    setEmailError("");
-    setPasswordError("");
     setLoginError("");
 
-    let hasError = false;
+    // All sign-in errors are shown as one message under the password field
+    if (!email.trim() && !password) {
+      setLoginError("Please enter your email and password.");
+      return;
+    }
 
     if (!email.trim()) {
-      setEmailError("Email address is required.");
-      hasError = true;
+      setLoginError("Please enter your email address.");
+      return;
     }
 
     if (!password) {
-      setPasswordError("Password is required.");
-      hasError = true;
-    }
-
-    if (hasError) {
+      setLoginError("Please enter your password.");
       return;
     }
 
@@ -135,15 +129,12 @@ export default function Login() {
       router.replace("/(tabs)/home");
     } catch (error: any) {
       const backendErrors = error?.response?.data?.errors;
-
-      if (backendErrors?.email) {
-        setEmailError(backendErrors.email[0]);
-      } else {
-        const message =
-          error?.response?.data?.message ?? "Invalid email or password.";
-        setLoginError(message);
-        showError("Sign In Failed", message);
-      }
+      const message =
+        backendErrors?.email?.[0] ??
+        backendErrors?.password?.[0] ??
+        error?.response?.data?.message ??
+        "Invalid email or password.";
+      setLoginError(message);
     } finally {
       setLoading(false);
     }
@@ -186,6 +177,8 @@ export default function Login() {
             <ScrollView
               contentContainerStyle={styles.sheetScrollContent}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              nestedScrollEnabled={true}
               showsVerticalScrollIndicator={false}
               bounces={false}
             >
@@ -200,24 +193,13 @@ export default function Login() {
                 autoCapitalize="none"
               />
 
-              {emailError ? (
-                <Text style={styles.errorText}>{emailError}</Text>
-              ) : null}
-
               <PasswordInput
                 label="Password"
                 placeholder="Enter your password"
                 value={password}
                 onChangeText={handlePasswordChange}
+                error={loginError || undefined}
               />
-
-              {passwordError ? (
-                <Text style={styles.errorText}>{passwordError}</Text>
-              ) : null}
-
-              {loginError ? (
-                <Text style={styles.errorText}>{loginError}</Text>
-              ) : null}
 
               <PrimaryButton
                 title="Sign In"

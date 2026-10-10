@@ -3,8 +3,8 @@ import {
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   RefreshControl,
   ScrollView,
@@ -15,7 +15,7 @@ import {
 } from "react-native";
 
 import { Colors } from "@/constants/colors";
-import { FontFamily, FontSize, Spacing } from "@/constants/theme";
+import { FontFamily, FontSize, Radius, Spacing } from "@/constants/theme";
 import { useAppToast } from "@/context/ToastContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import OperatorShell from "@/features/operator/components/navigation/OperatorShell";
@@ -41,7 +41,7 @@ const resolveVehicleImage = (vehicle: any): string => {
 };
 
 export default function OperatorDashboardScreen() {
-  const { user, isOperatorPending } = useAuth();
+  const { user, isOperatorPending, refreshUser } = useAuth();
   const { showModal } = useAppToast();
   const profile = user?.operatorProfile ?? user?.operator_profile;
 
@@ -49,13 +49,11 @@ export default function OperatorDashboardScreen() {
   const [bookings, setBookings] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadDashboardData();
-  }, []);
-
-  const loadDashboardData = async () => {
-    try {
+  const loadDashboardData = useCallback(async (isManualRefresh: boolean = false) => {
+    if (isManualRefresh) {
       setRefreshing(true);
+    }
+    try {
       const [vehiclesData, bookingsData] = await Promise.all([
         getMyVehicles().catch(() => []),
         getMyBookings().catch(() => []),
@@ -64,9 +62,17 @@ export default function OperatorDashboardScreen() {
       setFleet(vehiclesData);
       setBookings(bookingsData);
     } finally {
-      setRefreshing(false);
+      if (isManualRefresh) {
+        setRefreshing(false);
+      }
     }
-  };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadDashboardData(false);
+    }, [loadDashboardData])
+  );
 
   const pendingVerification = bookings.filter(
     (b) => b.status === "pending_verification" || b.status === "pending_payment"
@@ -96,7 +102,7 @@ export default function OperatorDashboardScreen() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={loadDashboardData}
+            onRefresh={() => loadDashboardData(true)}
             colors={[Colors.primary]}
           />
         }
@@ -181,6 +187,28 @@ export default function OperatorDashboardScreen() {
           </View>
         </View>
 
+        {/* Rental Payment Setup Reminder Banner */}
+        {!Boolean(profile?.account_number && String(profile.account_number).trim()) && (
+          <View style={styles.paymentNoticeCard}>
+            <View style={styles.paymentNoticeIconWrap}>
+              <Ionicons name="card" size={18} color={Colors.white} />
+            </View>
+            <View style={styles.paymentNoticeTextWrap}>
+              <Text style={styles.paymentNoticeTitle}>Rental Payment Not Set Up</Text>
+              <Text style={styles.paymentNoticeSub}>
+                Set up your GCash details so you can list vehicles and receive reservation fees.
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.paymentNoticeBtn}
+              onPress={() => router.push("/operator-profile" as any)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.paymentNoticeBtnText}>Set Up</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* 2. HERO PROMO / ADD VEHICLE BANNER (Screen 1 Middle Banner) */}
         <View style={styles.heroPromoBanner}>
           <Image
@@ -220,6 +248,26 @@ export default function OperatorDashboardScreen() {
                     );
                     return;
                   }
+
+                  const hasPaymentSetup = Boolean(
+                    profile?.account_number && String(profile.account_number).trim()
+                  );
+                  if (!hasPaymentSetup) {
+                    showModal(
+                      "Payment Setup Required",
+                      "Please set up your GCash rental payment details first before listing a vehicle, so renters know where to send reservation fees.",
+                      [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Set Up Now",
+                          onPress: () => router.push("/operator-profile" as any),
+                        },
+                      ],
+                      "warning"
+                    );
+                    return;
+                  }
+
                   router.push("/operator-vehicle-upload" as any);
                 }}
                 activeOpacity={0.85}
@@ -857,6 +905,51 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.medium,
     fontSize: 11,
     color: "#92400E",
+  },
+  paymentNoticeCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFBEB",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+    gap: 10,
+  },
+  paymentNoticeIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#F59E0B",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  paymentNoticeTextWrap: {
+    flex: 1,
+  },
+  paymentNoticeTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 13,
+    color: "#92400E",
+  },
+  paymentNoticeSub: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11,
+    color: "#B45309",
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  paymentNoticeBtn: {
+    backgroundColor: "#F59E0B",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: Radius.md,
+  },
+  paymentNoticeBtnText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 12,
+    color: Colors.white,
   },
 });
 

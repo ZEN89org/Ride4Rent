@@ -1,21 +1,24 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Location from "expo-location";
 import React, { useState } from "react";
 import {
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import AppBottomSheet from "@/components/common/AppBottomSheet";
+import MapLocationPicker, { SelectedLocationResult } from "@/components/common/MapLocationPicker";
 import PrimaryButton from "@/components/common/PrimaryButton";
 import { Colors } from "@/constants/colors";
-import { ORIENTAL_MINDORO_LOCATIONS } from "@/constants/orientalMindoroLocations";
+import { MUNICIPALITY_COORDINATES, ORIENTAL_MINDORO_LOCATIONS } from "@/constants/orientalMindoroLocations";
 import {
   FontFamily,
   FontSize,
@@ -37,6 +40,8 @@ export type BusinessInfoData = {
   streetAddress: string;
   barangay: string;
   municipality: string;
+  latitude?: number | null;
+  longitude?: number | null;
   businessContactNumber: string;
   businessEmail: string;
   password: string;
@@ -80,6 +85,14 @@ export default function OperatorBusinessInfo({
   const [municipality, setMunicipality] = useState(
     initialData?.municipality ?? ""
   );
+
+  const [latitude, setLatitude] = useState<number | null>(
+    initialData?.latitude ?? null
+  );
+  const [longitude, setLongitude] = useState<number | null>(
+    initialData?.longitude ?? null
+  );
+  const [showMapPicker, setShowMapPicker] = useState(false);
 
   const [businessContactNumber, setBusinessContactNumber] =
     useState(initialData?.businessContactNumber ?? "");
@@ -169,6 +182,24 @@ export default function OperatorBusinessInfo({
     setShowBarangayPicker(false);
   };
 
+  const handleMapConfirm = (result: SelectedLocationResult) => {
+    setLatitude(result.latitude);
+    setLongitude(result.longitude);
+
+    if (result.municipality) {
+      handleMunicipalitySelect(result.municipality);
+      if (result.barangay) {
+        setBarangay(result.barangay);
+        clearError("barangay");
+      }
+    }
+    if (result.streetAddress) {
+      setStreetAddress(result.streetAddress);
+      clearError("streetAddress");
+    }
+    setShowMapPicker(false);
+  };
+
   const openMunicipalityPicker = () => {
     setShowBarangayPicker(false);
     setShowMunicipalityPicker(true);
@@ -183,7 +214,7 @@ export default function OperatorBusinessInfo({
     setShowBarangayPicker(true);
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     const hasAnyData =
       businessName.trim() ||
       streetAddress.trim() ||
@@ -271,11 +302,37 @@ export default function OperatorBusinessInfo({
 
     setErrors({});
 
+    let finalLat = latitude;
+    let finalLng = longitude;
+
+    if ((!finalLat || !finalLng) && municipality.trim()) {
+      try {
+        const query = `${streetAddress.trim() ? streetAddress.trim() + ", " : ""}${barangay.trim() ? barangay.trim() + ", " : ""}${municipality.trim()}, Oriental Mindoro, Philippines`;
+        const geocoded = await Location.geocodeAsync(query);
+        if (geocoded && geocoded.length > 0) {
+          finalLat = geocoded[0].latitude;
+          finalLng = geocoded[0].longitude;
+        }
+      } catch (e) {
+        // Fallback to municipal coordinates
+      }
+
+      if (!finalLat || !finalLng) {
+        const muniCoords = MUNICIPALITY_COORDINATES[municipality.trim()];
+        if (muniCoords) {
+          finalLat = muniCoords.latitude;
+          finalLng = muniCoords.longitude;
+        }
+      }
+    }
+
     onContinue({
       businessName: businessName.trim(),
       streetAddress: streetAddress.trim(),
       barangay: barangay.trim(),
       municipality: municipality.trim(),
+      latitude: finalLat,
+      longitude: finalLng,
       businessContactNumber:
         businessContactNumber.trim(),
       businessEmail:
@@ -296,11 +353,7 @@ export default function OperatorBusinessInfo({
 
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
-        behavior={
-          Platform.OS === "ios"
-            ? "padding"
-            : "height"
-        }
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
           style={styles.scroll}
@@ -328,6 +381,54 @@ export default function OperatorBusinessInfo({
             autoCapitalize="words"
             error={errors.businessName}
           />
+
+          {/* Interactive Map Location Pinning */}
+          <View style={styles.mapCard}>
+            <View style={styles.mapCardHeader}>
+              <View
+                style={[
+                  styles.mapIconWrap,
+                  Boolean(latitude && longitude) && styles.mapIconWrapActive,
+                ]}
+              >
+                <Ionicons
+                  name={latitude && longitude ? "location" : "map-outline"}
+                  size={20}
+                  color={latitude && longitude ? Colors.white : Colors.primary}
+                />
+              </View>
+              <View style={styles.mapCardContent}>
+                <Text style={styles.mapCardTitle}>Fleet / Garage Location on Map</Text>
+                <Text style={styles.mapCardSubtitle}>
+                  {latitude && longitude
+                    ? `Coordinates: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
+                    : "Pin or drag your garage on the map to auto-fill address."}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.mapActionButton,
+                Boolean(latitude && longitude) && styles.mapActionButtonActive,
+              ]}
+              activeOpacity={0.85}
+              onPress={() => setShowMapPicker(true)}
+            >
+              <Ionicons
+                name={latitude && longitude ? "checkmark-circle" : "navigate-outline"}
+                size={17}
+                color={latitude && longitude ? Colors.white : Colors.secondary}
+              />
+              <Text
+                style={[
+                  styles.mapActionButtonText,
+                  Boolean(latitude && longitude) && styles.mapActionButtonTextActive,
+                ]}
+              >
+                {latitude && longitude ? "Change Location on Map" : "Pin Location on Map"}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
           <DropdownField
             label="Municipality"
@@ -507,6 +608,15 @@ export default function OperatorBusinessInfo({
           setShowBarangayPicker(false)
         }
       />
+
+      <MapLocationPicker
+        visible={showMapPicker}
+        onClose={() => setShowMapPicker(false)}
+        initialLatitude={latitude}
+        initialLongitude={longitude}
+        initialMunicipality={municipality}
+        onConfirm={handleMapConfirm}
+      />
     </SafeAreaView>
   );
 }
@@ -678,118 +788,79 @@ function SelectionModal({
   };
 
   return (
-    <Modal
+    <AppBottomSheet
       visible={visible}
-      transparent
-      animationType="fade"
-      statusBarTranslucent={true}
-      onRequestClose={handleClose}
+      onClose={handleClose}
+      title={title}
     >
-      <View style={styles.modalContainer}>
-        <Pressable
-          style={styles.modalBackdrop}
-          onPress={handleClose}
+      <Text style={styles.pickerSubtitle}>
+        {subtitle}
+      </Text>
+
+      <View style={styles.searchContainer}>
+        <Ionicons
+          name="search-outline"
+          size={19}
+          color={Colors.secondary}
         />
 
-        <View style={styles.selectionCard}>
-          <View style={styles.modalHeader}>
-            <View style={styles.modalHeaderText}>
-              <Text style={styles.pickerTitle}>
-                {title}
-              </Text>
-
-              <Text style={styles.pickerSubtitle}>
-                {subtitle}
-              </Text>
-            </View>
-
-            <Pressable
-              onPress={handleClose}
-              hitSlop={10}
-            >
-              <Ionicons
-                name="close"
-                size={23}
-                color={Colors.secondary}
-              />
-            </Pressable>
-          </View>
-
-          <View style={styles.searchContainer}>
-            <Ionicons
-              name="search-outline"
-              size={19}
-              color={Colors.secondary}
-            />
-
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search..."
-              placeholderTextColor="#A0A0A0"
-              value={search}
-              onChangeText={setSearch}
-              autoCapitalize="words"
-              autoCorrect={false}
-            />
-          </View>
-
-          <ScrollView
-            style={styles.selectionList}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            {filteredItems.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>
-                  No results found.
-                </Text>
-              </View>
-            ) : (
-              filteredItems.map((item) => (
-                <Pressable
-                  key={item}
-                  style={[
-                    styles.selectionItem,
-                    item === selectedValue &&
-                      styles.selectionItemActive,
-                  ]}
-                  onPress={() =>
-                    handleSelect(item)
-                  }
-                >
-                  <Text
-                    style={[
-                      styles.selectionItemText,
-                      item === selectedValue &&
-                        styles.selectionItemTextActive,
-                    ]}
-                  >
-                    {item}
-                  </Text>
-
-                  {item === selectedValue && (
-                    <Ionicons
-                      name="checkmark"
-                      size={20}
-                      color={Colors.primary}
-                    />
-                  )}
-                </Pressable>
-              ))
-            )}
-          </ScrollView>
-
-          <Pressable
-            style={styles.modalCancel}
-            onPress={handleClose}
-          >
-            <Text style={styles.modalCancelText}>
-              Cancel
-            </Text>
-          </Pressable>
-        </View>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search..."
+          placeholderTextColor="#A0A0A0"
+          value={search}
+          onChangeText={setSearch}
+          autoCapitalize="words"
+          autoCorrect={false}
+        />
       </View>
-    </Modal>
+
+      <ScrollView
+        style={[styles.selectionList, { maxHeight: 320 }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {filteredItems.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>
+              No results found.
+            </Text>
+          </View>
+        ) : (
+          filteredItems.map((item) => (
+            <Pressable
+              key={item}
+              style={[
+                styles.selectionItem,
+                item === selectedValue &&
+                  styles.selectionItemActive,
+              ]}
+              onPress={() =>
+                handleSelect(item)
+              }
+            >
+              <Text
+                style={[
+                  styles.selectionItemText,
+                  item === selectedValue &&
+                    styles.selectionItemTextActive,
+                ]}
+              >
+                {item}
+              </Text>
+
+              {item === selectedValue && (
+                <Ionicons
+                  name="checkmark"
+                  size={20}
+                  color={Colors.primary}
+                />
+              )}
+            </Pressable>
+          ))
+        )}
+      </ScrollView>
+    </AppBottomSheet>
   );
 }
 
@@ -836,6 +907,81 @@ const styles = StyleSheet.create({
 
   field: {
     marginBottom: Spacing.sm,
+  },
+
+  mapCard: {
+    backgroundColor: "#FBFBFA",
+    borderWidth: 1,
+    borderColor: "#EAEAE6",
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+    marginTop: 4,
+  },
+
+  mapCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: Spacing.sm,
+  },
+
+  mapIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#FFF8E7",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: Spacing.sm,
+  },
+
+  mapIconWrapActive: {
+    backgroundColor: Colors.primary,
+  },
+
+  mapCardContent: {
+    flex: 1,
+  },
+
+  mapCardTitle: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 13,
+    color: Colors.dark,
+  },
+
+  mapCardSubtitle: {
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    color: Colors.secondary,
+    marginTop: 2,
+  },
+
+  mapActionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: Spacing.md,
+    backgroundColor: "#F3F3F3",
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: "#E5E5E5",
+  },
+
+  mapActionButtonActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+
+  mapActionButtonText: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 13,
+    color: Colors.dark,
+  },
+
+  mapActionButtonTextActive: {
+    color: Colors.white,
   },
 
   label: {

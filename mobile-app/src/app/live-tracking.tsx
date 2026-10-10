@@ -11,6 +11,10 @@ import { router, useLocalSearchParams } from "expo-router";
 import { WebView } from "react-native-webview";
 
 import { Colors } from "@/constants/colors";
+import {
+  MUNICIPALITY_COORDINATES,
+  resolveCoordinatesFromAddress,
+} from "@/constants/orientalMindoroLocations";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";
 import { getBookingLocation } from "@/services/bookingService";
 
@@ -19,18 +23,69 @@ export default function LiveTrackingScreen() {
     bookingId?: string;
     vehicleName?: string;
     title?: string;
-    type?: "pickup" | "live_gps";
+    type?: string;
+    mode?: string;
     address?: string;
     latitude?: string;
     longitude?: string;
+    lat?: string;
+    lng?: string;
   }>();
 
-  const isPickupView = params.type === "pickup";
+  const isPickupView = params.type === "pickup" || params.mode === "pickup";
   const bookingId = params.bookingId;
   const screenTitle = params.title || (isPickupView ? "Pickup Location" : "Live GPS Telemetry");
   const vehicleName = params.vehicleName || "Vehicle";
 
   const webViewRef = useRef<WebView>(null);
+  const [activeLayer, setActiveLayer] = useState<"streets" | "satellite">("streets");
+
+  const rawLat = params.latitude || params.lat;
+  const rawLng = params.longitude || params.lng;
+  const parsedLat = rawLat && !isNaN(Number(rawLat)) ? Number(rawLat) : null;
+  const parsedLng = rawLng && !isNaN(Number(rawLng)) ? Number(rawLng) : null;
+
+  // Resolve fallback coordinates based on address
+  const addressFallbackCoords = resolveCoordinatesFromAddress(params.address);
+
+  // Validate if passed coordinates are within Oriental Mindoro
+  const isValidMindoroCoord = (lat: number | null, lng: number | null) =>
+    lat !== null &&
+    lng !== null &&
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    lat >= 12.0 &&
+    lat <= 14.0 &&
+    lng >= 120.5 &&
+    lng <= 122.0 &&
+    // Guard against the corrupted Puerto Galera mountain glitch coordinate (13.4115, 120.9575)
+    !(Math.abs(lat - 13.4115) < 0.001 && Math.abs(lng - 120.9575) < 0.001);
+
+  // Check if passed coordinates are just generic municipality defaults
+  const isGenericMunCoord = (lat: number | null, lng: number | null) => {
+    if (!lat || !lng) return true;
+    for (const mun of Object.values(MUNICIPALITY_COORDINATES)) {
+      if (Math.abs(lat - mun.latitude) < 0.0002 && Math.abs(lng - mun.longitude) < 0.0002) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const hasSpecificBarangayFallback =
+    addressFallbackCoords.latitude !== 13.4115 || addressFallbackCoords.longitude !== 121.1803;
+
+  const initialLat =
+    isValidMindoroCoord(parsedLat, parsedLng) &&
+    (!isGenericMunCoord(parsedLat, parsedLng) || !hasSpecificBarangayFallback)
+      ? parsedLat!
+      : addressFallbackCoords.latitude;
+
+  const initialLng =
+    isValidMindoroCoord(parsedLat, parsedLng) &&
+    (!isGenericMunCoord(parsedLat, parsedLng) || !hasSpecificBarangayFallback)
+      ? parsedLng!
+      : addressFallbackCoords.longitude;
 
   const [trackingData, setTrackingData] = useState<{
     booking_id?: number;
@@ -47,28 +102,46 @@ export default function LiveTrackingScreen() {
     last_updated_human?: string;
   } | null>(null);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isPickupView);
   const [initialCoordinates, setInitialCoordinates] = useState<{
     latitude: number;
     longitude: number;
-  } | null>(
-    params.latitude && params.longitude && !isNaN(Number(params.latitude)) && !isNaN(Number(params.longitude))
-      ? { latitude: Number(params.latitude), longitude: Number(params.longitude) }
-      : null
-  );
+  }>({
+    latitude: initialLat,
+    longitude: initialLng,
+  });
 
   // If viewing a static pickup location
   useEffect(() => {
     if (isPickupView) {
       setLoading(false);
-      if (params.latitude && params.longitude) {
-        setInitialCoordinates({
-          latitude: Number(params.latitude),
-          longitude: Number(params.longitude),
-        });
+      const targetLat =
+        isValidMindoroCoord(parsedLat, parsedLng) &&
+        (!isGenericMunCoord(parsedLat, parsedLng) || !hasSpecificBarangayFallback)
+          ? parsedLat!
+          : addressFallbackCoords.latitude;
+      const targetLng =
+        isValidMindoroCoord(parsedLat, parsedLng) &&
+        (!isGenericMunCoord(parsedLat, parsedLng) || !hasSpecificBarangayFallback)
+          ? parsedLng!
+          : addressFallbackCoords.longitude;
+
+      setInitialCoordinates({
+        latitude: targetLat,
+        longitude: targetLng,
+      });
+
+      if (webViewRef.current) {
+        webViewRef.current.postMessage(
+          JSON.stringify({
+            type: "UPDATE_LOCATION",
+            latitude: targetLat,
+            longitude: targetLng,
+          })
+        );
       }
     }
-  }, [isPickupView, params.latitude, params.longitude]);
+  }, [isPickupView, parsedLat, parsedLng, params.address]);
 
   // If viewing live GPS for an active booking, poll every 5s
   useEffect(() => {
@@ -172,15 +245,14 @@ export default function LiveTrackingScreen() {
   };
 
   const createMapHtml = () => {
-    const lat = initialCoordinates?.latitude ?? 13.4115;
-    const lng = initialCoordinates?.longitude ?? 120.9575;
-    const pinColor = isPickupView ? "#10B981" : "#2563EB";
-    const pulseColor = isPickupView ? "rgba(16, 185, 129, 0.25)" : "rgba(37, 99, 235, 0.25)";
-    
-    // SVG icon for marker inside Ride4Rent badge
+    const lat = initialCoordinates.latitude;
+    const lng = initialCoordinates.longitude;
+    const pinColor = "#FEC103";
+    const pulseColor = "rgba(254, 193, 3, 0.45)";
+
     const svgIcon = isPickupView
-      ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`
-      : `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FEC103" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>`;
+      ? `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`
+      : `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>`;
 
     return `
 <!DOCTYPE html>
@@ -189,80 +261,105 @@ export default function LiveTrackingScreen() {
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body, #map {
       width: 100%;
       height: 100%;
       margin: 0;
       padding: 0;
-      background: #F4F3F0;
-    }
-    body {
       overflow: hidden;
-      overscroll-behavior: none;
-      touch-action: none;
+      background: #E8E6DF;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }
-    .leaflet-control-zoom {
-      display: none !important;
-    }
-    .leaflet-container .leaflet-tile {
-      image-rendering: auto;
-    }
-    .leaflet-control-attribution {
-      font-size: 8px;
-      color: #71717A;
-      background: rgba(255, 255, 255, 0.75);
-      border-radius: 4px;
-      padding: 2px 6px;
-      margin: 6px !important;
-      backdrop-filter: blur(4px);
+      user-select: none;
+      -webkit-user-select: none;
     }
 
-    .marker-container {
+    /* Marker: Golden Circular Pin with Pulse */
+    .marker-wrap {
       position: relative;
-      width: 54px;
-      height: 54px;
+      width: 52px;
+      height: 52px;
       display: flex;
       align-items: center;
       justify-content: center;
     }
-
     .marker-pulse {
       position: absolute;
       width: 50px;
       height: 50px;
       border-radius: 50%;
-      background: ${isPickupView ? "rgba(16, 185, 129, 0.25)" : "rgba(254, 193, 3, 0.35)"};
-      animation: pinPulse 2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+      background: ${pulseColor};
+      animation: pinPulse 2s cubic-bezier(0.2, 0.9, 0.3, 1) infinite;
     }
-
+    @keyframes pinPulse {
+      0% { transform: scale(0.6); opacity: 0.95; }
+      75% { transform: scale(1.35); opacity: 0.1; }
+      100% { transform: scale(1.4); opacity: 0; }
+    }
     .marker-pin {
       position: relative;
-      width: 38px;
-      height: 38px;
+      width: 42px;
+      height: 42px;
       border-radius: 50%;
-      background: ${isPickupView ? "#10B981" : "#1A1A1A"};
-      border: 2.5px solid ${isPickupView ? "#FFFFFF" : "#FEC103"};
-      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+      background: ${pinColor};
+      border: 3px solid #1A1A1A;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
       display: flex;
       align-items: center;
       justify-content: center;
       z-index: 10;
+      cursor: pointer;
+      transition: transform 0.2s ease;
+    }
+    .marker-pin:active {
+      transform: scale(0.92);
     }
 
-    @keyframes pinPulse {
-      0% {
-        transform: scale(0.65);
-        opacity: 0.95;
-      }
-      70% {
-        transform: scale(1.4);
-        opacity: 0;
-      }
-      100% {
-        transform: scale(1.4);
-        opacity: 0;
-      }
+    /* Bubble Chat Popup with Tip pointing to Pin */
+    .leaflet-popup {
+      margin-bottom: 6px;
+    }
+    .leaflet-popup-content-wrapper {
+      background: #FFFFFF !important;
+      border-radius: 14px !important;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22) !important;
+      padding: 3px !important;
+    }
+    .leaflet-popup-content {
+      margin: 10px 14px !important;
+      line-height: 1.4 !important;
+    }
+    .leaflet-popup-tip {
+      background: #FFFFFF !important;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15) !important;
+    }
+    .leaflet-container a.leaflet-popup-close-button {
+      top: 8px !important;
+      right: 10px !important;
+      color: #94A3B8 !important;
+      font-size: 16px !important;
+      font-weight: 700 !important;
+    }
+    .leaflet-container a.leaflet-popup-close-button:hover {
+      color: #0F172A !important;
+    }
+
+    /* Zoom control styling */
+    .leaflet-control-zoom {
+      top: 14px !important;
+      left: 14px !important;
+      border: none !important;
+      border-radius: 10px !important;
+      overflow: hidden !important;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18) !important;
+    }
+    .leaflet-control-zoom a {
+      width: 36px !important;
+      height: 36px !important;
+      line-height: 36px !important;
+      font-size: 16px !important;
+      color: #0F172A !important;
+      background: #FFFFFF !important;
     }
   </style>
 </head>
@@ -273,46 +370,85 @@ export default function LiveTrackingScreen() {
   <script>
     const initLat = ${lat};
     const initLng = ${lng};
+    let currentMode = "streets";
 
-    const map = L.map("map", {
-      zoomControl: false,
-      attributionControl: true,
+    window.map = L.map("map", {
+      zoomControl: true,
+      attributionControl: false,
       dragging: true,
       touchZoom: true,
       doubleClickZoom: true,
-      scrollWheelZoom: false,
+      scrollWheelZoom: true,
     }).setView([initLat, initLng], 16);
 
-    // Esri Light Gray Canvas (Ultra-clean, modern light minimalist map - 100% free, no watermark)
-    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
-      maxNativeZoom: 16,
+    // 1. Watermark-free, official Esri World Street Map (high-definition streets, barangays, POIs)
+    const streetsLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
       maxZoom: 19,
       minZoom: 3,
-      attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
-    }).addTo(map);
+      keepBuffer: 6,
+    });
 
-    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}", {
-      maxNativeZoom: 16,
-      maxZoom: 19,
+    // 2. High-Resolution Google Hybrid Satellite with Roads & Place Labels (maxZoom 20, zero missing tiles)
+    const satelliteLayer = L.tileLayer("https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", {
+      subdomains: ["mt0", "mt1", "mt2", "mt3"],
+      maxZoom: 20,
       minZoom: 3,
-    }).addTo(map);
+      keepBuffer: 6,
+    });
 
+    // Default start with Streets
+    streetsLayer.addTo(window.map);
+
+    function switchLayer(mode) {
+      currentMode = mode;
+
+      if (mode === "streets") {
+        window.map.removeLayer(satelliteLayer);
+        if (!window.map.hasLayer(streetsLayer)) streetsLayer.addTo(window.map);
+        window.map.flyTo([initLat, initLng], 16, { animate: true, duration: 0.5 });
+      } else if (mode === "satellite") {
+        window.map.removeLayer(streetsLayer);
+        satelliteLayer.addTo(window.map);
+        window.map.flyTo([initLat, initLng], 17, { animate: true, duration: 0.5 });
+      }
+
+      setTimeout(function() {
+        if (window.map) window.map.invalidateSize();
+      }, 150);
+    }
+
+    // Circular Golden Pin Marker with Bubble Chat
     const customIcon = L.divIcon({
       className: "",
       html: \`
-        <div class="marker-container">
+        <div class="marker-wrap">
           <div class="marker-pulse"></div>
-          <div class="marker-pin">${svgIcon}</div>
+          <div class="marker-pin">
+            ${svgIcon}
+          </div>
         </div>
       \`,
-      iconSize: [54, 54],
-      iconAnchor: [27, 27],
+      iconSize: [52, 52],
+      iconAnchor: [26, 26],
+      popupAnchor: [0, -28],
     });
 
     const marker = L.marker([initLat, initLng], {
       icon: customIcon,
-      interactive: false,
-    }).addTo(map);
+      interactive: true,
+    }).addTo(window.map);
+
+    const titleText = ${JSON.stringify(screenTitle)};
+    const descText = ${JSON.stringify(params.address || vehicleName)};
+    marker.bindPopup(\`
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 2px; min-width: 170px;">
+        <div style="font-size: 13px; font-weight: 800; color: #0F172A; margin-bottom: 3px;">\${titleText}</div>
+        <div style="font-size: 11px; color: #475569; line-height: 1.35; margin-bottom: 6px;">\${descText}</div>
+        <div style="display: inline-block; font-size: 9.5px; font-weight: 700; color: #0F172A; background: #FEC103; padding: 2px 7px; border-radius: 4px;">
+          ${isPickupView ? "Official Garage & Warehouse Hub" : "Active GPS Vehicle"}
+        </div>
+      </div>
+    \`).openPopup();
 
     function handleReactNativeMessage(event) {
       try {
@@ -324,11 +460,13 @@ export default function LiveTrackingScreen() {
 
           if (Number.isFinite(lat) && Number.isFinite(lng)) {
             marker.setLatLng([lat, lng]);
-            map.flyTo([lat, lng], 16, {
+            window.map.flyTo([lat, lng], currentMode === "satellite" ? 17 : 16, {
               animate: true,
-              duration: 0.9,
+              duration: 0.8,
             });
           }
+        } else if (data.type === "SWITCH_LAYER") {
+          switchLayer(data.mode);
         }
       } catch (e) {
         console.error("Leaflet message error:", e);
@@ -337,10 +475,24 @@ export default function LiveTrackingScreen() {
 
     document.addEventListener("message", handleReactNativeMessage);
     window.addEventListener("message", handleReactNativeMessage);
+
+    setTimeout(function() {
+      if (window.map) {
+        window.map.invalidateSize();
+      }
+    }, 200);
   </script>
 </body>
 </html>
 `;
+  };
+
+  const currentLat = initialCoordinates.latitude;
+  const currentLng = initialCoordinates.longitude;
+
+  const handleLayerSwitch = (mode: "streets" | "satellite") => {
+    setActiveLayer(mode);
+    webViewRef.current?.injectJavaScript(`switchLayer('${mode}'); true;`);
   };
 
   return (
@@ -373,6 +525,49 @@ export default function LiveTrackingScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Single, Unified Layer Switcher Bar in Container */}
+      <View style={styles.layerBar}>
+        <TouchableOpacity
+          style={[styles.layerPill, activeLayer === "streets" && styles.layerPillActive]}
+          onPress={() => handleLayerSwitch("streets")}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name="map"
+            size={14}
+            color={activeLayer === "streets" ? Colors.white : Colors.secondary}
+          />
+          <Text
+            style={[
+              styles.layerPillText,
+              activeLayer === "streets" && styles.layerPillTextActive,
+            ]}
+          >
+            Streets
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.layerPill, activeLayer === "satellite" && styles.layerPillActive]}
+          onPress={() => handleLayerSwitch("satellite")}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name="earth"
+            size={14}
+            color={activeLayer === "satellite" ? Colors.white : Colors.secondary}
+          />
+          <Text
+            style={[
+              styles.layerPillText,
+              activeLayer === "satellite" && styles.layerPillTextActive,
+            ]}
+          >
+            Satellite
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Interactive Map View */}
       <View style={styles.mapWrapper}>
         {loading && !initialCoordinates ? (
@@ -382,6 +577,7 @@ export default function LiveTrackingScreen() {
           </View>
         ) : (
           <WebView
+            key={`${currentLat}_${currentLng}_${isPickupView}`}
             ref={webViewRef}
             source={{ html: createMapHtml() }}
             style={styles.map}
@@ -390,13 +586,21 @@ export default function LiveTrackingScreen() {
             domStorageEnabled
             scrollEnabled={false}
             geolocationEnabled
+            onLoadEnd={() => {
+              webViewRef.current?.injectJavaScript(`
+                if (window.map) {
+                  window.map.invalidateSize();
+                }
+                true;
+              `);
+            }}
           />
         )}
 
         {/* Live Telemetry Speed Badge (only for active GPS tracking) */}
         {!isPickupView && (
           <View style={styles.floatingSpeedBadge}>
-            <MaterialCommunityIcons name="speedometer" size={17} color="#2563EB" />
+            <MaterialCommunityIcons name="speedometer" size={17} color={Colors.dark} />
             <Text style={styles.floatingSpeedText}>
               {trackingData?.current_speed !== undefined && trackingData?.current_speed !== null
                 ? `${trackingData.current_speed} km/h`
@@ -419,17 +623,17 @@ export default function LiveTrackingScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Bottom Simplified Location Card */}
+      {/* Bottom Location Card */}
       <View style={styles.bottomCard}>
         <View style={styles.cardHeaderRow}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
             <Ionicons
               name={isPickupView ? "location" : "navigate-circle"}
               size={18}
-              color={isPickupView ? "#10B981" : "#2563EB"}
+              color={Colors.primary}
             />
             <Text style={styles.cardHeaderTitle}>
-              {isPickupView ? "PICKUP ADDRESS" : "CURRENT LOCATION"}
+              {isPickupView ? "PICKUP & GARAGE ADDRESS" : "CURRENT LOCATION"}
             </Text>
           </View>
 
@@ -440,10 +644,19 @@ export default function LiveTrackingScreen() {
           )}
         </View>
 
-        {/* Clean Single Paragraph Address Text */}
+        {/* Single Paragraph Address Text */}
         <Text style={styles.addressParagraph}>
           {getSingleParagraphAddress()}
         </Text>
+
+        {isPickupView && (
+          <View style={styles.badgesRow}>
+            <View style={styles.infoBadge}>
+              <Ionicons name="business-outline" size={12} color="#D97706" />
+              <Text style={styles.infoBadgeText}>Host Garage / Warehouse</Text>
+            </View>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -458,7 +671,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingTop: 52,
-    paddingBottom: 12,
+    paddingBottom: 10,
     paddingHorizontal: Spacing.md,
     backgroundColor: Colors.white,
     borderBottomWidth: 1,
@@ -500,20 +713,66 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#FEF3C7",
   },
+  layerBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    paddingHorizontal: Spacing.md,
+    backgroundColor: "#F8FAFC",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+    gap: 12,
+    zIndex: 9,
+  },
+  layerPill: {
+    flex: 1,
+    maxWidth: 160,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  layerPillActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  layerPillText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+    color: Colors.secondary,
+  },
+  layerPillTextActive: {
+    fontFamily: FontFamily.bold,
+    color: Colors.white,
+  },
   mapWrapper: {
     flex: 1,
     position: "relative",
-    backgroundColor: Colors.white,
+    backgroundColor: "#E8E6DF",
   },
   map: {
     width: "100%",
     height: "100%",
+    backgroundColor: "#E8E6DF",
   },
   loadingContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
+    backgroundColor: Colors.white,
   },
   loadingText: {
     fontFamily: FontFamily.medium,
@@ -588,7 +847,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
-    paddingBottom: Spacing.xl,
+    paddingBottom: Spacing.lg,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -3 },
     shadowOpacity: 0.06,
@@ -619,5 +878,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.dark,
     lineHeight: 21,
+  },
+  badgesRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 10,
+  },
+  infoBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#FEF3C7",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  infoBadgeText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 10.5,
+    color: "#92400E",
   },
 });

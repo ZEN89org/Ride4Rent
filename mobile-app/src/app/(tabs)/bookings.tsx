@@ -14,8 +14,10 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Platform,
 } from "react-native";
 
+import { AppBottomSheet } from "@/components/common/AppBottomSheet";
 import PrimaryButton from "@/components/common/PrimaryButton";
 import ScreenContainer from "@/components/common/ScreenContainer";
 import { Skeleton } from "@/components/common/Skeleton";
@@ -26,9 +28,11 @@ import { useAuth } from "@/features/auth/hooks/useAuth";
 import { useFocusEffect } from "expo-router";
 import * as Location from "expo-location";
 import * as WebBrowser from "expo-web-browser";
+import * as FileSystem from "expo-file-system/legacy";
 import { copyToClipboard } from "@/utils/clipboard";
 import {
   Booking,
+  deleteBooking,
   getMyBookings,
   requestBookingExtension,
   sendBookingLocation,
@@ -91,7 +95,9 @@ export default function Bookings() {
   const [paymentRef, setPaymentRef] = useState("");
   const [paymentRefError, setPaymentRefError] = useState("");
   const [submittingPayment, setSubmittingPayment] = useState(false);
-  const [showQrPreview, setShowQrPreview] = useState<string | null>(null);
+  const [showQrInline, setShowQrInline] = useState(false);
+  const [savingQr, setSavingQr] = useState(false);
+  const [qrSavedSuccess, setQrSavedSuccess] = useState(false);
   const [copiedPhone, setCopiedPhone] = useState(false);
 
   // Review Modal State
@@ -270,6 +276,38 @@ export default function Bookings() {
     );
   };
 
+  const isDeletable = (status: string) => {
+    return ["cancelled", "rejected", "declined", "completed", "no_show", "refunded"].includes(status);
+  };
+
+  const handleDeleteBooking = (booking: Booking) => {
+    const vehicleTitle = booking.vehicle?.name || "this booking";
+    showModal(
+      "Delete Booking",
+      `Are you sure you want to remove the booking for ${vehicleTitle}? It will be removed from your bookings list.`,
+      [
+        { text: "Keep", style: "cancel" },
+        {
+          text: "Yes, Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteBooking(booking.id);
+              showSuccess("Booking Deleted", "The booking card has been removed.");
+              setBookings((prev) => prev.filter((b) => b.id !== booking.id));
+              if (selectedBookingForDetails?.id === booking.id) {
+                setSelectedBookingForDetails(null);
+              }
+            } catch (e: any) {
+              showError("Error", e.response?.data?.message || "Could not delete booking.");
+            }
+          },
+        },
+      ],
+      "confirm"
+    );
+  };
+
   const handleChatOperatorForPayment = (booking: Booking) => {
     const opId = booking.operator_id;
     const opName =
@@ -294,9 +332,90 @@ export default function Bookings() {
     setTimeout(() => setCopiedPhone(false), 2000);
   };
 
+  const handleSaveQr = async (qrUrl: string) => {
+    if (!qrUrl) return;
+    try {
+      setSavingQr(true);
+      const filename = `host_qr_${Date.now()}.jpg`;
+      const localUri = `${FileSystem.cacheDirectory || FileSystem.documentDirectory}${filename}`;
+      const downloadRes = await FileSystem.downloadAsync(qrUrl, localUri);
+
+      let saved = false;
+
+      // 1. Try MediaLibrary dynamically (works if native module compiled in build)
+      try {
+        const MediaLibrary = require("expo-media-library");
+        if (MediaLibrary && typeof MediaLibrary.saveToLibraryAsync === "function") {
+          const { status } = await MediaLibrary.requestPermissionsAsync();
+          if (status === "granted") {
+            await MediaLibrary.saveToLibraryAsync(downloadRes.uri);
+            saved = true;
+          }
+        }
+      } catch {
+        // Native module not linked in current dev client
+      }
+
+      // 2. Fallback for Android: StorageAccessFramework directly saves into Pictures
+      if (!saved && Platform.OS === "android") {
+        try {
+          const SAF = (FileSystem as any).StorageAccessFramework;
+          if (SAF) {
+            const initialUri = SAF.getUriForDirectoryInRoot("Pictures");
+            const perm = await SAF.requestDirectoryPermissionsAsync(initialUri);
+            if (perm && perm.granted) {
+              const base64 = await FileSystem.readAsStringAsync(downloadRes.uri, {
+                encoding: FileSystem.EncodingType.Base64,
+              });
+              const fileUri = await SAF.createFileAsync(
+                perm.directoryUri,
+                `host_qr_${Date.now()}`,
+                "image/jpeg"
+              );
+              await FileSystem.writeAsStringAsync(fileUri, base64, {
+                encoding: FileSystem.EncodingType.Base64,
+              });
+              saved = true;
+            }
+          }
+        } catch {
+          // ignore or permission dismissed
+        }
+      }
+
+      // Provide silent visual button feedback (no notification popup as requested)
+      setQrSavedSuccess(true);
+      setTimeout(() => setQrSavedSuccess(false), 2500);
+    } catch (err: any) {
+      console.error("Save QR error:", err);
+    } finally {
+      setSavingQr(false);
+    }
+  };
+
   const handleSettlePayment = async () => {
     if (!selectedBookingForPayment) return;
     setPaymentRefError("");
+
+    const rawRef = paymentRef.trim();
+    if (!rawRef) {
+      setPaymentRefError("Reference number is required to verify your transaction.");
+      return;
+    }
+    const cleanRef = rawRef.replace(/[\s-]/g, "");
+    if (!/^\d+$/.test(cleanRef)) {
+      setPaymentRefError("GCash reference number must contain only numbers.");
+      return;
+    }
+    if (cleanRef.length < 10 || cleanRef.length > 16) {
+      setPaymentRefError("Please enter a valid GCash reference number (typically 13 digits from your receipt).");
+      return;
+    }
+    if (/^(\d)\1+$/.test(cleanRef)) {
+      setPaymentRefError("Please enter the authentic reference number from your GCash receipt.");
+      return;
+    }
+
     try {
       setSubmittingPayment(true);
       const renterFullName =
@@ -308,7 +427,7 @@ export default function Bookings() {
 
       await settleReservationPayment(selectedBookingForPayment.id, {
         payment_method: paymentMethod,
-        payment_reference: paymentRef.trim() || undefined,
+        payment_reference: cleanRef,
         renter_refund_method: paymentMethod,
         renter_refund_account_name: renterFullName,
         renter_refund_account_number: renterContact,
@@ -316,10 +435,19 @@ export default function Bookings() {
       setSelectedBookingForPayment(null);
       setPaymentRef("");
       setPaymentRefError("");
+      setShowQrInline(false);
       showSuccess("Payment Notice Sent", "Host notified! You can chat with the host to finalize payment receipt.");
       loadBookings();
     } catch (e: any) {
-      setPaymentRefError(e.response?.data?.message || "Payment notification failed. Please try again.");
+      const msg = e.response?.data?.message || e.message || "Payment notification failed. Please try again.";
+      if (
+        msg.toLowerCase().includes("reference number is required") ||
+        msg.toLowerCase().includes("receipt / reference")
+      ) {
+        setPaymentRefError("Reference number is required to verify your transaction.");
+      } else {
+        setPaymentRefError(msg);
+      }
     } finally {
       setSubmittingPayment(false);
     }
@@ -347,11 +475,30 @@ export default function Bookings() {
 
   const handleRequestExtension = async () => {
     if (!selectedBookingForExtension) return;
-    if (extensionPaymentMethod !== "cash" && !extensionPaymentRef.trim()) {
-      setExtensionError("Please enter the transaction reference number / receipt ID.");
-      return;
-    }
     setExtensionError("");
+
+    let cleanExtRef = "";
+    if (extensionPaymentMethod !== "cash") {
+      const rawExtRef = extensionPaymentRef.trim();
+      if (!rawExtRef) {
+        setExtensionError("Reference number is required to verify your transaction.");
+        return;
+      }
+      cleanExtRef = rawExtRef.replace(/[\s-]/g, "");
+      if (!/^\d+$/.test(cleanExtRef)) {
+        setExtensionError("GCash reference number must contain only numbers.");
+        return;
+      }
+      if (cleanExtRef.length < 10 || cleanExtRef.length > 16) {
+        setExtensionError("Please enter a valid GCash reference number (typically 13 digits from your receipt).");
+        return;
+      }
+      if (/^(\d)\1+$/.test(cleanExtRef)) {
+        setExtensionError("Please enter the authentic reference number from your GCash receipt.");
+        return;
+      }
+    }
+
     try {
       setSubmittingExtension(true);
       const currentEnd = new Date(selectedBookingForExtension.end_date);
@@ -361,7 +508,7 @@ export default function Bookings() {
       await requestBookingExtension(selectedBookingForExtension.id, {
         extended_end_date: newEndDateStr,
         extension_payment_method: extensionPaymentMethod,
-        extension_payment_reference: extensionPaymentRef.trim() || undefined,
+        extension_payment_reference: cleanExtRef || undefined,
       });
 
       setSelectedBookingForExtension(null);
@@ -409,38 +556,38 @@ export default function Bookings() {
 
   const getStatusConfig = (item: Booking) => {
     if (item.refund_status === "pending" || item.payment_status === "refund_pending") {
-      return { label: "Refund Pending", bg: "#FEF2F2", text: "#DC2626", dot: "#DC2626", icon: "alert-circle" as const };
+      return { label: "Refund Pending", bg: "#FDF2F2", text: "#991B1B", dot: "#991B1B", border: "#FEE2E2", icon: "alert-circle" as const };
     }
     if (item.refund_status === "refunded" || item.payment_status === "refunded") {
-      return { label: "Refunded", bg: "#ECFDF5", text: "#059669", dot: "#059669", icon: "checkmark-circle" as const };
+      return { label: "Refunded", bg: "#FFF6DA", text: "#92400E", dot: Colors.primary, border: "#FDE68A", icon: "checkmark-circle" as const };
     }
     switch (item.status) {
       case "pending_payment":
-        return { label: "Awaiting Fee", bg: "#FFFBEB", text: "#D97706", dot: "#D97706", icon: "time-outline" as const };
+        return { label: "Awaiting Fee", bg: "#FFFBEB", text: "#B45309", dot: Colors.primary, border: "#FDE68A", icon: "time-outline" as const };
       case "pending_verification":
-        return { label: "Verifying Fee", bg: "#EFF6FF", text: "#2563EB", dot: "#2563EB", icon: "shield-checkmark-outline" as const };
+        return { label: "Verifying Fee", bg: "#FFF9E6", text: Colors.dark, dot: Colors.primary, border: Colors.primary, icon: "shield-checkmark-outline" as const };
       case "approved":
       case "awaiting_pickup":
-        return { label: "Awaiting Pickup", bg: "#ECFDF5", text: "#059669", dot: "#10B981", icon: "checkmark-circle" as const };
+        return { label: "Awaiting Pickup", bg: "#FFF6DA", text: "#92400E", dot: Colors.primary, border: "#FDE68A", icon: "checkmark-circle" as const };
       case "pickup_in_progress":
-        return { label: "Pickup Inspection", bg: "#FEF3C7", text: "#B45309", dot: "#F59E0B", icon: "walk" as const };
+        return { label: "Pickup Inspection", bg: "#FEF3C7", text: "#B45309", dot: Colors.primary, border: "#FDE68A", icon: "walk" as const };
       case "ready_to_start":
-        return { label: "Ready to Start", bg: "#EDE9FE", text: "#7C3AED", dot: "#8B5CF6", icon: "key" as const };
+        return { label: "Ready to Start", bg: "#1A1A1A", text: Colors.primary, dot: Colors.primary, border: "#1A1A1A", icon: "key" as const };
       case "trip_in_progress":
       case "ongoing":
-        return { label: "On Trip", bg: "#F0FDF4", text: "#15803D", dot: "#22C55E", icon: "car" as const };
+        return { label: "On Trip", bg: "#1A1A1A", text: Colors.primary, dot: Colors.primary, border: "#1A1A1A", icon: "car" as const };
       case "return_pending":
-        return { label: "Return Check", bg: "#FFF7ED", text: "#C2410C", dot: "#F97316", icon: "hourglass-outline" as const };
+        return { label: "Return Check", bg: "#FFF6DA", text: "#92400E", dot: Colors.primary, border: "#FDE68A", icon: "hourglass-outline" as const };
       case "completed":
-        return { label: "Completed", bg: "#F3F4F6", text: "#4B5563", dot: "#9CA3AF", icon: "flag" as const };
+        return { label: "Completed", bg: "#F4F4F5", text: "#52525B", dot: "#71717A", border: "#E4E4E7", icon: "flag" as const };
       case "rejected":
-        return { label: "Declined", bg: "#FEF2F2", text: Colors.error, dot: Colors.error, icon: "close-circle" as const };
+        return { label: "Declined", bg: "#FDF2F2", text: "#991B1B", dot: "#991B1B", border: "#FEE2E2", icon: "close-circle" as const };
       case "cancelled":
-        return { label: "Cancelled", bg: "#FEF2F2", text: Colors.error, dot: Colors.error, icon: "close-circle" as const };
+        return { label: "Cancelled", bg: "#FDF2F2", text: "#991B1B", dot: "#991B1B", border: "#FEE2E2", icon: "close-circle" as const };
       case "no_show":
-        return { label: "No-Show", bg: "#F3F4F6", text: "#6B7280", dot: "#9CA3AF", icon: "person-remove-outline" as const };
+        return { label: "No-Show", bg: "#F4F4F5", text: "#52525B", dot: "#71717A", border: "#E4E4E7", icon: "person-remove-outline" as const };
       default:
-        return { label: String((item as any)?.status || "").toUpperCase(), bg: Colors.inputBackground, text: Colors.dark, dot: Colors.secondary, icon: "information-circle" as const };
+        return { label: String((item as any)?.status || "").toUpperCase(), bg: Colors.inputBackground, text: Colors.dark, dot: Colors.secondary, border: Colors.border, icon: "information-circle" as const };
     }
   };
 
@@ -601,11 +748,13 @@ export default function Bookings() {
 
                     {/* Right Status Pill & Image */}
                     <View style={styles.cardRightCol}>
-                      <View style={[styles.statusPill, { backgroundColor: statusCfg.bg }]}>
-                        <View style={[styles.statusPillDot, { backgroundColor: statusCfg.dot }]} />
-                        <Text style={[styles.statusPillText, { color: statusCfg.text }]}>
-                          {statusCfg.label}
-                        </Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                        <View style={[styles.statusPill, { backgroundColor: statusCfg.bg, borderColor: (statusCfg as any).border || statusCfg.bg, borderWidth: 1 }]}>
+                          <View style={[styles.statusPillDot, { backgroundColor: statusCfg.dot }]} />
+                          <Text style={[styles.statusPillText, { color: statusCfg.text }]}>
+                            {statusCfg.label}
+                          </Text>
+                        </View>
                       </View>
                       <Image source={{ uri: vehicleImageUrl }} style={styles.vehicleThumbMini} contentFit="cover" transition={200} />
                     </View>
@@ -715,8 +864,8 @@ export default function Bookings() {
                       <View style={styles.metricCol}>
                         <Text style={styles.metricLabel}>GPS STATUS</Text>
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
-                          <Ionicons name="radio" size={11} color="#10B981" />
-                          <Text style={[styles.metricVal, { color: "#10B981" }]}>Active</Text>
+                          <Ionicons name="radio" size={11} color={Colors.primary} />
+                          <Text style={[styles.metricVal, { color: Colors.primary }]}>Active</Text>
                         </View>
                       </View>
                     </View>
@@ -746,17 +895,22 @@ export default function Bookings() {
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={styles.primaryActionBtn}
-                          onPress={() => setSelectedBookingForPayment(item)}
+                          onPress={() => {
+                            setPaymentRef("");
+                            setPaymentRefError("");
+                            setShowQrInline(false);
+                            setSelectedBookingForPayment(item);
+                          }}
                           activeOpacity={0.85}
                         >
-                          <Ionicons name="card" size={14} color={Colors.dark} />
+                          <Ionicons name="card" size={14} color={Colors.white} />
                           <Text style={styles.primaryActionText}>Settle Fee</Text>
                         </TouchableOpacity>
                       </View>
                     ) : item.status === "approved" || item.status === "awaiting_pickup" || item.status === "pickup_in_progress" || item.status === "ready_to_start" ? (
                       <View style={{ flexDirection: "row", gap: 8, flex: 1 }}>
                         <TouchableOpacity
-                          style={[styles.outlineActionBtn, { flex: 1, borderColor: "#3B82F6", backgroundColor: "#EFF6FF" }]}
+                          style={[styles.outlineActionBtn, { flex: 1, borderColor: "#FDE68A", backgroundColor: "#FFF9E6" }]}
                           onPress={() => {
                             setSelectedBookingForExtension(item);
                             setExtensionDays(1);
@@ -765,8 +919,8 @@ export default function Bookings() {
                           }}
                           activeOpacity={0.85}
                         >
-                          <Ionicons name="add-circle-outline" size={14} color="#2563EB" />
-                          <Text style={[styles.outlineActionText, { color: "#2563EB" }]}>Extend</Text>
+                          <Ionicons name="add-circle-outline" size={14} color={Colors.dark} />
+                          <Text style={[styles.outlineActionText, { color: Colors.dark }]}>Extend</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={[styles.primaryActionBtn, { flex: 1.3 }]}
@@ -785,7 +939,7 @@ export default function Bookings() {
                           }
                           activeOpacity={0.85}
                         >
-                          <Ionicons name="location" size={14} color={Colors.dark} />
+                          <Ionicons name="location" size={14} color={Colors.white} />
                           <Text style={styles.primaryActionText}>Pickup Map</Text>
                         </TouchableOpacity>
                       </View>
@@ -793,7 +947,7 @@ export default function Bookings() {
                       <View style={{ flexDirection: "row", gap: 8, flex: 1 }}>
                         {item.extension_status !== "pending" && (
                           <TouchableOpacity
-                            style={[styles.outlineActionBtn, { flex: 1, borderColor: "#3B82F6", backgroundColor: "#EFF6FF" }]}
+                            style={[styles.outlineActionBtn, { flex: 1, borderColor: "#FDE68A", backgroundColor: "#FFF9E6" }]}
                             onPress={() => {
                               setSelectedBookingForExtension(item);
                               setExtensionDays(1);
@@ -802,8 +956,8 @@ export default function Bookings() {
                             }}
                             activeOpacity={0.85}
                           >
-                            <Ionicons name="add-circle-outline" size={14} color="#2563EB" />
-                            <Text style={[styles.outlineActionText, { color: "#2563EB" }]}>Extend</Text>
+                            <Ionicons name="add-circle-outline" size={14} color={Colors.dark} />
+                            <Text style={[styles.outlineActionText, { color: Colors.dark }]}>Extend</Text>
                           </TouchableOpacity>
                         )}
                         <TouchableOpacity
@@ -820,7 +974,7 @@ export default function Bookings() {
                           }
                           activeOpacity={0.85}
                         >
-                          <Ionicons name="navigate-circle" size={15} color={Colors.dark} />
+                          <Ionicons name="navigate-circle" size={15} color={Colors.white} />
                           <Text style={styles.primaryActionText}>Live GPS</Text>
                         </TouchableOpacity>
                       </View>
@@ -830,23 +984,35 @@ export default function Bookings() {
                         onPress={() => setSelectedBookingForReview(item)}
                         activeOpacity={0.85}
                       >
-                        <Ionicons name="star" size={14} color={Colors.dark} />
+                        <Ionicons name="star" size={14} color={Colors.white} />
                         <Text style={styles.primaryActionText}>Leave Review</Text>
                       </TouchableOpacity>
                     ) : (
-                      <TouchableOpacity
-                        style={[styles.outlineActionBtn, { backgroundColor: "#F8FAFC" }]}
-                        onPress={() =>
-                          router.push({
-                            pathname: `/chat/${item.operator_id}`,
-                            params: { name: operatorBusinessName },
-                          } as any)
-                        }
-                        activeOpacity={0.85}
-                      >
-                        <Ionicons name="chatbubble-ellipses-outline" size={14} color={Colors.dark} />
-                        <Text style={styles.outlineActionText}>Chat Host</Text>
-                      </TouchableOpacity>
+                      <View style={{ flexDirection: "row", gap: 8, flex: 1 }}>
+                        {isDeletable(item.status) && (
+                          <TouchableOpacity
+                            style={[styles.dangerActionBtn, { paddingHorizontal: 12 }]}
+                            onPress={() => handleDeleteBooking(item)}
+                            activeOpacity={0.75}
+                          >
+                            <Ionicons name="trash-outline" size={13} color="#991B1B" />
+                            <Text style={styles.dangerActionText}>Delete</Text>
+                          </TouchableOpacity>
+                        )}
+                        <TouchableOpacity
+                          style={[styles.outlineActionBtn, { backgroundColor: "#F8FAFC", flex: 1 }]}
+                          onPress={() =>
+                            router.push({
+                              pathname: `/chat/${item.operator_id}`,
+                              params: { name: operatorBusinessName },
+                            } as any)
+                          }
+                          activeOpacity={0.85}
+                        >
+                          <Ionicons name="chatbubble-ellipses-outline" size={14} color={Colors.dark} />
+                          <Text style={styles.outlineActionText}>Chat Host</Text>
+                        </TouchableOpacity>
+                      </View>
                     )}
                   </View>
                 </View>
@@ -856,20 +1022,14 @@ export default function Bookings() {
         )}
 
         {/* Modal 1: Rental Details & Schedule Milestone (Reference UI Screen 3) */}
-        <Modal
+        <AppBottomSheet
           visible={!!selectedBookingForDetails}
-          transparent
-          animationType="slide"
-          statusBarTranslucent={true}
-          onRequestClose={() => setSelectedBookingForDetails(null)}
+          onClose={() => setSelectedBookingForDetails(null)}
+          position="bottom"
+          showHandle={false}
+          sheetStyle={styles.modalCardLarge}
         >
-          <View style={styles.modalOverlay}>
-            <Pressable
-              style={StyleSheet.absoluteFill}
-              onPress={() => setSelectedBookingForDetails(null)}
-            />
-            <View style={styles.modalCardLarge}>
-              <View style={styles.modalHeader}>
+          <View style={styles.modalHeader}>
                 <View>
                   <Text style={styles.modalTitle}>Rental Plan Details</Text>
                   <Text style={styles.modalSub}>
@@ -920,9 +1080,12 @@ export default function Bookings() {
                     <Text style={styles.detailsVehicleSub}>
                       {selectedBookingForDetails?.vehicle?.type || "Car"} • {selectedBookingForDetails?.vehicle?.transmission || "Automatic"} • {selectedBookingForDetails?.vehicle?.fuel_type || "Gasoline"}
                     </Text>
-                    <Text style={styles.detailsPickupAddress} numberOfLines={1}>
-                      📍 {selectedBookingForDetails?.pickup_location || selectedBookingForDetails?.vehicle?.pickup_address || "Pinamalayan, Oriental Mindoro"}
-                    </Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2 }}>
+                      <Ionicons name="location-outline" size={12} color="#059669" />
+                      <Text style={[styles.detailsPickupAddress, { marginTop: 0, flex: 1 }]} numberOfLines={1}>
+                        {selectedBookingForDetails?.pickup_location || selectedBookingForDetails?.vehicle?.pickup_address || "Pinamalayan, Oriental Mindoro"}
+                      </Text>
+                    </View>
                   </View>
                   <Ionicons name="chevron-forward" size={18} color={Colors.secondary} />
                 </TouchableOpacity>
@@ -1023,34 +1186,49 @@ export default function Bookings() {
                       router.push({ pathname: `/chat/${opId}`, params: { name: opName } } as any);
                     }}
                   />
+                  {selectedBookingForDetails && isDeletable(selectedBookingForDetails.status) && (
+                    <TouchableOpacity
+                      style={[styles.dangerActionBtn, { height: 44, justifyContent: "center", borderRadius: 12 }]}
+                      onPress={() => {
+                        const b = selectedBookingForDetails;
+                        handleDeleteBooking(b);
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="trash-outline" size={15} color="#DC2626" />
+                      <Text style={[styles.dangerActionText, { fontSize: 13 }]}>Delete Booking from List</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </ScrollView>
-            </View>
-          </View>
-        </Modal>
+        </AppBottomSheet>
 
         {/* Modal 2: Payment & Fee Settlement with Host */}
-        <Modal
+        <AppBottomSheet
           visible={!!selectedBookingForPayment}
-          transparent
-          animationType="slide"
-          statusBarTranslucent={true}
-          onRequestClose={() => setSelectedBookingForPayment(null)}
+          onClose={() => {
+            setSelectedBookingForPayment(null);
+            setShowQrInline(false);
+            setPaymentRef("");
+            setPaymentRefError("");
+          }}
+          position="bottom"
+          showHandle={false}
+          sheetStyle={[styles.modalCardLarge, { paddingHorizontal: 24, paddingTop: 14, paddingBottom: 24 }]}
         >
-          <View style={styles.modalOverlay}>
-            <Pressable
-              style={StyleSheet.absoluteFill}
-              onPress={() => setSelectedBookingForPayment(null)}
-            />
-            <View style={[styles.modalCardLarge, { paddingHorizontal: 24, paddingTop: 14, paddingBottom: 24 }]}>
-              {/* Drag Indicator */}
-              <View style={{ alignItems: "center", marginBottom: 8 }}>
-                <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.border }} />
-              </View>
+          {/* Drag Indicator */}
+          <View style={{ alignItems: "center", marginBottom: 8 }}>
+            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.border }} />
+          </View>
 
               {/* Top Row with Close Icon */}
               <View style={{ flexDirection: "row", justifyContent: "flex-end", marginBottom: 4 }}>
-                <TouchableOpacity onPress={() => setSelectedBookingForPayment(null)}>
+                <TouchableOpacity onPress={() => {
+                  setSelectedBookingForPayment(null);
+                  setShowQrInline(false);
+                  setPaymentRef("");
+                  setPaymentRefError("");
+                }}>
                   <Ionicons name="close-circle" size={26} color={Colors.secondary} />
                 </TouchableOpacity>
               </View>
@@ -1100,46 +1278,21 @@ export default function Bookings() {
                       padding: 16,
                       marginBottom: 20,
                     }}>
-                      {/* GCash Header with Asset Image & QR Button */}
-                      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                          <Image
-                            source={GCASH_IMG}
-                            style={{ width: 34, height: 34, borderRadius: 8 }}
-                            contentFit="cover"
-                          />
-                          <View>
-                            <Text style={{ fontFamily: FontFamily.bold, fontSize: 14, color: Colors.dark }}>
-                              GCash
-                            </Text>
-                            <Text style={{ fontFamily: FontFamily.regular, fontSize: 11, color: Colors.secondary }}>
-                              Send to {hostName}
-                            </Text>
-                          </View>
+                      {/* GCash Header */}
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 }}>
+                        <Image
+                          source={GCASH_IMG}
+                          style={{ width: 38, height: 38, borderRadius: 10 }}
+                          contentFit="cover"
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontFamily: FontFamily.bold, fontSize: 15, color: Colors.dark }}>
+                            GCash Payment
+                          </Text>
+                          <Text style={{ fontFamily: FontFamily.regular, fontSize: 11.5, color: Colors.secondary }}>
+                            Send reservation deposit to {hostName}
+                          </Text>
                         </View>
-
-                        {pInfo?.qr_code_url ? (
-                          <TouchableOpacity
-                            style={{
-                              flexDirection: "row",
-                              alignItems: "center",
-                              gap: 5,
-                              backgroundColor: Colors.logoBackground,
-                              paddingHorizontal: 10,
-                              paddingVertical: 6,
-                              borderRadius: 8,
-                              borderWidth: 1,
-                              borderColor: "#FDE68A",
-                            }}
-                            onPress={() => setShowQrPreview(pInfo.qr_code_url)}
-                            activeOpacity={0.8}
-                          >
-                            <Ionicons name="qr-code" size={14} color={Colors.dark} />
-                            <Text style={{ fontFamily: FontFamily.bold, fontSize: 11, color: Colors.dark }}>
-                              View QR
-                            </Text>
-                          </TouchableOpacity>
-                        ) : null}
                       </View>
 
                       {/* Recipient Number & Copy Button Row */}
@@ -1147,14 +1300,14 @@ export default function Bookings() {
                         backgroundColor: Colors.inputBackground,
                         borderRadius: 12,
                         paddingHorizontal: 14,
-                        paddingVertical: 10,
+                        paddingVertical: 11,
                         flexDirection: "row",
                         alignItems: "center",
                         justifyContent: "space-between",
                         marginBottom: 12,
                       }}>
                         <View style={{ flex: 1, paddingRight: 8 }}>
-                          <Text style={{ fontFamily: FontFamily.regular, fontSize: 10.5, color: Colors.secondary }}>
+                          <Text style={{ fontFamily: FontFamily.medium, fontSize: 11, color: Colors.secondary }}>
                             {pInfo?.account_name ? `Account Name: ${pInfo.account_name}` : "Host GCash Number"}
                           </Text>
                           <Text style={{ fontFamily: FontFamily.bold, fontSize: 15, color: Colors.dark, marginTop: 1, letterSpacing: 0.5 }}>
@@ -1171,8 +1324,8 @@ export default function Bookings() {
                               backgroundColor: copiedPhone ? "#ECFDF5" : Colors.white,
                               borderWidth: 1,
                               borderColor: copiedPhone ? "#A7F3D0" : Colors.border,
-                              paddingHorizontal: 10,
-                              paddingVertical: 6,
+                              paddingHorizontal: 11,
+                              paddingVertical: 7,
                               borderRadius: 8,
                             }}
                             onPress={() => handleCopyNumber(hostNumber)}
@@ -1194,24 +1347,178 @@ export default function Bookings() {
                         ) : null}
                       </View>
 
+                      {/* Responsive, Spacious View QR Button & Prominent Inline Display */}
+                      {pInfo?.qr_code_url ? (
+                        <View style={{ marginBottom: 14 }}>
+                          <TouchableOpacity
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              backgroundColor: showQrInline ? "#FEF3C7" : Colors.inputBackground,
+                              borderWidth: 1,
+                              borderColor: showQrInline ? Colors.primary : Colors.border,
+                              borderRadius: 12,
+                              paddingHorizontal: 14,
+                              paddingVertical: 12,
+                            }}
+                            onPress={() => setShowQrInline((prev) => !prev)}
+                            activeOpacity={0.7}
+                          >
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+                              <View style={{
+                                width: 34,
+                                height: 34,
+                                borderRadius: 8,
+                                backgroundColor: showQrInline ? Colors.primary : "#E5E7EB",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}>
+                                <Ionicons
+                                  name="qr-code"
+                                  size={18}
+                                  color={showQrInline ? Colors.white : Colors.secondary}
+                                />
+                              </View>
+                              <View style={{ flex: 1 }}>
+                                <Text style={{ fontFamily: FontFamily.bold, fontSize: 13, color: Colors.dark }}>
+                                  {showQrInline ? "Hide Operator QR Code" : "View Operator QR Code"}
+                                </Text>
+                                <Text style={{ fontFamily: FontFamily.regular, fontSize: 11, color: Colors.secondary }}>
+                                  {showQrInline ? "Tap to close QR preview" : "Tap to view and save QR for payment"}
+                                </Text>
+                              </View>
+                            </View>
+                            <Ionicons
+                              name={showQrInline ? "chevron-up" : "chevron-down"}
+                              size={18}
+                              color={Colors.secondary}
+                            />
+                          </TouchableOpacity>
+
+                          {/* Prominent Inline QR View */}
+                          {showQrInline ? (
+                            <View style={{
+                              marginTop: 10,
+                              backgroundColor: "#F9FAFB",
+                              borderRadius: 14,
+                              borderWidth: 1,
+                              borderColor: Colors.border,
+                              padding: 16,
+                              alignItems: "center",
+                            }}>
+                              <Text style={{
+                                fontFamily: FontFamily.bold,
+                                fontSize: 13.5,
+                                color: Colors.dark,
+                                marginBottom: 3,
+                              }}>
+                                Scan or Upload in GCash
+                              </Text>
+                              <Text style={{
+                                fontFamily: FontFamily.regular,
+                                fontSize: 11.5,
+                                color: Colors.secondary,
+                                textAlign: "center",
+                                marginBottom: 14,
+                                paddingHorizontal: 8,
+                              }}>
+                                Save this QR code to your device and upload it directly inside the GCash QR reader.
+                              </Text>
+
+                              {/* Prominent QR Container */}
+                              <View style={{
+                                backgroundColor: Colors.white,
+                                padding: 12,
+                                borderRadius: 14,
+                                borderWidth: 1,
+                                borderColor: Colors.border,
+                                shadowColor: "#000",
+                                shadowOffset: { width: 0, height: 2 },
+                                shadowOpacity: 0.08,
+                                shadowRadius: 6,
+                                elevation: 2,
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}>
+                                <Image
+                                  source={{ uri: pInfo.qr_code_url }}
+                                  style={{ width: 220, height: 220, borderRadius: 8 }}
+                                  contentFit="contain"
+                                />
+                              </View>
+
+                              {/* Save to Gallery Button */}
+                              <TouchableOpacity
+                                style={{
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  gap: 8,
+                                  backgroundColor: qrSavedSuccess ? "#FFF6DA" : Colors.primary,
+                                  borderRadius: 10,
+                                  paddingVertical: 11,
+                                  paddingHorizontal: 16,
+                                  marginTop: 14,
+                                  width: "100%",
+                                  borderWidth: 1,
+                                  borderColor: qrSavedSuccess ? "#FDE68A" : Colors.primary,
+                                  opacity: savingQr ? 0.7 : 1,
+                                }}
+                                onPress={() => handleSaveQr(pInfo.qr_code_url!)}
+                                disabled={savingQr}
+                                activeOpacity={0.8}
+                              >
+                                {savingQr ? (
+                                  <ActivityIndicator size="small" color={qrSavedSuccess ? Colors.dark : Colors.white} />
+                                ) : qrSavedSuccess ? (
+                                  <Ionicons name="checkmark-circle" size={18} color="#92400E" />
+                                ) : (
+                                  <Ionicons name="download-outline" size={18} color={Colors.white} />
+                                )}
+                                <Text style={{
+                                  fontFamily: FontFamily.bold,
+                                  fontSize: 13,
+                                  color: qrSavedSuccess ? "#92400E" : Colors.white,
+                                }}>
+                                  {savingQr
+                                    ? "Saving to Gallery..."
+                                    : qrSavedSuccess
+                                    ? "Saved to Gallery!"
+                                    : "Save QR Code to Gallery"}
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          ) : null}
+                        </View>
+                      ) : null}
+
                       {/* Reference Input */}
-                      <TextInput
-                        style={{
-                          backgroundColor: Colors.inputBackground,
-                          borderRadius: 12,
-                          paddingHorizontal: 14,
-                          paddingVertical: 11,
-                          fontFamily: FontFamily.medium,
-                          fontSize: 13,
-                          color: Colors.dark,
-                          borderWidth: 1,
-                          borderColor: paymentRef ? Colors.primary : "transparent",
-                        }}
-                        placeholder="Enter Reference No."
-                        placeholderTextColor={Colors.secondary}
-                        value={paymentRef}
-                        onChangeText={setPaymentRef}
-                      />
+                      <View>
+                        <Text style={{ fontFamily: FontFamily.semiBold, fontSize: 11.5, color: Colors.secondary, marginBottom: 6 }}>
+                          GCash Reference Number
+                        </Text>
+                        <TextInput
+                          style={{
+                            backgroundColor: Colors.inputBackground,
+                            borderRadius: 12,
+                            paddingHorizontal: 14,
+                            paddingVertical: 12,
+                            fontFamily: FontFamily.medium,
+                            fontSize: 13,
+                            color: Colors.dark,
+                            borderWidth: 1,
+                            borderColor: paymentRefError ? Colors.error : (paymentRef ? Colors.primary : "transparent"),
+                          }}
+                          placeholder="Enter GCash Reference No."
+                          placeholderTextColor={Colors.secondary}
+                          value={paymentRef}
+                          onChangeText={(val) => {
+                            setPaymentRef(val);
+                            if (paymentRefError) setPaymentRefError("");
+                          }}
+                        />
+                      </View>
                     </View>
                   );
                 })()}
@@ -1287,157 +1594,67 @@ export default function Bookings() {
                   </Text>
                 </TouchableOpacity>
               </ScrollView>
-            </View>
-          </View>
-        </Modal>
-
-        {/* Fullscreen QR Code Preview Modal */}
-        <Modal
-          visible={!!showQrPreview}
-          transparent
-          animationType="fade"
-          statusBarTranslucent
-          onRequestClose={() => setShowQrPreview(null)}
-        >
-          <View style={{
-            flex: 1,
-            backgroundColor: "rgba(0, 0, 0, 0.75)",
-            justifyContent: "center",
-            alignItems: "center",
-            padding: 24,
-          }}>
-            <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowQrPreview(null)} />
-            <View style={{
-              backgroundColor: Colors.white,
-              borderRadius: 20,
-              padding: 22,
-              alignItems: "center",
-              maxWidth: 340,
-              width: "100%",
-              shadowColor: Colors.shadow,
-              shadowOffset: { width: 0, height: 10 },
-              shadowOpacity: 0.25,
-              shadowRadius: 16,
-              elevation: 8,
-            }}>
-              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.border, marginBottom: 14 }} />
-              <Text style={{ fontFamily: FontFamily.bold, fontSize: 16, color: Colors.dark, marginBottom: 2 }}>
-                Host Payment QR Code
-              </Text>
-              <Text style={{ fontFamily: FontFamily.regular, fontSize: 11.5, color: Colors.secondary, marginBottom: 14, textAlign: "center" }}>
-                Scan with GCash, Maya, or any QRPH banking app
-              </Text>
-
-              {showQrPreview && (
-                <View style={{
-                  padding: 10,
-                  backgroundColor: Colors.inputBackground,
-                  borderRadius: 14,
-                  borderWidth: 1,
-                  borderColor: Colors.border,
-                  marginBottom: 16,
-                }}>
-                  <Image
-                    source={{ uri: showQrPreview }}
-                    style={{ width: 220, height: 220, borderRadius: 8 }}
-                    contentFit="contain"
-                  />
-                </View>
-              )}
-
-              <TouchableOpacity
-                style={{
-                  backgroundColor: Colors.primary,
-                  paddingVertical: 12,
-                  paddingHorizontal: 32,
-                  borderRadius: 12,
-                  width: "100%",
-                  alignItems: "center",
-                }}
-                onPress={() => setShowQrPreview(null)}
-                activeOpacity={0.88}
-              >
-                <Text style={{ fontFamily: FontFamily.bold, fontSize: 13.5, color: Colors.white }}>
-                  Done
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
+        </AppBottomSheet>
 
         {/* Modal 3: Review Modal */}
-        <Modal
+        <AppBottomSheet
           visible={!!selectedBookingForReview}
-          transparent
-          animationType="slide"
-          statusBarTranslucent={true}
-          onRequestClose={() => setSelectedBookingForReview(null)}
+          onClose={() => setSelectedBookingForReview(null)}
+          position="bottom"
+          showHandle={true}
+          sheetStyle={styles.modalCard}
         >
-          <View style={styles.modalOverlay}>
-            <Pressable
-              style={StyleSheet.absoluteFill}
-              onPress={() => setSelectedBookingForReview(null)}
-            />
-            <View style={styles.modalCard}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Rate Your Rental Trip</Text>
-                <TouchableOpacity onPress={() => setSelectedBookingForReview(null)}>
-                  <Ionicons name="close-circle" size={24} color={Colors.secondary} />
-                </TouchableOpacity>
-              </View>
-
-              <Text style={styles.modalSub}>
-                How was your experience with {selectedBookingForReview?.vehicle?.name}?
-              </Text>
-
-              {/* Star Selector */}
-              <View style={styles.starRow}>
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <TouchableOpacity key={star} onPress={() => setReviewRating(star)}>
-                    <Ionicons
-                      name={star <= reviewRating ? "star" : "star-outline"}
-                      size={34}
-                      color={Colors.primary}
-                    />
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <Text style={styles.modalFieldLabel}>Write a Review</Text>
-              <TextInput
-                style={[styles.modalInput, { height: 80 }]}
-                placeholder="Vehicle condition, handover punctuality, host friendliness..."
-                value={reviewText}
-                onChangeText={setReviewText}
-                multiline
-              />
-
-              <View style={{ marginTop: Spacing.lg }}>
-                <PrimaryButton
-                  title={submittingReview ? "Submitting..." : "Submit Review"}
-                  onPress={handleSubmitReview}
-                  loading={submittingReview}
-                />
-              </View>
-            </View>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Rate Your Rental Trip</Text>
+            <TouchableOpacity onPress={() => setSelectedBookingForReview(null)}>
+              <Ionicons name="close-circle" size={24} color={Colors.secondary} />
+            </TouchableOpacity>
           </View>
-        </Modal>
+
+          <Text style={styles.modalSub}>
+            How was your experience with {selectedBookingForReview?.vehicle?.name}?
+          </Text>
+
+          {/* Star Selector */}
+          <View style={styles.starRow}>
+            {[1, 2, 3, 4, 5].map((star) => (
+              <TouchableOpacity key={star} onPress={() => setReviewRating(star)}>
+                <Ionicons
+                  name={star <= reviewRating ? "star" : "star-outline"}
+                  size={34}
+                  color={Colors.primary}
+                />
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Text style={styles.modalFieldLabel}>Write a Review</Text>
+          <TextInput
+            style={[styles.modalInput, { height: 80 }]}
+            placeholder="Vehicle condition, handover punctuality, host friendliness..."
+            value={reviewText}
+            onChangeText={setReviewText}
+            multiline
+          />
+
+          <View style={{ marginTop: Spacing.lg }}>
+            <PrimaryButton
+              title={submittingReview ? "Submitting..." : "Submit Review"}
+              onPress={handleSubmitReview}
+              loading={submittingReview}
+            />
+          </View>
+        </AppBottomSheet>
 
         {/* Modal 4: Rental Extension Modal */}
-        <Modal
+        <AppBottomSheet
           visible={!!selectedBookingForExtension}
-          transparent
-          animationType="slide"
-          statusBarTranslucent={true}
-          onRequestClose={() => setSelectedBookingForExtension(null)}
+          onClose={() => setSelectedBookingForExtension(null)}
+          position="bottom"
+          showHandle={false}
+          sheetStyle={styles.modalCardLarge}
         >
-          <View style={styles.modalOverlay}>
-            <Pressable
-              style={StyleSheet.absoluteFill}
-              onPress={() => setSelectedBookingForExtension(null)}
-            />
-            <View style={styles.modalCardLarge}>
-              <View style={styles.modalHeader}>
+          <View style={styles.modalHeader}>
                 <View>
                   <Text style={styles.modalTitle}>Extend Rental Duration</Text>
                   <Text style={styles.modalSub}>
@@ -1625,9 +1842,7 @@ export default function Bookings() {
                   );
                 })()}
               </ScrollView>
-            </View>
-          </View>
-        </Modal>
+        </AppBottomSheet>
       </View>
     </ScreenContainer>
   );
@@ -1902,17 +2117,21 @@ const styles = StyleSheet.create({
     color: Colors.white,
   },
   dangerActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 10,
-    backgroundColor: "#FEF2F2",
-    justifyContent: "center",
-    alignItems: "center",
+    backgroundColor: "#FDF2F2",
+    borderWidth: 1,
+    borderColor: "#FEE2E2",
   },
   dangerActionText: {
     fontFamily: FontFamily.bold,
     fontSize: 12,
-    color: Colors.error,
+    color: "#991B1B",
   },
   // Trip Live Metrics Banner
   tripMetricsBanner: {

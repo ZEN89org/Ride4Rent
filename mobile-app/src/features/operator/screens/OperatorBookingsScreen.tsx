@@ -16,6 +16,7 @@ import {
   View,
 } from "react-native";
 
+import { AppBottomSheet } from "@/components/common/AppBottomSheet";
 import { Skeleton } from "@/components/common/Skeleton";
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";
@@ -206,7 +207,7 @@ export default function OperatorBookingsScreen() {
       } catch {
         await updateBookingStatus(verifyModalBooking.id, "approved");
       }
-      showSuccess("✨ Payment Confirmed & Approved", `Booking #${verifyModalBooking.id} is confirmed. Renter has been notified.`);
+      showSuccess("Payment Confirmed & Approved", `Booking #${verifyModalBooking.id} is confirmed. Renter has been notified.`);
       setVerifyModalBooking(null);
       loadOperatorBookings();
     } catch (e: any) {
@@ -237,7 +238,7 @@ export default function OperatorBookingsScreen() {
         refund_notes: refundNotesInput.trim() || undefined,
       });
 
-      showSuccess("🎉 Refund Logged", "Refund reference recorded and notification sent to the renter.");
+      showSuccess("Refund Logged", "Refund reference recorded and notification sent to the renter.");
       setRefundModalBooking(null);
       loadOperatorBookings();
     } catch (e: any) {
@@ -318,7 +319,7 @@ export default function OperatorBookingsScreen() {
         start_inspection_notes: startNotesInput.trim() || undefined,
       });
 
-      showSuccess("🚗 Trip Started!", `Inspection recorded. Live GPS & Rental duration tracker active.`);
+      showSuccess("Trip Started!", `Inspection recorded. Live GPS & Rental duration tracker active.`);
       setStartTripModalBooking(null);
       loadOperatorBookings();
     } catch (e: any) {
@@ -366,7 +367,7 @@ export default function OperatorBookingsScreen() {
         end_inspection_notes: endNotesInput.trim() || undefined,
       });
 
-      showSuccess("🎉 Trip Completed", "Return inspection finalized and rental closed.");
+      showSuccess("Trip Completed", "Return inspection finalized and rental closed.");
       setReturnTripModalBooking(null);
       loadOperatorBookings();
     } catch (e: any) {
@@ -410,16 +411,18 @@ export default function OperatorBookingsScreen() {
     if (item.refund_status === "pending" || item.payment_status === "refund_pending") {
       return {
         label: "Refund Required",
-        bg: "#FEF2F2",
-        text: "#DC2626",
+        bg: "#FDF2F2",
+        text: "#991B1B",
+        border: "#FEE2E2",
         icon: "alert-circle" as const,
       };
     }
     if (item.refund_status === "refunded" || item.payment_status === "refunded") {
       return {
         label: "Refunded",
-        bg: "#ECFDF5",
-        text: "#059669",
+        bg: "#FFF6DA",
+        text: "#92400E",
+        border: "#FDE68A",
         icon: "checkmark-circle" as const,
       };
     }
@@ -428,22 +431,25 @@ export default function OperatorBookingsScreen() {
         return {
           label: "Awaiting Renter Fee",
           bg: "#FFFBEB",
-          text: "#D97706",
+          text: "#B45309",
+          border: "#FDE68A",
           icon: "time-outline" as const,
         };
       case "pending_verification":
         return {
           label: "Verify Payment",
-          bg: "#EFF6FF",
-          text: "#2563EB",
+          bg: "#FFF9E6",
+          text: Colors.dark,
+          border: Colors.primary,
           icon: "shield-checkmark-outline" as const,
         };
       case "approved":
       case "awaiting_pickup":
         return {
           label: "Awaiting Pickup",
-          bg: "#ECFDF5",
-          text: "#059669",
+          bg: "#FFF6DA",
+          text: "#92400E",
+          border: "#FDE68A",
           icon: "checkmark-circle" as const,
         };
       case "pickup_in_progress":
@@ -451,56 +457,64 @@ export default function OperatorBookingsScreen() {
           label: "Pickup In Progress",
           bg: "#FEF3C7",
           text: "#B45309",
+          border: "#FDE68A",
           icon: "walk" as const,
         };
       case "ready_to_start":
         return {
           label: "Ready to Start",
-          bg: "#EDE9FE",
-          text: "#7C3AED",
+          bg: "#1A1A1A",
+          text: Colors.primary,
+          border: "#1A1A1A",
           icon: "key" as const,
         };
       case "trip_in_progress":
       case "ongoing":
         return {
-          label: "🚗 Trip In Progress",
-          bg: "#F0FDF4",
-          text: "#15803D",
+          label: "Trip In Progress",
+          bg: "#1A1A1A",
+          text: Colors.primary,
+          border: "#1A1A1A",
           icon: "car" as const,
         };
       case "return_pending":
         return {
           label: "Return Pending",
-          bg: "#FFF7ED",
-          text: "#C2410C",
+          bg: "#FFF6DA",
+          text: "#92400E",
+          border: "#FDE68A",
           icon: "hourglass-outline" as const,
         };
       case "completed":
         return {
           label: "Completed",
-          bg: "#F3F4F6",
-          text: "#4B5563",
+          bg: "#F4F4F5",
+          text: "#52525B",
+          border: "#E4E4E7",
           icon: "flag" as const,
         };
       case "rejected":
         return {
           label: "Declined",
-          bg: "#FEF2F2",
-          text: Colors.error,
+          bg: "#FDF2F2",
+          text: "#991B1B",
+          border: "#FEE2E2",
           icon: "close-circle" as const,
         };
       case "cancelled":
         return {
           label: "Cancelled",
-          bg: "#FEF2F2",
-          text: Colors.error,
+          bg: "#FDF2F2",
+          text: "#991B1B",
+          border: "#FEE2E2",
           icon: "close-circle" as const,
         };
       case "no_show":
         return {
           label: "No-Show",
-          bg: "#F3F4F6",
-          text: "#6B7280",
+          bg: "#F4F4F5",
+          text: "#52525B",
+          border: "#E4E4E7",
           icon: "person-remove-outline" as const,
         };
       default:
@@ -508,6 +522,7 @@ export default function OperatorBookingsScreen() {
           label: String((item as any)?.status || "").toUpperCase(),
           bg: Colors.inputBackground,
           text: Colors.dark,
+          border: Colors.border,
           icon: "information-circle" as const,
         };
     }
@@ -667,7 +682,7 @@ export default function OperatorBookingsScreen() {
 
                     {/* Right Status Pill & Image */}
                     <View style={styles.cardRightCol}>
-                      <View style={[styles.statusPill, { backgroundColor: statusCfg.bg }]}>
+                      <View style={[styles.statusPill, { backgroundColor: statusCfg.bg, borderColor: (statusCfg as any).border || statusCfg.bg, borderWidth: 1 }]}>
                         <Ionicons name={statusCfg.icon} size={11} color={statusCfg.text} />
                         <Text style={[styles.statusPillText, { color: statusCfg.text }]}>
                           {statusCfg.label}
@@ -719,7 +734,7 @@ export default function OperatorBookingsScreen() {
                   {/* Reference Number / Receipt Box */}
                   {item.payment_reference && !isRefundPending ? (
                     <View style={styles.receiptBox}>
-                      <Ionicons name="receipt-outline" size={14} color="#2563EB" />
+                      <Ionicons name="receipt-outline" size={14} color="#92400E" />
                       <Text style={styles.receiptBoxLabel}>Payment Ref / Receipt:</Text>
                       <Text style={styles.receiptBoxVal} numberOfLines={1}>
                         {item.payment_reference}
@@ -802,7 +817,7 @@ export default function OperatorBookingsScreen() {
                           onPress={() => handleApproveExtension(item.id)}
                           activeOpacity={0.85}
                         >
-                          <Ionicons name="checkmark-circle" size={14} color="#065F46" />
+                          <Ionicons name="checkmark-circle" size={14} color={Colors.white} />
                           <Text style={styles.extensionApproveText}>Approve Extension</Text>
                         </TouchableOpacity>
                       </View>
@@ -812,235 +827,268 @@ export default function OperatorBookingsScreen() {
                   {/* Extension Approved Banner */}
                   {item.extension_status === "approved" && (
                     <View style={styles.extensionApprovedBox}>
-                      <Ionicons name="checkmark-circle" size={15} color="#059669" />
+                      <Ionicons name="checkmark-circle" size={15} color={Colors.dark} />
                       <Text style={styles.extensionApprovedText}>
                         Trip Extended (+{item.extension_days || 1} d) until {cleanDate(item.end_date)} • Extra Fee: ₱{Number(item.extension_fee || 0).toLocaleString()}
                       </Text>
                     </View>
                   )}
 
-                  {/* Dual Actions Footer */}
-                  <View style={styles.dualActionRow}>
-                    {item.renter?.id && (
-                      <TouchableOpacity
-                        style={styles.outlineActionBtn}
-                        onPress={() =>
-                          router.push({
-                            pathname: `/chat/${item.renter.id}`,
-                            params: { name: renterName },
-                          } as any)
-                        }
-                        activeOpacity={0.8}
-                      >
-                        <Ionicons name="chatbubble-ellipses-outline" size={14} color={Colors.dark} />
-                        <Text style={styles.outlineActionText}>Chat</Text>
-                      </TouchableOpacity>
-                    )}
+                  {/* Actions Section */}
+                  {(item.status === "approved" || item.status === "awaiting_pickup" || item.status === "pickup_in_progress" || item.status === "ready_to_start") ? (
+                    <View style={styles.approvedActionsContainer}>
+                      {/* Top Utility Row: Chat & Mark No-Show */}
+                      <View style={styles.approvedSecondaryRow}>
+                        {item.renter?.id ? (
+                          <TouchableOpacity
+                            style={styles.approvedChatBtn}
+                            onPress={() =>
+                              router.push({
+                                pathname: `/chat/${item.renter.id}`,
+                                params: { name: renterName },
+                              } as any)
+                            }
+                            activeOpacity={0.75}
+                          >
+                            <Ionicons name="chatbubble-ellipses-outline" size={14} color={Colors.dark} />
+                            <Text style={styles.approvedChatBtnText}>Chat Renter</Text>
+                          </TouchableOpacity>
+                        ) : null}
 
-                    {isRefundPending ? (
+                        <TouchableOpacity
+                          style={styles.approvedNoShowBtn}
+                          onPress={() => handleStatusChange(item.id, "no_show")}
+                          activeOpacity={0.75}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Ionicons name="person-remove-outline" size={14} color="#991B1B" />
+                          <Text style={styles.approvedNoShowBtnText}>Mark No-Show</Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {/* Prominent Full-Width Handover Action */}
                       <TouchableOpacity
-                        style={[styles.primaryActionBtn, { backgroundColor: "#DC2626" }]}
-                        onPress={() => openRefundModal(item)}
+                        style={styles.approvedStartTripBtn}
+                        onPress={() => openStartTripModal(item)}
                         activeOpacity={0.85}
                       >
-                        <Ionicons name="cash-outline" size={15} color={Colors.white} />
-                        <Text style={[styles.primaryActionText, { color: Colors.white }]}>Submit Refund Proof</Text>
+                        <MaterialCommunityIcons name="car-key" size={17} color={Colors.white} />
+                        <Text style={styles.approvedStartTripBtnText}>Start Trip Handover</Text>
+                        <Ionicons name="arrow-forward" size={15} color={Colors.white} />
                       </TouchableOpacity>
-                    ) : item.status === "pending_verification" ? (
-                      <View style={{ flexDirection: "row", gap: 8, flex: 1 }}>
+                    </View>
+                  ) : (
+                    <View style={styles.dualActionRow}>
+                      {item.renter?.id && (
                         <TouchableOpacity
-                          style={styles.dangerActionBtn}
-                          onPress={() => handleStatusChange(item.id, "rejected")}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={styles.dangerActionText}>Decline</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={styles.primaryActionBtn}
-                          onPress={() => setVerifyModalBooking(item)}
-                          activeOpacity={0.85}
-                        >
-                          <Ionicons name="shield-checkmark" size={14} color={Colors.white} />
-                          <Text style={styles.primaryActionText}>Verify & Approve</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ) : (item.status === "approved" || item.status === "awaiting_pickup" || item.status === "pickup_in_progress" || item.status === "ready_to_start") ? (
-                      <View style={{ flexDirection: "row", gap: 8, flex: 1 }}>
-                        <TouchableOpacity
-                          style={styles.dangerActionBtn}
-                          onPress={() => handleStatusChange(item.id, "no_show")}
-                          activeOpacity={0.7}
-                        >
-                          <Ionicons name="person-remove-outline" size={13} color={Colors.error} />
-                          <Text style={styles.dangerActionText}>No-Show</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={styles.primaryActionBtn}
-                          onPress={() => openStartTripModal(item)}
-                          activeOpacity={0.85}
-                        >
-                          <MaterialCommunityIcons name="car-key" size={15} color={Colors.white} />
-                          <Text style={styles.primaryActionText}>Start Trip & Inspect</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ) : (item.status === "trip_in_progress" || item.status === "return_pending" || item.status === "ongoing") ? (
-                      <View style={{ flexDirection: "row", gap: 8, flex: 1 }}>
-                        <TouchableOpacity
-                          style={styles.gpsActionBtn}
+                          style={styles.outlineActionBtn}
                           onPress={() =>
                             router.push({
-                              pathname: "/live-tracking",
-                              params: {
-                                bookingId: item.id.toString(),
-                                vehicleName: item.vehicle?.name || "Vehicle",
-                                renterName: renterName,
-                              },
+                              pathname: `/chat/${item.renter.id}`,
+                              params: { name: renterName },
                             } as any)
                           }
                           activeOpacity={0.8}
                         >
-                          <Ionicons name="navigate-circle" size={15} color="#2563EB" />
-                          <Text style={styles.gpsActionText}>Live GPS</Text>
+                          <Ionicons name="chatbubble-ellipses-outline" size={14} color={Colors.dark} />
+                          <Text style={styles.outlineActionText}>Chat</Text>
                         </TouchableOpacity>
+                      )}
 
+                      {isRefundPending ? (
                         <TouchableOpacity
-                          style={styles.primaryActionBtn}
-                          onPress={() => openReturnTripModal(item)}
+                          style={[styles.primaryActionBtn, { backgroundColor: "#991B1B" }]}
+                          onPress={() => openRefundModal(item)}
                           activeOpacity={0.85}
                         >
-                          <Ionicons name="clipboard-outline" size={15} color={Colors.white} />
-                          <Text style={styles.primaryActionText}>Return Check</Text>
+                          <Ionicons name="cash-outline" size={15} color={Colors.white} />
+                          <Text style={[styles.primaryActionText, { color: Colors.white }]}>Submit Refund Proof</Text>
                         </TouchableOpacity>
-                      </View>
-                    ) : null}
-                  </View>
+                      ) : item.status === "pending_verification" ? (
+                        <View style={{ flexDirection: "row", gap: 8, flex: 1 }}>
+                          <TouchableOpacity
+                            style={styles.dangerActionBtn}
+                            onPress={() => handleStatusChange(item.id, "rejected")}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.dangerActionText}>Decline</Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={styles.primaryActionBtn}
+                            onPress={() => setVerifyModalBooking(item)}
+                            activeOpacity={0.85}
+                          >
+                            <Ionicons name="shield-checkmark" size={14} color={Colors.white} />
+                            <Text style={styles.primaryActionText}>Verify & Approve</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : (item.status === "trip_in_progress" || item.status === "return_pending" || item.status === "ongoing") ? (
+                        <View style={{ flexDirection: "row", gap: 8, flex: 1 }}>
+                          <TouchableOpacity
+                            style={styles.gpsActionBtn}
+                            onPress={() =>
+                              router.push({
+                                pathname: "/live-tracking",
+                                params: {
+                                  bookingId: item.id.toString(),
+                                  vehicleName: item.vehicle?.name || "Vehicle",
+                                  renterName: renterName,
+                                },
+                              } as any)
+                            }
+                            activeOpacity={0.8}
+                          >
+                            <Ionicons name="navigate-circle" size={15} color={Colors.dark} />
+                            <Text style={styles.gpsActionText}>Live GPS</Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={styles.primaryActionBtn}
+                            onPress={() => openReturnTripModal(item)}
+                            activeOpacity={0.85}
+                          >
+                            <Ionicons name="clipboard-outline" size={15} color={Colors.white} />
+                            <Text style={styles.primaryActionText}>Return Check</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
+                    </View>
+                  )}
                 </View>
               );
             }}
           />
         )}
 
-        {/* Start Trip Inspection Modal */}
-        <Modal
+        {/* Start Trip Handover Inspection Modal */}
+        <AppBottomSheet
           visible={!!startTripModalBooking}
-          transparent
-          animationType="slide"
-          statusBarTranslucent={true}
-          onRequestClose={() => setStartTripModalBooking(null)}
+          onClose={() => setStartTripModalBooking(null)}
+          position="bottom"
+          showHandle={true}
+          sheetStyle={styles.verifyModalCard}
         >
-          <View style={styles.modalOverlay}>
-            <Pressable
-              style={StyleSheet.absoluteFill}
-              onPress={() => setStartTripModalBooking(null)}
-            />
-            <View style={styles.modalCard}>
-              <View style={styles.modalHeader}>
-                <View>
-                  <Text style={styles.modalTitle}>🚗 Start Trip Handover</Text>
-                  <Text style={styles.modalSub}>{startTripModalBooking?.vehicle?.name}</Text>
-                </View>
-                <TouchableOpacity onPress={() => setStartTripModalBooking(null)}>
-                  <Ionicons name="close-circle" size={24} color={Colors.secondary} />
-                </TouchableOpacity>
-              </View>
+          <Text style={styles.verifyModalHeading}>Start Trip Handover</Text>
+          <Text style={styles.verifyModalSubheading}>
+            Record vehicle baseline condition & hand over keys to renter
+          </Text>
 
-              <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
-                {/* Info Card */}
-                <View style={styles.modalInfoBanner}>
-                  <Ionicons name="information-circle" size={18} color="#2563EB" />
-                  <Text style={styles.modalInfoBannerText}>
-                    Record the vehicle's initial condition to baseline mileage and fuel before releasing the keys.
-                  </Text>
-                </View>
+          {/* Renter & Vehicle Summary Card */}
+          <View style={styles.verifySummaryCard}>
+            <View style={styles.verifyRow}>
+              <Text style={styles.verifyLabel}>Renter</Text>
+              <Text style={styles.verifyValue} numberOfLines={1}>
+                {startTripModalBooking?.renter
+                  ? `${startTripModalBooking.renter.first_name || ""} ${startTripModalBooking.renter.last_name || ""}`.trim()
+                  : "Verified Renter"}
+              </Text>
+            </View>
 
-                {/* Starting Mileage */}
-                <Text style={styles.inputLabel}>Starting Odometer Mileage (km) *</Text>
-                <View style={styles.inputBox}>
-                  <Ionicons name="speedometer-outline" size={18} color={Colors.secondary} />
-                  <TextInput
-                    style={styles.textInputField}
-                    keyboardType="numeric"
-                    placeholder="e.g. 24580"
-                    placeholderTextColor={Colors.secondary}
-                    value={startMileageInput}
-                    onChangeText={setStartMileageInput}
-                  />
-                  <Text style={styles.inputUnit}>km</Text>
-                </View>
+            <View style={styles.verifyDivider} />
 
-                {/* Starting Fuel Level Selector */}
-                <Text style={styles.inputLabel}>Starting Fuel Level: {startFuelLevelInput}%</Text>
-                <View style={styles.fuelOptionsRow}>
-                  {[25, 50, 75, 100].map((level) => (
-                    <TouchableOpacity
-                      key={level}
-                      style={[styles.fuelBtn, startFuelLevelInput === level && styles.fuelBtnActive]}
-                      onPress={() => setStartFuelLevelInput(level)}
-                    >
-                      <Ionicons
-                        name="flash"
-                        size={12}
-                        color={startFuelLevelInput === level ? Colors.white : Colors.secondary}
-                      />
-                      <Text style={[styles.fuelBtnText, startFuelLevelInput === level && styles.fuelBtnTextActive]}>
-                        {level}%
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+            <View style={styles.verifyRow}>
+              <Text style={styles.verifyLabel}>Vehicle</Text>
+              <Text style={styles.verifyValue} numberOfLines={1}>
+                {startTripModalBooking?.vehicle?.name || "Vehicle"}
+              </Text>
+            </View>
 
-                {/* Inspection Notes */}
-                <Text style={styles.inputLabel}>Handover & Vehicle Condition Notes</Text>
-                <TextInput
-                  style={[styles.textInputField, styles.textAreaField]}
-                  multiline
-                  numberOfLines={3}
-                  placeholder="Note pre-existing scratches, cleanliness, or accessories handed over..."
-                  placeholderTextColor={Colors.secondary}
-                  value={startNotesInput}
-                  onChangeText={setStartNotesInput}
-                />
-              </ScrollView>
+            <View style={styles.verifyDivider} />
 
-              <View style={styles.modalFooterActions}>
-                <TouchableOpacity
-                  style={styles.cancelModalBtn}
-                  onPress={() => setStartTripModalBooking(null)}
-                >
-                  <Text style={styles.cancelModalBtnText}>Cancel</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.confirmStartBtn}
-                  onPress={handleExecuteStartTrip}
-                  disabled={submittingStartTrip}
-                >
-                  <MaterialCommunityIcons name="car-key" size={16} color={Colors.white} />
-                  <Text style={styles.confirmStartBtnText}>
-                    {submittingStartTrip ? "Starting..." : "Start Trip"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+            <View style={styles.verifyRow}>
+              <Text style={styles.verifyLabel}>Rental Schedule</Text>
+              <Text style={styles.verifyValue}>
+                {cleanDate(startTripModalBooking?.start_date)} → {cleanDate(startTripModalBooking?.end_date)} ({startTripModalBooking?.total_days || 1} d)
+              </Text>
             </View>
           </View>
-        </Modal>
+
+          <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 280 }}>
+            {/* Starting Mileage */}
+            <Text style={styles.inputLabel}>Starting Odometer Mileage (km) *</Text>
+            <View style={styles.inputBox}>
+              <Ionicons name="speedometer-outline" size={18} color={Colors.secondary} />
+              <TextInput
+                style={styles.textInputField}
+                keyboardType="numeric"
+                placeholder="e.g. 24580"
+                placeholderTextColor={Colors.secondary}
+                value={startMileageInput}
+                onChangeText={setStartMileageInput}
+              />
+              <Text style={styles.inputUnit}>km</Text>
+            </View>
+
+            {/* Starting Fuel Level Selector */}
+            <Text style={styles.inputLabel}>Starting Fuel Level: {startFuelLevelInput}%</Text>
+            <View style={styles.fuelOptionsRow}>
+              {[25, 50, 75, 100].map((level) => (
+                <TouchableOpacity
+                  key={level}
+                  style={[styles.fuelBtn, startFuelLevelInput === level && styles.fuelBtnActive]}
+                  onPress={() => setStartFuelLevelInput(level)}
+                >
+                  <Ionicons
+                    name="flash"
+                    size={12}
+                    color={startFuelLevelInput === level ? Colors.white : Colors.secondary}
+                  />
+                  <Text style={[styles.fuelBtnText, startFuelLevelInput === level && styles.fuelBtnTextActive]}>
+                    {level}%
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Inspection Notes */}
+            <Text style={styles.inputLabel}>Handover & Vehicle Condition Notes</Text>
+            <TextInput
+              style={[styles.textInputField, styles.textAreaField]}
+              multiline
+              numberOfLines={3}
+              placeholder="Note pre-existing scratches, cleanliness, or accessories handed over..."
+              placeholderTextColor={Colors.secondary}
+              value={startNotesInput}
+              onChangeText={setStartNotesInput}
+            />
+          </ScrollView>
+
+          {/* Dual Action Footer matching verifyActionsRow */}
+          <View style={styles.verifyActionsRow}>
+            <TouchableOpacity
+              style={styles.verifyCancelBtn}
+              onPress={() => setStartTripModalBooking(null)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.verifyCancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.verifyConfirmBtn}
+              onPress={handleExecuteStartTrip}
+              disabled={submittingStartTrip}
+              activeOpacity={0.88}
+            >
+              <MaterialCommunityIcons name="car-key" size={18} color={Colors.white} />
+              <Text style={styles.verifyConfirmBtnText}>
+                {submittingStartTrip ? "Starting..." : "Start Trip"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </AppBottomSheet>
 
         {/* Return Trip Inspection Modal */}
-        <Modal
+        <AppBottomSheet
           visible={!!returnTripModalBooking}
-          transparent
-          animationType="slide"
-          statusBarTranslucent={true}
-          onRequestClose={() => setReturnTripModalBooking(null)}
+          onClose={() => setReturnTripModalBooking(null)}
+          position="bottom"
+          showHandle={false}
+          sheetStyle={styles.modalCard}
         >
-          <View style={styles.modalOverlay}>
-            <Pressable style={StyleSheet.absoluteFill} onPress={() => setReturnTripModalBooking(null)} />
-            <View style={styles.modalCard}>
-              <View style={styles.modalHeader}>
+          <View style={styles.modalHeader}>
                 <View>
-                  <Text style={styles.modalTitle}>🔍 Return Inspection</Text>
+                  <Text style={styles.modalTitle}>Return Inspection</Text>
                   <Text style={styles.modalSub}>{returnTripModalBooking?.vehicle?.name}</Text>
                 </View>
                 <TouchableOpacity onPress={() => setReturnTripModalBooking(null)}>
@@ -1174,22 +1222,17 @@ export default function OperatorBookingsScreen() {
                   </Text>
                 </TouchableOpacity>
               </View>
-            </View>
-          </View>
-        </Modal>
+        </AppBottomSheet>
 
         {/* Submit Refund Proof Modal */}
-        <Modal
+        <AppBottomSheet
           visible={!!refundModalBooking}
-          transparent
-          animationType="slide"
-          statusBarTranslucent={true}
-          onRequestClose={() => setRefundModalBooking(null)}
+          onClose={() => setRefundModalBooking(null)}
+          position="bottom"
+          showHandle={false}
+          sheetStyle={styles.modalCard}
         >
-          <View style={styles.modalOverlay}>
-            <Pressable style={StyleSheet.absoluteFill} onPress={() => setRefundModalBooking(null)} />
-            <View style={styles.modalCard}>
-              <View style={styles.modalHeader}>
+          <View style={styles.modalHeader}>
                 <View>
                   <Text style={styles.modalTitle}>Process Renter Refund</Text>
                   <Text style={styles.modalSub}>
@@ -1270,69 +1313,56 @@ export default function OperatorBookingsScreen() {
                   </Text>
                 </TouchableOpacity>
               </View>
-            </View>
-          </View>
-        </Modal>
+        </AppBottomSheet>
 
         {/* View Renter Profile Modal */}
-        <Modal
+        <AppBottomSheet
           visible={!!selectedRenter}
-          transparent
-          animationType="fade"
-          statusBarTranslucent={true}
-          onRequestClose={() => setSelectedRenter(null)}
+          onClose={() => setSelectedRenter(null)}
+          position="bottom"
+          showHandle={true}
+          sheetStyle={styles.modalCard}
         >
-          <View style={styles.modalOverlay}>
-            <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedRenter(null)} />
-            <View style={styles.modalCard}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Renter Profile</Text>
-                <TouchableOpacity onPress={() => setSelectedRenter(null)}>
-                  <Ionicons name="close-circle" size={24} color={Colors.secondary} />
-                </TouchableOpacity>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Renter Profile</Text>
+            <TouchableOpacity onPress={() => setSelectedRenter(null)}>
+              <Ionicons name="close-circle" size={24} color={Colors.secondary} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.renterModalBody}>
+            {selectedRenter?.profile_photo ? (
+              <Image source={{ uri: selectedRenter.profile_photo }} style={styles.renterAvatarLg} />
+            ) : (
+              <View style={styles.renterAvatarLg}>
+                <Ionicons name="person" size={32} color={Colors.dark} />
               </View>
+            )}
 
-              <View style={styles.renterModalBody}>
-                {selectedRenter?.profile_photo ? (
-                  <Image source={{ uri: selectedRenter.profile_photo }} style={styles.renterAvatarLg} />
-                ) : (
-                  <View style={styles.renterAvatarLg}>
-                    <Ionicons name="person" size={32} color={Colors.dark} />
-                  </View>
-                )}
+            <Text style={styles.renterNameLg}>
+              {selectedRenter?.first_name} {selectedRenter?.last_name}
+            </Text>
+            <Text style={styles.renterEmailLg}>{selectedRenter?.email}</Text>
+            <Text style={styles.renterPhoneLg}>{selectedRenter?.mobile_number || "No contact number"}</Text>
 
-                <Text style={styles.renterNameLg}>
-                  {selectedRenter?.first_name} {selectedRenter?.last_name}
-                </Text>
-                <Text style={styles.renterEmailLg}>{selectedRenter?.email}</Text>
-                <Text style={styles.renterPhoneLg}>{selectedRenter?.mobile_number || "No contact number"}</Text>
-
-                <View style={styles.verifiedPill}>
-                  <Ionicons name="checkmark-circle" size={14} color="#10B981" />
-                  <Text style={styles.verifiedText}>Verified Customer</Text>
-                </View>
-              </View>
+            <View style={styles.verifiedPill}>
+              <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+              <Text style={styles.verifiedText}>Verified Customer</Text>
             </View>
           </View>
-        </Modal>
+        </AppBottomSheet>
 
         {/* Dedicated Professional & Minimal Verify & Approve Bottom Sheet */}
-        <Modal
+        <AppBottomSheet
           visible={!!verifyModalBooking}
-          transparent
-          animationType="slide"
-          statusBarTranslucent={true}
-          onRequestClose={() => setVerifyModalBooking(null)}
+          onClose={() => setVerifyModalBooking(null)}
+          position="bottom"
+          showHandle={true}
+          sheetStyle={styles.verifyModalCard}
         >
-          <View style={styles.verifyModalOverlay}>
-            <Pressable style={StyleSheet.absoluteFill} onPress={() => setVerifyModalBooking(null)} />
-            <View style={styles.verifyModalCard}>
-              {/* Bottom Sheet Top Pill Handle */}
-              <View style={styles.verifySheetHandle} />
-
-              {/* Top Drama Glow Icon */}
+          {/* Top Drama Glow Icon */}
               <View style={styles.verifyGlowCircle}>
-                <Ionicons name="shield-checkmark" size={32} color="#0F172A" />
+                <Ionicons name="shield-checkmark" size={32} color={Colors.dark} />
               </View>
 
               <Text style={styles.verifyModalHeading}>Verify & Approve Reservation</Text>
@@ -1391,7 +1421,7 @@ export default function OperatorBookingsScreen() {
 
               {/* Operational Guarantee Notice */}
               <View style={styles.verifyNoticeBox}>
-                <Ionicons name="lock-closed" size={14} color="#64748B" />
+                <Ionicons name="lock-closed" size={14} color={Colors.dark} />
                 <Text style={styles.verifyNoticeText}>
                   Approving will secure this vehicle in your fleet calendar and issue a pickup confirmation pass to the renter.
                 </Text>
@@ -1413,7 +1443,7 @@ export default function OperatorBookingsScreen() {
                   }}
                   activeOpacity={0.8}
                 >
-                  <Ionicons name="chatbubble-ellipses-outline" size={15} color="#475569" />
+                  <Ionicons name="chatbubble-ellipses-outline" size={15} color={Colors.dark} />
                   <Text style={styles.verifyCancelBtnText}>Chat Renter</Text>
                 </TouchableOpacity>
 
@@ -1429,9 +1459,7 @@ export default function OperatorBookingsScreen() {
                   </Text>
                 </TouchableOpacity>
               </View>
-            </View>
-          </View>
-        </Modal>
+        </AppBottomSheet>
       </View>
     </OperatorShell>
   );
@@ -1579,6 +1607,73 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: Colors.inputBackground,
   },
+  approvedActionsContainer: {
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+    gap: 8,
+  },
+  approvedSecondaryRow: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+  },
+  approvedChatBtn: {
+    flex: 1,
+    height: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.white,
+  },
+  approvedChatBtnText: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 12.5,
+    color: Colors.dark,
+  },
+  approvedNoShowBtn: {
+    flex: 1,
+    height: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#FEE2E2",
+    backgroundColor: "#FDF2F2",
+  },
+  approvedNoShowBtnText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 12.5,
+    color: "#991B1B",
+  },
+  approvedStartTripBtn: {
+    width: "100%",
+    height: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: 13,
+    backgroundColor: Colors.primary,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  approvedStartTripBtnText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 13.5,
+    color: Colors.white,
+    letterSpacing: -0.2,
+  },
   dualActionRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1625,22 +1720,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 10,
-    backgroundColor: "#FEF2F2",
+    backgroundColor: "#FDF2F2",
+    borderWidth: 1,
+    borderColor: "#FEE2E2",
     justifyContent: "center",
     alignItems: "center",
   },
   dangerActionText: {
     fontFamily: FontFamily.bold,
     fontSize: 12,
-    color: Colors.error,
+    color: "#991B1B",
   },
   gpsActionBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#EFF6FF",
+    backgroundColor: Colors.logoBackground,
     borderWidth: 1,
-    borderColor: "#BFDBFE",
+    borderColor: "#FDE68A",
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 10,
@@ -1648,7 +1745,7 @@ const styles = StyleSheet.create({
   gpsActionText: {
     fontFamily: FontFamily.bold,
     fontSize: 12,
-    color: "#2563EB",
+    color: Colors.dark,
   },
   timelineLabel: {
     fontFamily: FontFamily.bold,
@@ -1665,10 +1762,10 @@ const styles = StyleSheet.create({
   receiptBox: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    backgroundColor: "#EFF6FF",
+    gap: 6,
+    backgroundColor: Colors.logoBackground,
     borderWidth: 1,
-    borderColor: "#DBEAFE",
+    borderColor: "#FDE68A",
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
@@ -1677,12 +1774,12 @@ const styles = StyleSheet.create({
   receiptBoxLabel: {
     fontFamily: FontFamily.medium,
     fontSize: 11,
-    color: "#1E40AF",
+    color: "#92400E",
   },
   receiptBoxVal: {
     fontFamily: FontFamily.bold,
     fontSize: 11.5,
-    color: "#1E40AF",
+    color: Colors.dark,
     flex: 1,
   },
   cardFooter: {
@@ -1896,9 +1993,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "#EFF6FF",
+    backgroundColor: Colors.logoBackground,
     borderWidth: 1,
-    borderColor: "#DBEAFE",
+    borderColor: "#FDE68A",
     padding: 10,
     borderRadius: 12,
     marginVertical: 12,
@@ -1907,7 +2004,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: FontFamily.regular,
     fontSize: 11.5,
-    color: "#1E40AF",
+    color: "#92400E",
     lineHeight: 16,
   },
   comparisonBox: {
@@ -2072,7 +2169,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#10B981",
+    backgroundColor: Colors.primary,
     paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 12,
@@ -2086,9 +2183,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#EFF6FF",
+    backgroundColor: Colors.logoBackground,
     borderWidth: 1,
-    borderColor: "#BFDBFE",
+    borderColor: "#FDE68A",
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 10,
@@ -2096,7 +2193,7 @@ const styles = StyleSheet.create({
   trackGpsBtnText: {
     fontFamily: FontFamily.bold,
     fontSize: 12,
-    color: "#2563EB",
+    color: Colors.dark,
   },
   verifiedPill: {
     flexDirection: "row",
@@ -2339,7 +2436,7 @@ const styles = StyleSheet.create({
     flex: 1.6,
     flexDirection: "row",
     gap: 5,
-    backgroundColor: "#A7F3D0",
+    backgroundColor: Colors.primary,
     borderRadius: 10,
     paddingVertical: 9,
     alignItems: "center",
@@ -2348,23 +2445,23 @@ const styles = StyleSheet.create({
   extensionApproveText: {
     fontFamily: FontFamily.bold,
     fontSize: 12.5,
-    color: "#065F46",
+    color: Colors.white,
   },
   extensionApprovedBox: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#ECFDF5",
+    backgroundColor: "#FFF9E6",
     borderRadius: 10,
     padding: 8,
     marginTop: 6,
     borderWidth: 1,
-    borderColor: "#A7F3D0",
+    borderColor: "#FDE68A",
   },
   extensionApprovedText: {
     fontFamily: FontFamily.medium,
     fontSize: 11.5,
-    color: "#065F46",
+    color: "#92400E",
     flex: 1,
   },
   /* Dedicated Verify & Approve Bottom Sheet Styles */
@@ -2401,17 +2498,17 @@ const styles = StyleSheet.create({
     width: 62,
     height: 62,
     borderRadius: 31,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: Colors.logoBackground,
     borderWidth: 1.5,
-    borderColor: "#E2E8F0",
+    borderColor: "#FDE68A",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 12,
   },
   verifyModalHeading: {
     fontFamily: FontFamily.bold,
-    fontSize: 17.5,
-    color: "#0F172A",
+    fontSize: 18,
+    color: Colors.dark,
     textAlign: "center",
     letterSpacing: -0.3,
     marginBottom: 4,
@@ -2419,7 +2516,7 @@ const styles = StyleSheet.create({
   verifyModalSubheading: {
     fontFamily: FontFamily.regular,
     fontSize: 12,
-    color: "#64748B",
+    color: Colors.secondary,
     textAlign: "center",
     lineHeight: 17,
     marginBottom: 18,
@@ -2427,11 +2524,11 @@ const styles = StyleSheet.create({
   },
   verifySummaryCard: {
     width: "100%",
-    backgroundColor: "#F8FAFC",
+    backgroundColor: Colors.white,
     borderRadius: 16,
     padding: 14,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: Colors.border,
     marginBottom: 14,
   },
   verifyRow: {
@@ -2443,34 +2540,36 @@ const styles = StyleSheet.create({
   verifyLabel: {
     fontFamily: FontFamily.medium,
     fontSize: 12,
-    color: "#64748B",
+    color: Colors.secondary,
   },
   verifyValue: {
     fontFamily: FontFamily.semiBold,
     fontSize: 12.5,
-    color: "#0F172A",
+    color: Colors.dark,
     maxWidth: "58%",
     textAlign: "right",
   },
   verifyDivider: {
     height: 1,
-    backgroundColor: "#E2E8F0",
+    backgroundColor: Colors.divider,
     marginVertical: 6,
   },
   verifyPaymentRef: {
     fontFamily: FontFamily.bold,
-    color: "#2563EB",
+    color: Colors.dark,
   },
   verifyPriceHighlight: {
     fontFamily: FontFamily.bold,
-    fontSize: 14,
-    color: "#059669",
+    fontSize: 15,
+    color: Colors.dark,
   },
   verifyNoticeBox: {
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: Colors.logoBackground,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -2480,7 +2579,7 @@ const styles = StyleSheet.create({
   verifyNoticeText: {
     fontFamily: FontFamily.regular,
     fontSize: 11,
-    color: "#475569",
+    color: Colors.dark,
     flex: 1,
     lineHeight: 15,
   },
@@ -2491,35 +2590,37 @@ const styles = StyleSheet.create({
   },
   verifyCancelBtn: {
     flex: 1,
-    height: 46,
+    height: 48,
     borderRadius: 13,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.border,
     alignItems: "center",
     justifyContent: "center",
   },
   verifyCancelBtnText: {
     fontFamily: FontFamily.bold,
     fontSize: 13.5,
-    color: "#64748B",
+    color: Colors.dark,
   },
   verifyConfirmBtn: {
     flex: 1.8,
-    height: 46,
+    height: 48,
     borderRadius: 13,
-    backgroundColor: "#0F172A",
+    backgroundColor: Colors.primary,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowColor: Colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 3,
   },
   verifyConfirmBtnText: {
     fontFamily: FontFamily.bold,
-    fontSize: 13.5,
+    fontSize: 14,
     color: Colors.white,
     letterSpacing: -0.2,
   },

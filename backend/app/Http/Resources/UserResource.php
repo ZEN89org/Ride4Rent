@@ -38,7 +38,13 @@ class UserResource extends JsonResource
 
             'role' => $this->role,
             'account_status' => $this->account_status,
-            'operator_profile' => $this->operatorProfile,
+            'operator_profile' => $this->operatorProfile ? array_merge(
+                $this->operatorProfile->toArray(),
+                [
+                    'latitude' => $this->operatorProfile->getCoordinates()['latitude'],
+                    'longitude' => $this->operatorProfile->getCoordinates()['longitude'],
+                ]
+            ) : null,
 
             'email_verified_at' => $this->email_verified_at,
 

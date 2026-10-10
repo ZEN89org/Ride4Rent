@@ -42,7 +42,10 @@ export default function RootLayout() {
             <Stack
               screenOptions={{
                 headerShown: false,
+                // Simple and smooth fade animation (no horizontal slide)
                 animation: "fade",
+                animationDuration: 200,
+                gestureEnabled: true,
                 contentStyle: { backgroundColor: "#FFFFFF" },
               }}
             >
@@ -53,19 +56,6 @@ export default function RootLayout() {
               <Stack.Screen name="login" options={{ contentStyle: { backgroundColor: Colors.primary } }} />
               <Stack.Screen name="register" />
               <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="profile" options={{ animation: "slide_from_right" }} />
-              <Stack.Screen name="driver-license" options={{ animation: "slide_from_right" }} />
-              <Stack.Screen name="vehicles/[id]" options={{ animation: "slide_from_right" }} />
-              <Stack.Screen name="faq" options={{ animation: "slide_from_right" }} />
-              <Stack.Screen name="terms" options={{ animation: "slide_from_right" }} />
-              <Stack.Screen name="settings" options={{ animation: "slide_from_right" }} />
-              <Stack.Screen name="support" options={{ animation: "slide_from_right" }} />
-              <Stack.Screen name="about" options={{ animation: "slide_from_right" }} />
-              <Stack.Screen name="operator/[id]" options={{ animation: "slide_from_right" }} />
-              <Stack.Screen name="chat/[id]" options={{ animation: "slide_from_right" }} />
-              <Stack.Screen name="notifications" options={{ animation: "slide_from_right" }} />
-              <Stack.Screen name="live-tracking" options={{ animation: "slide_from_right" }} />
-              <Stack.Screen name="operator-maintenance" options={{ animation: "slide_from_right" }} />
             </Stack>
           </FavoritesProvider>
         </ToastProvider>

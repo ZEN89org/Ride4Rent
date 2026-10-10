@@ -246,7 +246,12 @@ class AuthController extends Controller
             'last_name' => ['required', 'string', 'max:100'],
             'suffix' => ['nullable', 'string', 'max:20'],
             'email' => ['required', 'email', 'unique:users,email'],
-            'date_of_birth' => ['required', 'date'],
+            'date_of_birth' => [
+                'required',
+                'date',
+                'before_or_equal:' . now()->subYears(18)->toDateString(),
+                'after:' . now()->subYears(100)->toDateString(),
+            ],
             'sex' => ['required', 'string', 'max:30'],
 
             'business_name' => ['required', 'string', 'max:255'],
@@ -255,6 +260,8 @@ class AuthController extends Controller
             'street_address' => ['required', 'string', 'max:255'],
             'barangay' => ['required', 'string', 'max:100'],
             'municipality' => ['required', 'string', 'max:100'],
+            'latitude' => ['nullable', 'numeric', 'between:-90,90'],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180'],
 
             'government_id_front' => [
                 'nullable',

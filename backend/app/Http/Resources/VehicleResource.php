@@ -53,9 +53,13 @@ class VehicleResource extends JsonResource
             'pet_policy' => $this->pet_policy ?? 'Pets allowed with prior host approval and carrier',
             'additional_driver_policy' => $this->additional_driver_policy ?? 'Allowed with verified license presentation',
             'other_policies' => $this->other_policies,
-            'pickup_address' => $this->pickup_address,
-            'pickup_latitude' => $this->pickup_latitude,
-            'pickup_longitude' => $this->pickup_longitude,
+            'pickup_address' => $this->pickup_address ?: ($profile ? trim(($profile->street_address ? $profile->street_address.', ' : '').($profile->barangay ? $profile->barangay.', ' : '').($profile->municipality ?? 'Pinamalayan, Oriental Mindoro'), ', ') : 'Pinamalayan, Oriental Mindoro'),
+            'pickup_latitude' => ($this->pickup_latitude !== null && is_numeric($this->pickup_latitude))
+                ? (float) $this->pickup_latitude
+                : ($profile ? $profile->getCoordinates()['latitude'] : 13.0453),
+            'pickup_longitude' => ($this->pickup_longitude !== null && is_numeric($this->pickup_longitude))
+                ? (float) $this->pickup_longitude
+                : ($profile ? $profile->getCoordinates()['longitude'] : 121.4878),
             'distance_km' => isset($this->distance_km) ? round($this->distance_km, 1) : null,
             'features' => $this->features ?? [],
             'description' => $this->description,
@@ -98,6 +102,8 @@ class VehicleResource extends JsonResource
                 'street_address' => $profile?->street_address,
                 'barangay' => $profile?->barangay,
                 'municipality' => $profile?->municipality,
+                'latitude' => $profile ? $profile->getCoordinates()['latitude'] : 13.0453,
+                'longitude' => $profile ? $profile->getCoordinates()['longitude'] : 121.4878,
                 'accepted_payment_methods' => $profile?->accepted_payment_methods,
                 'account_name' => $profile?->account_name,
                 'account_number' => $profile?->account_number,

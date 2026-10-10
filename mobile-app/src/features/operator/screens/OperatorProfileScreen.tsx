@@ -1,9 +1,8 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   ScrollView,
   StyleSheet,
@@ -23,10 +22,18 @@ import OperatorShell from "@/features/operator/components/navigation/OperatorShe
 import api from "@/services/api";
 import { uploadProfilePhoto } from "@/services/profileService";
 
+const GCASH_IMG = require("@/assets/img/gcash.jpg");
+
 export default function OperatorProfileScreen() {
-  const { user, updateUser, isOperatorPending } = useAuth();
+  const { user, updateUser, isOperatorPending, refreshUser } = useAuth();
   const { showSuccess, showError } = useAppToast();
   const profile = user?.operatorProfile ?? user?.operator_profile;
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshUser?.().catch(() => {});
+    }, [refreshUser])
+  );
 
   const [profileImage, setProfileImage] = useState<string | null>(user?.profile_photo || null);
   const [uploading, setUploading] = useState(false);
@@ -160,7 +167,13 @@ export default function OperatorProfileScreen() {
 
   return (
     <OperatorShell activeRoute="profile">
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        nestedScrollEnabled={true}
+      >
         {/* Profile Card & Avatar */}
         <View style={styles.avatarSection}>
           <View style={styles.avatarWrapper}>
@@ -259,17 +272,35 @@ export default function OperatorProfileScreen() {
 
           <Text style={styles.inputLabel}>Primary Payment Channel</Text>
           <View style={styles.paymentMethodsRow}>
-            {["gcash", "maya", "bank_transfer", "cash"].map((method) => (
-              <TouchableOpacity
-                key={method}
-                style={[styles.methodPill, paymentMethod === method && styles.methodPillActive]}
-                onPress={() => setPaymentMethod(method)}
+            <View
+              style={[
+                styles.methodPill,
+                styles.methodPillActive,
+                {
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  borderRadius: 10,
+                },
+              ]}
+            >
+              <Image
+                source={GCASH_IMG}
+                style={{ width: 22, height: 22, borderRadius: 6 }}
+                resizeMode="cover"
+              />
+              <Text
+                style={[
+                  styles.methodPillText,
+                  styles.methodPillTextActive,
+                  { fontSize: 13, letterSpacing: 0.3 },
+                ]}
               >
-                <Text style={[styles.methodPillText, paymentMethod === method && styles.methodPillTextActive]}>
-                  {method.replace("_", " ").toUpperCase()}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                GCash
+              </Text>
+            </View>
           </View>
 
           <Text style={styles.inputLabel}>Account Name</Text>

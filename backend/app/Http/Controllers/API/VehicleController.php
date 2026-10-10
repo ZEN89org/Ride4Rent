@@ -153,11 +153,25 @@ class VehicleController extends Controller
         ]);
     }
 
-    public function byOperator(int $id): JsonResponse
+    public function byOperator($id): JsonResponse
     {
-        $operatorUser = \App\Models\User::with('operatorProfile')
-            ->where('role', 'operator')
-            ->findOrFail($id);
+        if (!is_numeric($id)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid operator identifier.',
+            ], 404);
+        }
+
+        $id = (int) $id;
+
+        $operatorUser = \App\Models\User::with('operatorProfile')->find($id);
+
+        if (!$operatorUser) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Operator not found.',
+            ], 404);
+        }
 
         $vehicles = Vehicle::with([
                 'operator.operatorProfile',
@@ -174,23 +188,29 @@ class VehicleController extends Controller
             ->get();
 
         $profile = $operatorUser->operatorProfile;
+        $displayName = trim(($operatorUser->first_name ?? '').' '.($operatorUser->last_name ?? ''));
+        $coords = $profile ? $profile->getCoordinates() : ['latitude' => 13.0453, 'longitude' => 121.4878];
 
         return response()->json([
             'success' => true,
             'operator' => [
                 'id' => $operatorUser->id,
-                'name' => trim(($operatorUser->first_name ?? '').' '.($operatorUser->last_name ?? '')),
+                'name' => $displayName ?: 'Verified Operator',
                 'email' => $operatorUser->email,
                 'mobile_number' => $operatorUser->mobile_number,
                 'profile_photo' => $operatorUser->profile_photo
-                    ? request()->getSchemeAndHttpHost().'/storage/'.$operatorUser->profile_photo
+                    ? (str_starts_with($operatorUser->profile_photo, 'http')
+                        ? $operatorUser->profile_photo
+                        : request()->getSchemeAndHttpHost().'/storage/'.$operatorUser->profile_photo)
                     : null,
-                'business_name' => $profile?->business_name,
-                'business_email' => $profile?->business_email,
-                'business_contact_number' => $profile?->business_contact_number,
+                'business_name' => $profile?->business_name ?? ($displayName ?: 'Verified Operator'),
+                'business_email' => $profile?->business_email ?? $operatorUser->email,
+                'business_contact_number' => $profile?->business_contact_number ?? $operatorUser->mobile_number,
                 'street_address' => $profile?->street_address,
                 'barangay' => $profile?->barangay,
                 'municipality' => $profile?->municipality,
+                'latitude' => $coords['latitude'],
+                'longitude' => $coords['longitude'],
             ],
             'data' => VehicleResource::collection($vehicles),
         ]);
@@ -235,7 +255,7 @@ class VehicleController extends Controller
         $profile = $operator->operatorProfile;
 
         // Validation: Operator must have setup payment accounts before uploading vehicle
-        if (!$profile || (empty($profile->account_number) && empty($profile->accepted_payment_methods))) {
+        if (!$profile || empty(trim($profile->account_number ?? ''))) {
             return response()->json([
                 'success' => false,
                 'message' => 'Please set up your payment account details in your business profile before listing a vehicle.',
@@ -264,6 +284,8 @@ class VehicleController extends Controller
             'features' => ['nullable'],
             'description' => ['nullable', 'string'],
             'pickup_address' => ['nullable', 'string'],
+            'pickup_latitude' => ['nullable', 'numeric'],
+            'pickup_longitude' => ['nullable', 'numeric'],
             'cover_photo' => ['nullable', 'image', 'max:10240'],
             'images' => ['nullable', 'array'],
             'images.*' => ['image', 'max:10240'],
@@ -317,6 +339,19 @@ class VehicleController extends Controller
             }
         }
 
+        $coords = $profile ? $profile->getCoordinates() : ['latitude' => 13.0453, 'longitude' => 121.4878];
+        $pickupLat = isset($validated['pickup_latitude']) && is_numeric($validated['pickup_latitude'])
+            ? (float) $validated['pickup_latitude']
+            : $coords['latitude'];
+        $pickupLng = isset($validated['pickup_longitude']) && is_numeric($validated['pickup_longitude'])
+            ? (float) $validated['pickup_longitude']
+            : $coords['longitude'];
+
+        $defaultAddress = $profile
+            ? trim(($profile->street_address ? $profile->street_address.', ' : '').($profile->barangay ? $profile->barangay.', ' : '').($profile->municipality ?? 'Pinamalayan, Oriental Mindoro'), ', ')
+            : 'Pinamalayan, Oriental Mindoro';
+        $pickupAddress = !empty($validated['pickup_address']) ? $validated['pickup_address'] : $defaultAddress;
+
         $vehicle = Vehicle::create([
             'operator_id' => $operator->id,
             'name' => $validated['name'],
@@ -339,7 +374,9 @@ class VehicleController extends Controller
             'reservation_fee' => $validated['reservation_fee'] ?? 500,
             'features' => $features,
             'description' => $validated['description'] ?? null,
-            'pickup_address' => $validated['pickup_address'] ?? ($profile->street_address.', '.$profile->barangay.', '.$profile->municipality),
+            'pickup_address' => $pickupAddress,
+            'pickup_latitude' => $pickupLat,
+            'pickup_longitude' => $pickupLng,
             'cover_photo' => $coverPhotoPath,
             'availability_status' => 'available',
             'is_active' => true,
@@ -403,6 +440,8 @@ class VehicleController extends Controller
             'features' => ['nullable'],
             'description' => ['nullable', 'string'],
             'pickup_address' => ['nullable', 'string'],
+            'pickup_latitude' => ['nullable', 'numeric'],
+            'pickup_longitude' => ['nullable', 'numeric'],
             'availability_status' => ['sometimes', 'in:available,unavailable,maintenance'],
             'cover_photo' => ['nullable', 'image', 'max:10240'],
             'images' => ['nullable', 'array'],

@@ -162,7 +162,7 @@ class BookingController extends Controller
 
         $dailyRate = (float) $vehicle->daily_rate;
         $resFee = (float) ($vehicle->reservation_fee ?? 500);
-        $totalPrice = ($dailyRate * $totalDays) + $resFee;
+        $totalPrice = $dailyRate * $totalDays;
 
         $booking = Booking::create([
             'renter_id' => $user->id,
@@ -208,12 +208,19 @@ class BookingController extends Controller
     {
         $validated = $request->validate([
             'payment_method' => ['required', 'string', 'in:gcash,maya,bank_transfer,cash'],
-            'payment_reference' => ['required_unless:payment_method,cash', 'nullable', 'string', 'min:3', 'max:100'],
+            'payment_reference' => [
+                'required_unless:payment_method,cash',
+                'nullable',
+                'string',
+                'regex:/^[\d\s-]{10,20}$/',
+            ],
             'renter_refund_method' => ['nullable', 'string', 'in:gcash,maya,bank_transfer,cash'],
             'renter_refund_account_name' => ['nullable', 'string', 'max:150'],
             'renter_refund_account_number' => ['nullable', 'string', 'max:50'],
         ], [
-            'payment_reference.required_unless' => 'The payment receipt / reference number is required to verify your transaction.',
+            'payment_reference.required_unless' => 'Reference number is required to verify your transaction.',
+            'payment_reference.required' => 'Reference number is required to verify your transaction.',
+            'payment_reference.regex' => 'Please enter a valid GCash reference number (typically 13 digits from your receipt).',
         ]);
 
         $booking = Booking::with(['vehicle', 'operator'])->where('renter_id', $request->user()->id)->findOrFail($id);
@@ -343,7 +350,7 @@ class BookingController extends Controller
         // Notify Renter
         Notification::create([
             'user_id' => $booking->renter_id,
-            'title' => '🎉 Payment Confirmed & Booking Approved!',
+            'title' => 'Payment Confirmed & Booking Approved',
             'message' => "The operator has confirmed your payment of ₱" . number_format($booking->reservation_fee ?? 500, 2) . " for booking #{$booking->id}. Your reservation is ready for handover.",
             'type' => 'booking',
             'action_url' => '/(tabs)/bookings',
@@ -716,7 +723,7 @@ class BookingController extends Controller
                 // Urgent task notification to operator
                 Notification::create([
                     'user_id' => $booking->operator_id,
-                    'title' => '⚠️ Refund Required',
+                    'title' => 'Refund Required',
                     'message' => "Booking #{$booking->id} was {$newStatus}. Please refund ₱" . number_format($booking->reservation_fee, 2) . " to {$booking->renter_refund_account_name} ({$booking->renter_refund_method}: {$booking->renter_refund_account_number}).",
                     'type' => 'warning',
                     'action_url' => '/operator-bookings',
@@ -905,7 +912,7 @@ class BookingController extends Controller
         // Notify Renter
         Notification::create([
             'user_id' => $booking->renter_id,
-            'title' => '🎉 Refund Completed',
+            'title' => 'Refund Completed',
             'message' => "The host has processed your ₱" . number_format($booking->refund_amount ?: $booking->reservation_fee, 2) . " reservation refund. Reference ID: {$validated['refund_reference']}.",
             'type' => 'success',
             'action_url' => '/(tabs)/bookings',
@@ -969,7 +976,7 @@ class BookingController extends Controller
             // Urgent task notification to Operator
             Notification::create([
                 'user_id' => $booking->operator_id,
-                'title' => '⚠️ Refund Required (Auto-Expired)',
+                'title' => 'Refund Required (Auto-Expired)',
                 'message' => "Booking #{$booking->id} expired without verification. Please refund ₱" . number_format($booking->reservation_fee, 2) . " to {$renterName} via {$refundDest}.",
                 'type' => 'warning',
                 'action_url' => '/operator-bookings',
@@ -1006,7 +1013,10 @@ class BookingController extends Controller
         $validated = $request->validate([
             'extension_end_date' => ['required', 'date', 'after:today'],
             'extension_payment_method' => ['required', 'string', 'in:gcash,maya,bank_transfer,cash'],
-            'extension_payment_reference' => ['required', 'string', 'min:3', 'max:100'],
+            'extension_payment_reference' => ['required', 'string', 'regex:/^[\d\s-]{10,20}$/'],
+        ], [
+            'extension_payment_reference.required' => 'Reference number is required to verify your transaction.',
+            'extension_payment_reference.regex' => 'Please enter a valid GCash reference number (typically 13 digits from your receipt).',
         ]);
 
         $booking = Booking::with(['vehicle', 'operator'])->where('renter_id', $request->user()->id)->findOrFail($id);
@@ -1045,7 +1055,7 @@ class BookingController extends Controller
         // Notify Operator
         Notification::create([
             'user_id' => $booking->operator_id,
-            'title' => '⏳ Extension Requested',
+            'title' => 'Extension Requested',
             'message' => "Renter requested a +{$extraDays} day extension for Booking #{$booking->id} (₱" . number_format($extensionPrice, 2) . " settled via {$validated['extension_payment_method']}).",
             'type' => 'booking',
             'action_url' => '/operator-bookings',
@@ -1095,7 +1105,7 @@ class BookingController extends Controller
         // Notify Renter
         Notification::create([
             'user_id' => $booking->renter_id,
-            'title' => '🎉 Extension Approved',
+            'title' => 'Extension Approved',
             'message' => "Your host approved your rental extension! Your new return date is " . \Carbon\Carbon::parse($newEnd)->format('M d, Y') . ".",
             'type' => 'success',
             'action_url' => '/(tabs)/bookings',

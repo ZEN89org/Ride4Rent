@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import ScreenContainer from "@/components/common/ScreenContainer";
 import AuthRequiredBottomSheet from "@/features/auth/components/AuthRequiredBottomSheet";
@@ -56,12 +56,7 @@ export default function Home() {
 
   return (
     <ScreenContainer>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
+      <View style={styles.container}>
         <HomeHeader
           user={user}
           isGuest={isGuest}
@@ -86,7 +81,7 @@ export default function Home() {
           visible={showAuthSheet}
           onClose={() => setShowAuthSheet(false)}
         />
-      </ScrollView>
+      </View>
     </ScreenContainer>
   );
 }

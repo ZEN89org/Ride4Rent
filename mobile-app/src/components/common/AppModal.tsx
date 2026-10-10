@@ -12,6 +12,8 @@ import {
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Radius, Spacing } from "@/constants/theme";
 
+import { AppBottomSheet } from "./AppBottomSheet";
+
 export interface ModalButton {
   text: string;
   onPress?: () => void;
@@ -35,8 +37,6 @@ export function AppModal({
   buttons = [{ text: "OK", style: "default" }],
   onClose,
 }: AppModalProps) {
-  if (!visible) return null;
-
   const getTypeConfig = () => {
     switch (type) {
       case "success":
@@ -87,69 +87,64 @@ export function AppModal({
   };
 
   return (
-    <Modal
+    <AppBottomSheet
       visible={visible}
-      transparent
-      animationType="slide"
-      statusBarTranslucent={true}
-      navigationBarTranslucent={true}
-      onRequestClose={onClose}
+      onClose={onClose}
+      position="bottom"
+      showHandle={true}
+      sheetStyle={styles.sheetCard}
     >
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.backdrop}>
-          <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
-            <View style={styles.sheetCard}>
-              {/* Bottom Sheet Top Pill Handle */}
-              <View style={styles.sheetHandle} />
-
-              {/* Minimal Accent Glow Header */}
-              <View style={[styles.iconContainer, { backgroundColor: cfg.glowBg, borderColor: cfg.borderColor }]}>
-                {cfg.icon}
-              </View>
-
-              <Text style={styles.title}>{title}</Text>
-              {message ? <Text style={styles.message}>{message}</Text> : null}
-
-              <View style={styles.buttonRow}>
-                {buttons.map((btn, index) => {
-                  const isCancel = btn.style === "cancel";
-                  const isDestructive = btn.style === "destructive";
-
-                  return (
-                    <TouchableOpacity
-                      key={index}
-                      activeOpacity={0.85}
-                      onPress={() => handleButtonPress(btn)}
-                      style={[
-                        styles.button,
-                        isCancel && styles.buttonCancel,
-                        isDestructive && styles.buttonDestructive,
-                        !isCancel && !isDestructive && styles.buttonDefault,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.buttonText,
-                          isCancel && styles.buttonCancelText,
-                          isDestructive && styles.buttonDestructiveText,
-                          !isCancel && !isDestructive && styles.buttonDefaultText,
-                        ]}
-                      >
-                        {btn.text}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          </TouchableWithoutFeedback>
+      <View style={styles.contentWrap}>
+        {/* Minimal Accent Glow Header */}
+        <View style={[styles.iconContainer, { backgroundColor: cfg.glowBg, borderColor: cfg.borderColor }]}>
+          {cfg.icon}
         </View>
-      </TouchableWithoutFeedback>
-    </Modal>
+
+        <Text style={styles.title}>{title}</Text>
+        {message ? <Text style={styles.message}>{message}</Text> : null}
+
+        <View style={styles.buttonRow}>
+          {buttons.map((btn, index) => {
+            const isCancel = btn.style === "cancel";
+            const isDestructive = btn.style === "destructive";
+
+            return (
+              <TouchableOpacity
+                key={index}
+                activeOpacity={0.85}
+                onPress={() => handleButtonPress(btn)}
+                style={[
+                  styles.button,
+                  isCancel && styles.buttonCancel,
+                  isDestructive && styles.buttonDestructive,
+                  !isCancel && !isDestructive && styles.buttonDefault,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.buttonText,
+                    isCancel && styles.buttonCancelText,
+                    isDestructive && styles.buttonDestructiveText,
+                    !isCancel && !isDestructive && styles.buttonDefaultText,
+                  ]}
+                >
+                  {btn.text}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+    </AppBottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
+  contentWrap: {
+    width: "100%",
+    alignItems: "center",
+    paddingBottom: 8,
+  },
   backdrop: {
     flex: 1,
     backgroundColor: "rgba(15, 23, 42, 0.65)",

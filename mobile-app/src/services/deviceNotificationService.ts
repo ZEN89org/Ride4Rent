@@ -139,7 +139,7 @@ export const testPushNotification = async (): Promise<boolean> => {
   try {
     const granted = await requestDeviceNotificationPermission();
     await triggerDeviceNotification(
-      "🚗 Ride4Rent Test Alert",
+      "Ride4Rent Test Alert",
       "Push notification is active! You will receive live booking and trip updates here.",
       { action_url: "/(tabs)/bookings" }
     );

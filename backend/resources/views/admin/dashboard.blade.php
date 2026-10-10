@@ -468,7 +468,7 @@
                                 <div class="flex flex-wrap items-center justify-between gap-3 border-b border-[#F1F5F9] bg-[#FAFBFD] px-5 py-3">
                                     <div class="flex items-center gap-2.5">
                                         <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-[#FEC103] font-black text-xs text-[#1A1A1A]">
-                                            🏢
+                                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
                                         </div>
                                         <div>
                                             <p class="text-xs font-bold text-[#0F172A]">
@@ -510,14 +510,17 @@
                                         <div class="grid grid-cols-2 gap-2 text-xs">
                                             @foreach (['government_id_front' => 'Gov ID (Front)', 'government_id_back' => 'Gov ID (Back)', 'business_permit_front' => 'Permit (Front)', 'business_permit_back' => 'Permit (Back)'] as $field => $label)
                                                 @if ($operator->operatorProfile?->{$field})
-                                                    <a 
-                                                        href="{{ asset('storage/' . $operator->operatorProfile->{$field}) }}" 
-                                                        target="_blank" 
-                                                        class="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 text-[11px] font-semibold text-[#0F172A] hover:border-[#FEC103] flex items-center justify-between"
+                                                    <button 
+                                                        type="button"
+                                                        onclick="openImageModal('{{ asset('storage/' . $operator->operatorProfile->{$field}) }}', '{{ addslashes($label) }} - {{ addslashes($operator->operatorProfile?->business_name ?: trim($operator->first_name . ' ' . $operator->last_name)) }}')" 
+                                                        class="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 text-[11px] font-semibold text-[#0F172A] hover:border-[#FEC103] hover:bg-white flex items-center justify-between cursor-pointer w-full text-left transition"
                                                     >
-                                                        <span>📄 {{ $label }}</span>
-                                                        <span class="text-[#94A3B8]">↗</span>
-                                                    </a>
+                                                        <span class="flex items-center gap-1.5 truncate">
+                                                            <svg class="h-3.5 w-3.5 shrink-0 text-[#64748B]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                                            <span class="truncate">{{ $label }}</span>
+                                                        </span>
+                                                        <span class="text-[#FEC103] font-bold text-xs">View</span>
+                                                    </button>
                                                 @else
                                                     <div class="rounded-xl border border-dashed border-[#CBD5E1] bg-[#F1F5F9] px-3 py-2 text-[11px] text-[#94A3B8]">
                                                         {{ $label }} (Missing)
@@ -582,7 +585,7 @@
                             placeholder="Filter members by name, email, or mobile..." 
                             class="w-full rounded-xl border border-[#CBD5E1] bg-white py-2 pl-9 pr-3 text-xs text-[#0F172A] outline-none focus:border-[#FEC103]"
                         />
-                        <span class="absolute left-3 top-2.5 text-[#94A3B8]">🔍</span>
+                        <svg class="absolute left-3 top-2.5 h-4 w-4 text-[#94A3B8]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                     </div>
 
                     <div class="flex items-center gap-1.5 text-xs">
@@ -782,7 +785,7 @@
                                 </p>
 
                                 @if ($rev->is_review_hidden)
-                                    <p class="mt-2 text-[10.5px] font-bold text-red-600">⚠️ Hidden from Public Catalog</p>
+                                    <p class="mt-2 flex items-center gap-1 text-[10.5px] font-bold text-red-600"><svg class="h-3.5 w-3.5 inline text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>Hidden from Public Catalog</p>
                                 @endif
                             </div>
 
@@ -940,7 +943,9 @@
                 <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     <div class="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-xs flex flex-col justify-between">
                         <div>
-                            <p class="text-2xl">🪪</p>
+                            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FFF6DA] text-[#92400E]">
+                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2"/></svg>
+                            </div>
                             <h3 class="font-bold text-sm text-[#0F172A] mt-2">Renter KYC Audit Registry</h3>
                             <p class="text-[11px] text-[#64748B] mt-1">Spreadsheet of verified and unverified renters with government ID records.</p>
                         </div>
@@ -951,7 +956,9 @@
 
                     <div class="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-xs flex flex-col justify-between">
                         <div>
-                            <p class="text-2xl">🏢</p>
+                            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FFF6DA] text-[#92400E]">
+                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                            </div>
                             <h3 class="font-bold text-sm text-[#0F172A] mt-2">Fleet Operator Registry</h3>
                             <p class="text-[11px] text-[#64748B] mt-1">Directory of commercial host businesses, municipal addresses, and permits.</p>
                         </div>
@@ -962,7 +969,9 @@
 
                     <div class="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-xs flex flex-col justify-between">
                         <div>
-                            <p class="text-2xl">📜</p>
+                            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FFF6DA] text-[#92400E]">
+                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+                            </div>
                             <h3 class="font-bold text-sm text-[#0F172A] mt-2">Administrative Audit Trail</h3>
                             <p class="text-[11px] text-[#64748B] mt-1">Chronological history of admin approvals, suspensions, and notices.</p>
                         </div>
@@ -1055,7 +1064,7 @@
                     </div>
                 </dl>
                 <div id="view-operator-block" class="hidden rounded-lg bg-[#FFF6DA] border border-[#FDE68A] p-2.5">
-                    <p class="font-bold text-[#92400E]">🏢 Commercial Host Credentials</p>
+                    <p class="font-bold text-[#92400E]">Commercial Host Credentials</p>
                     <p class="text-[#64748B] mt-0.5">Name: <span id="view-biz-name" class="font-semibold text-[#0F172A]"></span></p>
                     <p class="text-[#64748B]">Address: <span id="view-biz-address" class="font-medium text-[#0F172A]"></span></p>
                 </div>
@@ -1087,9 +1096,9 @@
                     <div>
                         <label class="block font-bold text-[#0F172A] mb-1" for="announcement_type">Type</label>
                         <select class="w-full rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] p-2 outline-none" id="announcement_type" name="type" required>
-                            <option value="info">Info ℹ️</option>
-                            <option value="warning">Advisory ⚠️</option>
-                            <option value="success">Milestone 🎉</option>
+                            <option value="info">Info</option>
+                            <option value="warning">Advisory</option>
+                            <option value="success">Milestone</option>
                         </select>
                     </div>
                 </div>
@@ -1136,7 +1145,7 @@
             <div class="mb-3 flex items-center justify-between border-b border-white/10 pb-3">
                 <h4 id="modal-title" class="text-xs font-bold text-white truncate max-w-md">Document Inspection</h4>
                 <div class="flex items-center gap-2">
-                    <a id="modal-open-link" href="#" target="_blank" rel="noreferrer" class="rounded-lg bg-white/10 px-2.5 py-1 text-xs font-semibold text-[#FEC103]">Open Tab ↗</a>
+                    <a id="modal-open-link" href="#" target="_blank" rel="noreferrer" class="rounded-lg bg-white/10 px-2.5 py-1 text-xs font-semibold text-[#FEC103]">Open Tab</a>
                     <button onclick="closeImageModal()" class="rounded-lg p-1 text-[#94A3B8] hover:text-white">✕</button>
                 </div>
             </div>
@@ -1317,6 +1326,74 @@
                 closeDisputeMemoModal();
             }
         });
+
+        function showAdminToast(title, message, type = 'success') {
+            const container = document.getElementById('admin-toast-container');
+            if (!container) return;
+
+            const toastId = 'toast-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4);
+            const toast = document.createElement('div');
+            toast.id = toastId;
+            toast.className = 'pointer-events-auto transform transition-all duration-300 ease-out translate-x-full opacity-0 flex items-start gap-3 rounded-2xl border bg-white p-4 shadow-xl';
+
+            let iconHtml = '';
+            let borderColor = 'border-[#E2E8F0]';
+            let titleColor = 'text-[#0F172A]';
+
+            if (type === 'success') {
+                borderColor = 'border-emerald-200';
+                iconHtml = '<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 font-bold text-sm">✓</div>';
+            } else if (type === 'error') {
+                borderColor = 'border-rose-200';
+                iconHtml = '<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600 font-bold text-sm">✕</div>';
+            } else if (type === 'warning') {
+                borderColor = 'border-amber-200';
+                iconHtml = '<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 font-bold text-sm">!</div>';
+            } else {
+                borderColor = 'border-sky-200';
+                iconHtml = '<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600 font-bold text-sm">i</div>';
+            }
+
+            toast.classList.add(borderColor);
+            toast.innerHTML = `
+                ${iconHtml}
+                <div class="flex-1 min-w-0 pt-0.5">
+                    <h5 class="text-xs font-bold ${titleColor} truncate">${title}</h5>
+                    ${message ? `<p class="mt-0.5 text-[11.5px] leading-relaxed text-[#64748B]">${message}</p>` : ''}
+                </div>
+                <button type="button" onclick="dismissToast('${toastId}')" class="shrink-0 text-[#94A3B8] hover:text-[#0F172A] p-1 text-sm font-bold cursor-pointer">✕</button>
+            `;
+
+            container.appendChild(toast);
+
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-x-full', 'opacity-0');
+                toast.classList.add('translate-x-0', 'opacity-100');
+            });
+
+            setTimeout(() => {
+                dismissToast(toastId);
+            }, 4500);
+        }
+
+        function dismissToast(id) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.classList.add('translate-x-full', 'opacity-0');
+            setTimeout(() => el.remove(), 300);
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            @if (session('status'))
+                showAdminToast('Action Completed', '{{ addslashes(session('status')) }}', 'success');
+            @endif
+            @if (isset($errors) && $errors->any())
+                showAdminToast('Notice', '{{ addslashes($errors->first()) }}', 'error');
+            @endif
+        });
     </script>
+
+    <!-- Global Floating Toast Notification Stack -->
+    <div id="admin-toast-container" class="fixed top-5 right-5 z-[9999] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none sm:max-w-md"></div>
 </body>
 </html>

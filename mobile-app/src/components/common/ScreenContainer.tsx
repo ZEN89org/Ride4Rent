@@ -1,10 +1,8 @@
 import { ReactNode } from "react";
 import {
-  Keyboard,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
-  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { SafeAreaView, Edge } from "react-native-safe-area-context";
@@ -29,9 +27,7 @@ export default function ScreenContainer({
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={0}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-          <View style={styles.content}>{children}</View>
-        </TouchableWithoutFeedback>
+        <View style={styles.content}>{children}</View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

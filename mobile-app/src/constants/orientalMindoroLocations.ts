@@ -522,3 +522,83 @@ export const ORIENTAL_MINDORO_LOCATIONS: MunicipalityLocation[] = [
     ],
   },
 ];
+
+export const MUNICIPALITY_COORDINATES: Record<string, { latitude: number; longitude: number }> = {
+  Baco: { latitude: 13.3592, longitude: 121.0975 },
+  Bansud: { latitude: 12.8647, longitude: 121.4589 },
+  Bongabong: { latitude: 12.75, longitude: 121.4833 },
+  Bulalacao: { latitude: 12.3278, longitude: 121.3444 },
+  "Calapan City": { latitude: 13.4115, longitude: 121.1803 },
+  Calapan: { latitude: 13.4115, longitude: 121.1803 },
+  Gloria: { latitude: 12.9833, longitude: 121.4667 },
+  Mansalay: { latitude: 12.5167, longitude: 121.4167 },
+  Naujan: { latitude: 13.3236, longitude: 121.3033 },
+  Pinamalayan: { latitude: 13.0453, longitude: 121.4878 },
+  Pola: { latitude: 13.1467, longitude: 121.4339 },
+  "Puerto Galera": { latitude: 13.5, longitude: 120.9542 },
+  Roxas: { latitude: 12.5858, longitude: 121.5194 },
+  "San Teodoro": { latitude: 13.4333, longitude: 120.9833 },
+  Socorro: { latitude: 13.0667, longitude: 121.4 },
+  Victoria: { latitude: 13.1772, longitude: 121.2825 },
+};
+
+// Notable high-accuracy barangay coordinates for precise mapping
+export const NOTABLE_BARANGAY_COORDINATES: Record<string, { latitude: number; longitude: number }> = {
+  "san vicente north": { latitude: 13.4068, longitude: 121.1750 },
+  "san vicente": { latitude: 13.4068, longitude: 121.1750 },
+  "camilmil": { latitude: 13.4080, longitude: 121.1780 },
+  "lalud": { latitude: 13.4020, longitude: 121.1740 },
+  "suqui": { latitude: 13.4210, longitude: 121.1920 },
+  "calero": { latitude: 13.4180, longitude: 121.1810 },
+  "ibaba": { latitude: 13.4130, longitude: 121.1820 },
+  "ilaya": { latitude: 13.4120, longitude: 121.1810 },
+  "tawiran": { latitude: 13.4010, longitude: 121.1850 },
+  "lumangbayan pinamalayan": { latitude: 13.0453, longitude: 121.4878 },
+  "lumangbayan calapan": { latitude: 13.4030, longitude: 121.1770 },
+  "bucayao": { latitude: 13.3850, longitude: 121.1780 },
+};
+
+/**
+ * Resolves accurate coordinates for an Oriental Mindoro location string.
+ * Uses exact barangay matches first, then municipality boundaries,
+ * then barangay-to-municipality hierarchy lookup.
+ */
+export function resolveCoordinatesFromAddress(
+  address?: string | null
+): { latitude: number; longitude: number } {
+  const defaultCoord = { latitude: 13.4115, longitude: 121.1803 }; // Calapan City Capital
+
+  if (!address || typeof address !== "string" || !address.trim()) {
+    return defaultCoord;
+  }
+
+  const clean = address.toLowerCase();
+
+  // 1. Check notable barangay coordinates
+  for (const [key, coords] of Object.entries(NOTABLE_BARANGAY_COORDINATES)) {
+    if (clean.includes(key)) {
+      return coords;
+    }
+  }
+
+  // 2. Check municipality name matching
+  for (const [name, coords] of Object.entries(MUNICIPALITY_COORDINATES)) {
+    if (clean.includes(name.toLowerCase())) {
+      return coords;
+    }
+  }
+
+  // 3. Check barangay hierarchy to find the parent municipality
+  for (const loc of ORIENTAL_MINDORO_LOCATIONS) {
+    for (const bgy of loc.barangays) {
+      if (clean.includes(bgy.toLowerCase())) {
+        if (MUNICIPALITY_COORDINATES[loc.name]) {
+          return MUNICIPALITY_COORDINATES[loc.name];
+        }
+      }
+    }
+  }
+
+  return defaultCoord;
+}
+

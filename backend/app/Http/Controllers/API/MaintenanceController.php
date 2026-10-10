@@ -33,15 +33,15 @@ class MaintenanceController extends Controller
             if ($kmRemaining <= 0) {
                 $healthStatus = 'overdue';
                 $healthLabel = 'Service Overdue (' . abs($kmRemaining) . ' km past)';
-                $healthBadge = '🔴 Service Required';
+                $healthBadge = 'Service Required';
             } elseif ($kmRemaining <= 500) {
                 $healthStatus = 'due_soon';
                 $healthLabel = 'Service Due Soon (' . $kmRemaining . ' km remaining)';
-                $healthBadge = '🟡 Due Soon';
+                $healthBadge = 'Due Soon';
             } else {
                 $healthStatus = 'good';
                 $healthLabel = 'Optimal (' . $kmRemaining . ' km until service)';
-                $healthBadge = '🟢 Good Condition';
+                $healthBadge = 'Good Condition';
             }
 
             // Generate specific maintenance recommendations

@@ -23,6 +23,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import PrimaryButton from "@/components/common/PrimaryButton";
+import { AppBottomSheet } from "@/components/common/AppBottomSheet";
 import { Skeleton } from "@/components/common/Skeleton";
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";
@@ -38,6 +39,7 @@ import { useAuth } from "@/features/auth/hooks/useAuth";
 import { getVehicleById } from "@/features/operator/services/vehicleService";
 import { Vehicle } from "@/features/operator/types/vehicle";
 import { createBooking, getMyBookings, Booking } from "@/services/bookingService";
+import { resolveCoordinatesFromAddress } from "@/constants/orientalMindoroLocations";
 import api from "@/services/api";
 
 export default function VehicleDetailsScreen() {
@@ -601,13 +603,6 @@ export default function VehicleDetailsScreen() {
                 ₱{Math.max(0, Number(vehicle.price_per_day) - Number(vehicle.reservation_fee || 500)).toLocaleString()} (for 1 day)
               </Text>
             </View>
-            <View style={styles.breakdownDivider} />
-            <View style={styles.breakdownNoteRow}>
-              <Ionicons name="information-circle-outline" size={15} color={Colors.secondary} />
-              <Text style={styles.breakdownNoteText}>
-                Reservation fee secures your booking schedule with the host. Balance is settled upon meetup.
-              </Text>
-            </View>
           </View>
 
           {/* Rental Requirements & Policies */}
@@ -674,15 +669,31 @@ export default function VehicleDetailsScreen() {
             <TouchableOpacity
               style={styles.directionsButton}
               onPress={() => {
+                const addressToUse = vehicle.pickup_address || "Calapan City, Oriental Mindoro";
+                const fallbackGeocoded = resolveCoordinatesFromAddress(addressToUse);
+                const rawLat = vehicle.pickup_latitude || (vehicle.operator as any)?.latitude;
+                const rawLng = vehicle.pickup_longitude || (vehicle.operator as any)?.longitude;
+                const finalLat =
+                  rawLat && Number(rawLat) !== 0 && !isNaN(Number(rawLat))
+                    ? Number(rawLat)
+                    : fallbackGeocoded.latitude;
+                const finalLng =
+                  rawLng && Number(rawLng) !== 0 && !isNaN(Number(rawLng))
+                    ? Number(rawLng)
+                    : fallbackGeocoded.longitude;
+
                 router.push({
                   pathname: "/live-tracking",
                   params: {
                     type: "pickup",
-                    title: "Pickup Location",
+                    mode: "pickup",
+                    title: "Pickup & Garage Location",
                     vehicleName: vehicle.name,
-                    address: vehicle.pickup_address || "Pinamalayan, Oriental Mindoro",
-                    latitude: vehicle.pickup_latitude ? String(vehicle.pickup_latitude) : undefined,
-                    longitude: vehicle.pickup_longitude ? String(vehicle.pickup_longitude) : undefined,
+                    address: addressToUse,
+                    latitude: String(finalLat),
+                    longitude: String(finalLng),
+                    lat: String(finalLat),
+                    lng: String(finalLng),
                   },
                 } as any);
               }}
@@ -953,24 +964,15 @@ export default function VehicleDetailsScreen() {
       />
 
       {/* Date Picker & Booking Confirmation Modal */}
-      <Modal
+      <AppBottomSheet
         visible={showBookingModal}
-        transparent
-        animationType="slide"
-        statusBarTranslucent={true}
-        onRequestClose={() => setShowBookingModal(false)}
+        onClose={() => setShowBookingModal(false)}
+        position="bottom"
+        showHandle={false}
+        sheetStyle={styles.modalCard}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.modalOverlay}
-        >
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            onPress={() => setShowBookingModal(false)}
-          />
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Trip Dates</Text>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Select Trip Dates</Text>
               <TouchableOpacity onPress={() => setShowBookingModal(false)}>
                 <Ionicons name="close-circle" size={24} color={Colors.secondary} />
               </TouchableOpacity>
@@ -1038,6 +1040,39 @@ export default function VehicleDetailsScreen() {
                 </Text>
               </View>
 
+              {/* Dynamic Price & Fee Breakdown for Selected Trip Duration */}
+              <View style={[styles.priceBreakdownCard, { marginHorizontal: 0, marginTop: 12, padding: 14 }]}>
+                <View style={styles.breakdownRow}>
+                  <Text style={styles.breakdownLabel}>
+                    Daily Rate ({tripDurationDays} {tripDurationDays === 1 ? "day" : "days"})
+                  </Text>
+                  <Text style={styles.breakdownValue}>
+                    ₱{Number(vehicle.price_per_day).toLocaleString()} × {tripDurationDays}
+                  </Text>
+                </View>
+
+                <View style={styles.breakdownRow}>
+                  <Text style={[styles.breakdownLabel, { fontFamily: FontFamily.bold, color: Colors.dark }]}>Total Rental Cost</Text>
+                  <Text style={[styles.breakdownValue, { fontFamily: FontFamily.bold, color: Colors.dark }]}>
+                    ₱{(Number(vehicle.price_per_day) * tripDurationDays).toLocaleString()}
+                  </Text>
+                </View>
+
+                <View style={styles.breakdownRow}>
+                  <Text style={styles.breakdownLabel}>Required Upfront Deposit (GCash/Maya)</Text>
+                  <Text style={[styles.breakdownValue, { color: Colors.primary }]}>
+                    ₱{Number(vehicle.reservation_fee || 500).toLocaleString()}
+                  </Text>
+                </View>
+
+                <View style={styles.breakdownRow}>
+                  <Text style={styles.breakdownLabel}>Remaining Balance on Meetup</Text>
+                  <Text style={[styles.breakdownValue, { color: "#10B981", fontFamily: FontFamily.bold }]}>
+                    ₱{Math.max(0, Number(vehicle.price_per_day) * tripDurationDays - Number(vehicle.reservation_fee || 500)).toLocaleString()}
+                  </Text>
+                </View>
+              </View>
+
               {/* Multi-Vehicle Rental Verification Notice */}
               {hasActiveTripOverlap && (
                 <View style={styles.multiCarNoticeCard}>
@@ -1085,9 +1120,7 @@ export default function VehicleDetailsScreen() {
                 />
               </View>
             </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+      </AppBottomSheet>
 
       <AuthRequiredBottomSheet visible={showAuthSheet} onClose={() => setShowAuthSheet(false)} />
 

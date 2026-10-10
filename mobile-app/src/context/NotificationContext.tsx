@@ -43,8 +43,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     };
   }, []);
 
+  const userId = user?.id;
+
   const refreshUnreadCount = useCallback(async () => {
-    if (isGuest || !user) {
+    if (isGuest || !userId) {
       setUnreadCount(0);
       knownNotificationIds.current.clear();
       isInitialFetch.current = true;
@@ -81,7 +83,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     } catch {
       // silent catch
     }
-  }, [user, isGuest]);
+  }, [userId, isGuest]);
 
   useEffect(() => {
     refreshUnreadCount();

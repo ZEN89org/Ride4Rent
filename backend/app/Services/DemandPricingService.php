@@ -67,15 +67,15 @@ class DemandPricingService
         // Determine badge / demand label
         if ($multiplier >= 1.25) {
             $demandLevel = 'Peak Demand';
-            $demandBadge = '🔥 Peak Demand';
+            $demandBadge = 'Peak Demand';
             $description = "High booking volume in {$municipality}. Rates adjusted to maximize host revenue.";
         } elseif ($multiplier >= 1.10) {
             $demandLevel = 'High Demand';
-            $demandBadge = '⚡ High Demand';
+            $demandBadge = 'High Demand';
             $description = "Increased rental inquiries in {$municipality}.";
         } elseif ($multiplier <= 0.95) {
             $demandLevel = 'Special Rate';
-            $demandBadge = '🏷️ Best Value';
+            $demandBadge = 'Best Value';
             $description = "Competitive rate to attract fast bookings.";
         } else {
             $demandLevel = 'Normal';

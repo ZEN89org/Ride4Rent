@@ -212,7 +212,10 @@ export default function OperatorMaintenanceScreen() {
                 {/* AI / Algorithm Maintenance Recommendations */}
                 {item.recommendations && item.recommendations.length > 0 && (
                   <View style={styles.recoSection}>
-                    <Text style={styles.recoHeaderTitle}>💡 Maintenance Recommendation:</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 4 }}>
+                      <Ionicons name="bulb-outline" size={14} color="#D97706" />
+                      <Text style={styles.recoHeaderTitle}>Maintenance Recommendation:</Text>
+                    </View>
                     {item.recommendations.map((rec, idx) => (
                       <View key={idx} style={styles.recoItemBox}>
                         <Ionicons name="warning" size={15} color={rec.urgency === "critical" ? Colors.error : "#D97706"} />

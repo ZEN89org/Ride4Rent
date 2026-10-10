@@ -102,7 +102,7 @@ Role, Language & Strict Domain Scope:
 IMPORTANT FORMATTING RULE:
 - NEVER use asterisks (*) or double asterisks (**) anywhere in your response.
 - Write clean, normal, conversational, easy-to-read text without any markdown asterisks.
-- Use natural line breaks, numbered points (1., 2., 3.), or relevant emojis (🚗, 📋, 📍, 💡, 🔑) instead of asterisks or bullet markdown.
+- Use natural line breaks or numbered points (1., 2., 3.) instead of asterisks or bullet markdown. Do not use emojis.
 
 Key Ride4Rent Platform Rules & Knowledge:
 1. Requirements: Valid unexpired Driver's License + 1 secondary government ID. Minimum age is 21 years old. IDs are inspected upon vehicle handover.
@@ -178,14 +178,14 @@ You MUST return ONLY a valid JSON object with the following schema:
         $reply = "";
 
         if (str_contains($lower, 'brand')) {
-            $reply = "We offer popular vehicle brands on Ride4Rent:\n\n🚗 Cars & SUVs: Toyota, Honda, Mitsubishi, Nissan, Ford, Hyundai, Suzuki, Isuzu, Kia\n🏍️ Motorcycles: Yamaha, Honda, Kawasaki, Vespa, Kymco, SYM, TVS\n\nWhat brand or model are you looking for?";
+            $reply = "We offer popular vehicle brands on Ride4Rent:\n\nCars & SUVs: Toyota, Honda, Mitsubishi, Nissan, Ford, Hyundai, Suzuki, Isuzu, Kia\nMotorcycles: Yamaha, Honda, Kawasaki, Vespa, Kymco, SYM, TVS\n\nWhat brand or model are you looking for?";
             $vehicles = $this->formatVehicles($activeVehicles->take(3), $request);
             $quickReplies = ["Show Toyota cars", "Show Honda motorcycles", "Show SUVs"];
         } elseif (str_contains($lower, 'require') || str_contains($lower, 'document') || str_contains($lower, 'license') || str_contains($lower, 'id')) {
             $reply = "To rent on Ride4Rent:\n• Valid Driver's License\n• Secondary Valid ID (Passport, UMID, National ID)\n• Age 21+\n\nOriginal IDs are verified during handover inspection.";
             $quickReplies = ["How to book?", "What brands are available?", "How does payment work?"];
         } else {
-            $reply = "Hello! I'm your Ride4Rent Assistant 🚗✨\n\nI can help you browse cars, explain rental rules, or recommend vehicles for your trip in Oriental Mindoro!";
+            $reply = "Hello! I'm your Ride4Rent Assistant.\n\nI can help you browse cars, explain rental rules, or recommend vehicles for your trip in Oriental Mindoro!";
             $vehicles = $this->formatVehicles($activeVehicles->take(3), $request);
         }
 

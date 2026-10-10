@@ -26,21 +26,27 @@ export default function AuthRequiredBottomSheet({
   visible,
   onClose,
 }: AuthRequiredBottomSheetProps) {
-  const [translateY] = useState(
-    () => new Animated.Value(height)
-  );
+  const [translateY] = useState(() => new Animated.Value(height));
+  const [backdropOpacity] = useState(() => new Animated.Value(0));
 
   const closeSheet = useCallback(() => {
-    Animated.timing(translateY, {
-      toValue: height,
-      duration: 220,
-      useNativeDriver: true,
-    }).start(({ finished }) => {
+    Animated.parallel([
+      Animated.timing(translateY, {
+        toValue: height,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+      Animated.timing(backdropOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
       if (finished) {
         onClose();
       }
     });
-  }, [translateY, onClose]);
+  }, [translateY, backdropOpacity, onClose]);
 
   const panResponder = useMemo(
     () =>
@@ -78,14 +84,22 @@ export default function AuthRequiredBottomSheet({
     }
 
     translateY.setValue(height);
+    backdropOpacity.setValue(0);
 
-    Animated.spring(translateY, {
-      toValue: 0,
-      useNativeDriver: true,
-      tension: 65,
-      friction: 11,
-    }).start();
-  }, [visible, translateY]);
+    Animated.parallel([
+      Animated.spring(translateY, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 65,
+        friction: 11,
+      }),
+      Animated.timing(backdropOpacity, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [visible, translateY, backdropOpacity]);
 
   const continueToAuth = () => {
     closeSheet();
@@ -104,11 +118,12 @@ export default function AuthRequiredBottomSheet({
       onRequestClose={closeSheet}
     >
       <View style={styles.overlay}>
-
-        <Pressable
-          style={styles.backdrop}
-          onPress={closeSheet}
-        />
+        <Animated.View style={[StyleSheet.absoluteFill, { opacity: backdropOpacity }]}>
+          <Pressable
+            style={styles.backdrop}
+            onPress={closeSheet}
+          />
+        </Animated.View>
 
         <Animated.View
           style={[

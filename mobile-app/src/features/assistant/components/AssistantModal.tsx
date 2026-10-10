@@ -48,7 +48,7 @@ export const cleanAssistantText = (text: string | null | undefined): string => {
 const INITIAL_MESSAGE: MessageItem = {
   id: "welcome-1",
   sender: "assistant",
-  text: "Hello! I'm your Ride4Rent Assistant 🚗✨\n\nHow can I help you today? You can ask me in English or Tagalog about vehicle rentals, requirements, booking procedures, and rates in Oriental Mindoro!",
+  text: "Hello! I'm your Ride4Rent Assistant.\n\nHow can I help you today? You can ask me in English or Tagalog about vehicle rentals, requirements, booking procedures, and rates in Oriental Mindoro!",
   quickReplies: [
     "Rental requirements?",
     "Paano mag-book ng sasakyan?",
@@ -130,7 +130,7 @@ export default function AssistantModal({ visible, onClose, initialPrompt }: Prop
       <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
         <KeyboardAvoidingView
           style={styles.container}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
           keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
         >
           {/* Header */}

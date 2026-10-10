@@ -23,7 +23,6 @@ import {
   Spacing,
 } from "@/constants/theme";
 import { useNotificationCount } from "@/context/NotificationContext";
-import { useAppToast } from "@/context/ToastContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -41,7 +40,6 @@ export default function OperatorShell({
   const [menuVisible, setMenuVisible] = useState(false);
   const [drawerAnimation] = useState(() => new Animated.Value(0));
   const { user, logout, loading, isOperatorActive, isOperatorPending } = useAuth();
-  const { showWarning } = useAppToast();
   const { unreadCount } = useNotificationCount();
   const profile = user?.operatorProfile ?? user?.operator_profile;
   const profilePhoto = user?.profile_photo;
@@ -286,7 +284,7 @@ export default function OperatorShell({
                 {/* Header */}
                 <View style={styles.header}>
                   <View style={{ flex: 1, paddingRight: Spacing.sm }}>
-                    <Text style={styles.headerTitle}>Ride4Rent Host</Text>
+                    <Text style={styles.headerTitle}>Ride4Rent</Text>
                     <Text style={styles.headerSubtitle} numberOfLines={1}>
                       {profile?.business_name ||
                         (user?.first_name ? `Hi, ${user.first_name}!` : user?.name || "Operator")}
@@ -304,60 +302,6 @@ export default function OperatorShell({
                 </View>
 
                 <View style={styles.divider} />
-
-                {/* Section: Fleet Operations */}
-                <View style={styles.menuSection}>
-                  <Text style={styles.sectionTitle}>Fleet Operations</Text>
-
-                  <Pressable
-                    style={styles.menuItem}
-                    onPress={() => {
-                      closeMenu();
-                      if (isOperatorPending) {
-                        showWarning(
-                          "Account Under Review",
-                          "You cannot list new vehicles while your account is pending review. Listing will be enabled once your accreditation is approved."
-                        );
-                        return;
-                      }
-                      router.push("/operator-vehicle-upload" as any);
-                    }}
-                  >
-                    <View style={styles.menuIcon}>
-                      <Ionicons name="add-circle-outline" size={21} color={Colors.dark} />
-                    </View>
-                    <Text style={styles.menuLabel}>List New Vehicle</Text>
-                    <Ionicons name="chevron-forward" size={17} color={Colors.secondary} />
-                  </Pressable>
-
-                  <Pressable
-                    style={styles.menuItem}
-                    onPress={() => {
-                      closeMenu();
-                      router.push("/operator-vehicles" as any);
-                    }}
-                  >
-                    <View style={styles.menuIcon}>
-                      <Ionicons name="car-outline" size={21} color={Colors.dark} />
-                    </View>
-                    <Text style={styles.menuLabel}>Fleet Catalog</Text>
-                    <Ionicons name="chevron-forward" size={17} color={Colors.secondary} />
-                  </Pressable>
-
-                  <Pressable
-                    style={styles.menuItem}
-                    onPress={() => {
-                      closeMenu();
-                      router.push("/operator-bookings" as any);
-                    }}
-                  >
-                    <View style={styles.menuIcon}>
-                      <Ionicons name="calendar-outline" size={21} color={Colors.dark} />
-                    </View>
-                    <Text style={styles.menuLabel}>Rental Reservations</Text>
-                    <Ionicons name="chevron-forward" size={17} color={Colors.secondary} />
-                  </Pressable>
-                </View>
 
                 {/* Section: Account & Business */}
                 <View style={styles.menuSection}>

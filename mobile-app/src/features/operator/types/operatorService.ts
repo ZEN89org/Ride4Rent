@@ -17,6 +17,8 @@ export interface OperatorRegisterData {
   street_address: string;
   barangay: string;
   municipality: string;
+  latitude?: number | null;
+  longitude?: number | null;
 
   government_id_front?: string;
   government_id_back?: string;
@@ -49,6 +51,8 @@ export interface OperatorProfile {
   street_address: string;
   barangay: string;
   municipality: string;
+  latitude: number | null;
+  longitude: number | null;
 
   government_id_front: string | null;
   government_id_back: string | null;

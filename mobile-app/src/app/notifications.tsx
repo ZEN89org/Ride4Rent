@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { AppBottomSheet } from "@/components/common/AppBottomSheet";
 import { Skeleton } from "@/components/common/Skeleton";
 import { Colors } from "@/constants/colors";
 import { FontFamily, Spacing } from "@/constants/theme";
@@ -39,6 +40,7 @@ interface GroupedNotifications {
 interface SwipeableNotificationItemProps {
   item: AppNotification;
   isLast: boolean;
+  isArchived?: boolean;
   onPress: () => void;
   onArchive: () => void;
   onDelete: () => void;
@@ -49,9 +51,21 @@ interface SwipeableNotificationItemProps {
   };
 }
 
+function simplifyNotificationText(text?: string | null): string {
+  if (!text) return "";
+  // Strip parentheses and anything inside them e.g. "(...)"
+  let cleaned = text.replace(/\s*\([^)]*\)/g, "");
+  // Strip trailing colons or commas
+  cleaned = cleaned.replace(/[:,-]\s*$/, "");
+  // Normalize whitespace
+  cleaned = cleaned.replace(/\s+/g, " ").trim();
+  return cleaned;
+}
+
 function SwipeableNotificationItem({
   item,
   isLast,
+  isArchived = false,
   onPress,
   onArchive,
   onDelete,
@@ -59,6 +73,8 @@ function SwipeableNotificationItem({
 }: SwipeableNotificationItemProps) {
   const translateX = useRef(new Animated.Value(0)).current;
   const isOpen = useRef(false);
+
+  const SWIPE_WIDTH = -140;
 
   const panResponder = useRef(
     PanResponder.create({
@@ -68,19 +84,21 @@ function SwipeableNotificationItem({
       onPanResponderMove: (_, gestureState) => {
         if (gestureState.dx < 0) {
           // Swiping left
-          const newX = isOpen.current ? Math.max(-130, -120 + gestureState.dx) : Math.max(-130, gestureState.dx);
+          const newX = isOpen.current
+            ? Math.max(SWIPE_WIDTH - 25, SWIPE_WIDTH + gestureState.dx)
+            : Math.max(SWIPE_WIDTH - 25, gestureState.dx);
           translateX.setValue(newX);
         } else if (isOpen.current && gestureState.dx > 0) {
           // Swiping back right from open state
-          const newX = Math.min(0, -120 + gestureState.dx);
+          const newX = Math.min(0, SWIPE_WIDTH + gestureState.dx);
           translateX.setValue(newX);
         }
       },
       onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dx < -50 || (isOpen.current && gestureState.dx < 30)) {
-          // Snap open
+        if (gestureState.dx < -45 || (isOpen.current && gestureState.dx < 35)) {
+          // Snap open to reveal Archive and Delete buttons
           Animated.spring(translateX, {
-            toValue: -120,
+            toValue: SWIPE_WIDTH,
             useNativeDriver: true,
             bounciness: 4,
           }).start();
@@ -106,9 +124,12 @@ function SwipeableNotificationItem({
     isOpen.current = false;
   };
 
+  const cleanTitle = simplifyNotificationText(item.title);
+  const cleanMessage = simplifyNotificationText(item.message);
+
   return (
     <View style={styles.swipeContainer}>
-      {/* Hidden Action Buttons behind the swipe */}
+      {/* Hidden Archive & Delete Actions behind the swipe */}
       <View style={styles.actionsContainer}>
         <TouchableOpacity
           style={styles.archiveActionBtn}
@@ -118,8 +139,14 @@ function SwipeableNotificationItem({
           }}
           activeOpacity={0.85}
         >
-          <Ionicons name="archive-outline" size={18} color={Colors.dark} />
-          <Text style={styles.actionText}>Archive</Text>
+          <Ionicons
+            name={isArchived ? "arrow-undo-outline" : "archive-outline"}
+            size={18}
+            color={Colors.white}
+          />
+          <Text style={[styles.actionText, { color: Colors.white }]}>
+            {isArchived ? "Restore" : "Archive"}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -178,14 +205,14 @@ function SwipeableNotificationItem({
                 ]}
                 numberOfLines={1}
               >
-                {item.title}
+                {cleanTitle}
               </Text>
               <Text style={styles.timeText}>{item.time}</Text>
             </View>
 
             {/* Clean Subtitle / Status Text */}
             <Text style={styles.itemMessage} numberOfLines={1}>
-              {item.message}
+              {cleanMessage}
             </Text>
           </View>
 
@@ -203,8 +230,40 @@ function SwipeableNotificationItem({
   );
 }
 
+const EXCLUDED_NOTIFICATION_TITLES = new Set([
+  "welcome back",
+  "copied",
+  "test alert sent",
+  "invalid number",
+  "daily rate required",
+  "photos required",
+  "upload failed",
+  "message error",
+  "success",
+  "deleted",
+  "payment setup saved",
+  "hello!",
+]);
+
+function isPriorityNotification(notif: AppNotification): boolean {
+  if (!notif || !notif.title) return false;
+  const lower = notif.title.trim().toLowerCase();
+  if (EXCLUDED_NOTIFICATION_TITLES.has(lower)) return false;
+  if (
+    lower.startsWith("logged in") ||
+    lower.startsWith("logged out") ||
+    lower.startsWith("signed in") ||
+    lower.startsWith("signed out") ||
+    lower.startsWith("login") ||
+    lower.startsWith("logout")
+  ) {
+    return false;
+  }
+  return true;
+}
+
 export default function NotificationsScreen() {
-  const { user, isGuest } = useAuth();
+  const { user, isGuest, refreshUser } = useAuth();
   const { refreshUnreadCount, resetUnreadCount, decrementUnreadCount } = useNotificationCount();
   const { showModal, showSuccess, showInfo } = useAppToast();
   const [notificationTab, setNotificationTab] = useState<"inbox" | "archived">("inbox");
@@ -223,8 +282,12 @@ export default function NotificationsScreen() {
   const loadNotifications = async () => {
     try {
       setLoading(true);
-      const data = await getNotifications();
-      setNotifications(data);
+      const [data] = await Promise.all([
+        getNotifications(),
+        refreshUser?.().catch(() => null),
+      ]);
+      const validList = Array.isArray(data) ? data.filter(isPriorityNotification) : [];
+      setNotifications(validList);
       refreshUnreadCount();
     } catch (e) {
       console.log("Error loading notifications:", e);
@@ -319,20 +382,46 @@ export default function NotificationsScreen() {
       decrementUnreadCount(1);
     }
 
-    if (item.action_url) {
-      router.push(item.action_url as any);
+    // Refresh user profile before navigation so account standing is updated in real time
+    try {
+      await refreshUser?.();
+    } catch {}
+
+    const isOperator = user?.role === "operator";
+    let targetUrl = item.action_url;
+
+    // Fix redirection: operator notifications pointing to /profile or /operator/profile must go to /operator-profile
+    if (isOperator) {
+      if (
+        !targetUrl ||
+        targetUrl === "/profile" ||
+        targetUrl === "/operator/profile" ||
+        targetUrl.startsWith("/operator/")
+      ) {
+        targetUrl = "/operator-profile";
+      }
+    }
+
+    if (
+      isOperator &&
+      (item.title?.toLowerCase().includes("operator") ||
+        item.message?.toLowerCase().includes("operator"))
+    ) {
+      targetUrl = "/operator-profile";
+    }
+
+    if (targetUrl) {
+      router.push(targetUrl as any);
       return;
     }
 
     // Role-aware fallback navigation
-    const isOperator = user?.role === "operator";
-
     if (item.type === "booking") {
       router.push(isOperator ? ("/operator-bookings" as any) : ("/(tabs)/bookings" as any));
     } else if (item.type === "chat") {
       router.push(isOperator ? ("/operator-chats" as any) : ("/(tabs)/chats" as any));
-    } else if (item.type === "success" || item.type === "info") {
-      router.push(isOperator ? ("/operator-home" as any) : ("/(tabs)/home" as any));
+    } else {
+      router.push(isOperator ? ("/operator-profile" as any) : ("/(tabs)/home" as any));
     }
   };
 
@@ -524,9 +613,14 @@ export default function NotificationsScreen() {
                       key={item.id}
                       item={item}
                       isLast={isLast}
+                      isArchived={notificationTab === "archived"}
                       iconCfg={iconCfg}
                       onPress={() => handleNotificationPress(item)}
-                      onArchive={() => (notificationTab === "inbox" ? handleArchiveOne(item) : handleUnarchiveOne(item))}
+                      onArchive={() =>
+                        notificationTab === "archived"
+                          ? handleUnarchiveOne(item)
+                          : handleArchiveOne(item)
+                      }
                       onDelete={() => handleDeleteOne(item.id)}
                     />
                   );
@@ -538,83 +632,51 @@ export default function NotificationsScreen() {
       )}
 
       {/* Options Menu Bottom Sheet */}
-      <Modal
+      <AppBottomSheet
         visible={optionsMenuVisible}
-        transparent
-        animationType="slide"
-        statusBarTranslucent={true}
-        onRequestClose={() => setOptionsMenuVisible(false)}
+        onClose={() => setOptionsMenuVisible(false)}
+        title="Notification Options"
       >
-        <Pressable
-          style={styles.modalBackdrop}
-          onPress={() => setOptionsMenuVisible(false)}
-        >
-          <View style={styles.modalContent}>
-            <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>Notification Options</Text>
-
+        <View style={{ paddingBottom: Spacing.sm }}>
+          {notificationTab === "inbox" && unreadCountLocal > 0 && (
             <TouchableOpacity
               style={styles.menuOptionItem}
-              onPress={async () => {
-                setOptionsMenuVisible(false);
-                const ok = await testPushNotification();
-                if (ok) {
-                  showSuccess("Test Alert Sent", "Test notification sent to your device status bar!");
-                } else {
-                  showInfo("Permission Needed", "Please allow notification permissions in your phone settings.");
-                }
-              }}
+              onPress={handleMarkAllRead}
               activeOpacity={0.7}
             >
-              <View style={[styles.menuOptionIconBox, { backgroundColor: "#FEF9C3" }]}>
-                <Ionicons name="notifications" size={20} color="#CA8A04" />
+              <View style={[styles.menuOptionIconBox, { backgroundColor: "#ECFDF5" }]}>
+                <Ionicons name="checkmark-done" size={20} color="#10B981" />
               </View>
               <View style={styles.menuOptionTextBox}>
-                <Text style={styles.menuOptionTitle}>Test Device Push Notification</Text>
-                <Text style={styles.menuOptionSubtitle}>Trigger an instant heads-up alert on your physical phone</Text>
+                <Text style={styles.menuOptionTitle}>Mark all as read</Text>
+                <Text style={styles.menuOptionSubtitle}>Mark all unread notifications</Text>
               </View>
             </TouchableOpacity>
+          )}
 
-            {notificationTab === "inbox" && unreadCountLocal > 0 && (
-              <TouchableOpacity
-                style={styles.menuOptionItem}
-                onPress={handleMarkAllRead}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.menuOptionIconBox, { backgroundColor: "#ECFDF5" }]}>
-                  <Ionicons name="checkmark-done" size={20} color="#10B981" />
-                </View>
-                <View style={styles.menuOptionTextBox}>
-                  <Text style={styles.menuOptionTitle}>Mark all as read</Text>
-                  <Text style={styles.menuOptionSubtitle}>Mark all unread notifications as read</Text>
-                </View>
-              </TouchableOpacity>
-            )}
+          <TouchableOpacity
+            style={styles.menuOptionItem}
+            onPress={handleClearAll}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.menuOptionIconBox, { backgroundColor: "#FEF2F2" }]}>
+              <Ionicons name="trash-outline" size={20} color={Colors.error} />
+            </View>
+            <View style={styles.menuOptionTextBox}>
+              <Text style={[styles.menuOptionTitle, { color: Colors.error }]}>Clear all</Text>
+              <Text style={styles.menuOptionSubtitle}>Remove notifications from list</Text>
+            </View>
+          </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.menuOptionItem}
-              onPress={handleClearAll}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.menuOptionIconBox, { backgroundColor: "#FEF2F2" }]}>
-                <Ionicons name="trash-outline" size={20} color={Colors.error} />
-              </View>
-              <View style={styles.menuOptionTextBox}>
-                <Text style={[styles.menuOptionTitle, { color: Colors.error }]}>Clear all notifications</Text>
-                <Text style={styles.menuOptionSubtitle}>Remove all notifications from your list</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setOptionsMenuVisible(false)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </Pressable>
-      </Modal>
+          <TouchableOpacity
+            style={styles.cancelButton}
+            onPress={() => setOptionsMenuVisible(false)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.cancelButtonText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </AppBottomSheet>
     </SafeAreaView>
   );
 }
@@ -714,21 +776,21 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
     bottom: 0,
-    width: 120,
+    width: 140,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-end",
   },
   archiveActionBtn: {
-    width: 60,
+    width: 70,
     height: "100%",
-    backgroundColor: Colors.logoBackground,
+    backgroundColor: "#374151",
     justifyContent: "center",
     alignItems: "center",
     gap: 3,
   },
   deleteActionBtn: {
-    width: 60,
+    width: 70,
     height: "100%",
     backgroundColor: Colors.error,
     justifyContent: "center",
