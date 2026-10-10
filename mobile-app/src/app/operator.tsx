@@ -39,7 +39,6 @@ export default function OperatorRegistration() {
     useState<VerificationData | null>(null);
 
   const [showOtpModal, setShowOtpModal] = useState(false);
-  const [devOtp, setDevOtp] = useState<string | undefined>(undefined);
 
   const [showSuccessSheet, setShowSuccessSheet] =
     useState(false);
@@ -85,10 +84,7 @@ export default function OperatorRegistration() {
     setIsSubmitting(true);
 
     try {
-      const res = await sendVerificationOtp(businessInfo.businessEmail.trim().toLowerCase());
-      if (res?.dev_otp) {
-        setDevOtp(res.dev_otp);
-      }
+      await sendVerificationOtp(businessInfo.businessEmail.trim().toLowerCase());
       setShowOtpModal(true);
     } catch (error: any) {
       console.log("Operator OTP send error:", error.message, error.response?.data);
@@ -230,7 +226,6 @@ export default function OperatorRegistration() {
       <OtpVerificationModal
         visible={showOtpModal}
         email={businessInfo?.businessEmail || ""}
-        initialOtp={devOtp}
         onClose={() => setShowOtpModal(false)}
         onVerified={handleVerifiedOtp}
       />

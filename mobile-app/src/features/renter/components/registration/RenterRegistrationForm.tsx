@@ -82,7 +82,6 @@ export default function RenterRegistrationForm({
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showOtpModal, setShowOtpModal] = useState(false);
-  const [devOtp, setDevOtp] = useState<string | undefined>(undefined);
 
   const [dateMonth, setDateMonth] = useState("");
   const [dateDay, setDateDay] = useState("");
@@ -261,10 +260,7 @@ export default function RenterRegistrationForm({
 
     try {
       setLoading(true);
-      const res = await sendVerificationOtp(email.trim().toLowerCase());
-      if (res?.dev_otp) {
-        setDevOtp(res.dev_otp);
-      }
+      await sendVerificationOtp(email.trim().toLowerCase());
       setShowOtpModal(true);
     } catch (error: any) {
       console.log("Send OTP Error:", error.message, error.response?.data);
@@ -634,7 +630,6 @@ export default function RenterRegistrationForm({
       <OtpVerificationModal
         visible={showOtpModal}
         email={email.trim().toLowerCase()}
-        initialOtp={devOtp}
         onClose={() => setShowOtpModal(false)}
         onVerified={handleVerifiedOtp}
       />

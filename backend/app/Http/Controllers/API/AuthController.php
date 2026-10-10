@@ -11,6 +11,7 @@ use App\Mail\VerificationOtpMail;
 use App\Models\EmailVerificationOtp;
 use App\Models\User;
 use App\Services\AuthService;
+use App\Services\MailService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -54,17 +55,11 @@ class AuthController extends Controller
         ]);
 
         // Dispatch Email
-        try {
-            Mail::to($email)->send(new VerificationOtpMail($otp));
-            Log::info("OTP mail successfully dispatched to {$email} with code: {$otp}");
-        } catch (\Throwable $e) {
-            Log::warning("Failed to dispatch OTP email to {$email}: " . $e->getMessage());
-        }
+        MailService::sendVerificationOtp($email, $otp);
 
         return response()->json([
             'success' => true,
-            'message' => "A 6-digit verification code has been generated.",
-            'dev_otp' => $otp,
+            'message' => "A 6-digit verification code has been sent to {$email}.",
         ]);
     }
 
@@ -99,16 +94,11 @@ class AuthController extends Controller
         ]);
 
         // Dispatch Password Reset Email
-        try {
-            Mail::to($email)->send(new PasswordResetOtpMail($otp));
-        } catch (\Throwable $e) {
-            Log::warning("Failed to dispatch password reset OTP to {$email}: " . $e->getMessage());
-        }
+        MailService::sendPasswordResetOtp($email, $otp);
 
         return response()->json([
             'success' => true,
-            'message' => "A 6-digit password reset code has been generated.",
-            'dev_otp' => $otp,
+            'message' => "A 6-digit password reset code has been sent to {$email}.",
         ]);
     }
 
