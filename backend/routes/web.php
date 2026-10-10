@@ -45,6 +45,25 @@ Route::get('/run-migrations', function () {
     }
 });
 
+Route::get('/setup-admin', function () {
+    $existing = \App\Models\User::where('role', 'admin')->first();
+    if ($existing) {
+        return response()->json(['message' => 'Admin account already exists', 'email' => $existing->email]);
+    }
+    $admin = \App\Models\User::create([
+        'first_name' => 'System',
+        'last_name' => 'Admin',
+        'date_of_birth' => '1990-01-01',
+        'sex' => 'Male',
+        'email' => 'admin@ride4rent.ph',
+        'password' => \Illuminate\Support\Facades\Hash::make('Admin12345678!'),
+        'role' => 'admin',
+        'account_status' => 'active',
+        'email_verified_at' => now(),
+    ]);
+    return response()->json(['message' => 'Admin created successfully', 'email' => $admin->email]);
+});
+
 Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('/', fn () => redirect()->route('admin.dashboard'));
     Route::get('/login', [AdminWebController::class, 'loginForm'])->name('login');
