@@ -15,6 +15,12 @@ const locationBannerHeight = Math.min(
   Math.round(SCREEN_HEIGHT * 0.52)
 );
 
+// Vehicle showcase slide 3: True aspect ratio (5313 x 5625) fitting left and right without stretching
+const vehicleBannerHeight = Math.min(
+  Math.round(SCREEN_WIDTH * (5625 / 5313)),
+  Math.round(SCREEN_HEIGHT * 0.52)
+);
+
 export const onboardingData = [
   {
     id: "1",
@@ -44,9 +50,9 @@ export const onboardingData = [
     description:
       "Browse available vehicles from trusted rental operators. Compare prices, features, and availability in one place.",
     image: onboarding3,
-    imageWidth: Math.min(SCREEN_WIDTH - 32, 380),
-    imageHeight: Math.round(Math.min(SCREEN_WIDTH - 32, 380) * 0.5),
-    isFullTop: false,
+    imageWidth: SCREEN_WIDTH,
+    imageHeight: vehicleBannerHeight,
+    isFullTop: true,
     permission: null,
   },
 ];
