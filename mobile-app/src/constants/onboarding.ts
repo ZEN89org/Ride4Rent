@@ -1,11 +1,11 @@
 import onboarding1 from "@/assets/img/onboarding1.png";
 import onboarding2 from "@/assets/img/onboarding2.png";
 import onboarding3 from "@/assets/img/onboarding3.png";
-import { Dimensions } from "react-native";
+import { Dimensions, ImageSourcePropType } from "react-native";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
-// Notification banner has a 2:1 aspect ratio (6250 x 3125)
+// Notification banner has a 2:1 aspect ratio (1280 x 640)
 const notificationWidth = Math.min(Math.round(SCREEN_WIDTH * 1), 540);
 const notificationHeight = Math.round(notificationWidth / 2);
 
@@ -21,7 +21,23 @@ const vehicleBannerHeight = Math.min(
   Math.round(SCREEN_HEIGHT * 0.48)
 );
 
-export const onboardingData = [
+export interface OnboardingItem {
+  id: string;
+  title: string;
+  description: string;
+  image: ImageSourcePropType;
+  imageWidth: number;
+  imageHeight: number;
+  isFullTop: boolean;
+  contentFit?: "contain" | "cover";
+  contentPosition?: "top" | "center";
+  textPaddingHorizontal?: number;
+  textPaddingTop?: number;
+  textPaddingBottom?: number;
+  permission: string | null;
+}
+
+export const onboardingData: OnboardingItem[] = [
   {
     id: "1",
     title: "Enable Notifications",
@@ -46,6 +62,8 @@ export const onboardingData = [
     isFullTop: true,
     contentFit: "cover" as const,
     contentPosition: "top" as const,
+    textPaddingHorizontal: 20,
+    textPaddingBottom: 0,
     permission: "location",
   },
   {

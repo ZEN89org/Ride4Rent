@@ -125,6 +125,9 @@ export default function Onboarding() {
             isFullTop={item.isFullTop}
             contentFit={item.contentFit}
             contentPosition={item.contentPosition}
+            textPaddingHorizontal={item.textPaddingHorizontal}
+            textPaddingTop={item.textPaddingTop}
+            textPaddingBottom={item.textPaddingBottom}
             index={index}
             scrollX={scrollX}
           />

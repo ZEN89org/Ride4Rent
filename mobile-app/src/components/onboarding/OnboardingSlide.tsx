@@ -26,6 +26,9 @@ interface Props {
   isFullTop?: boolean;
   contentFit?: "contain" | "cover";
   contentPosition?: "top" | "center";
+  textPaddingHorizontal?: number;
+  textPaddingTop?: number;
+  textPaddingBottom?: number;
   index?: number;
   scrollX?: Animated.Value;
 }
@@ -39,6 +42,9 @@ export default function OnboardingSlide({
   isFullTop = false,
   contentFit = "contain",
   contentPosition = "center",
+  textPaddingHorizontal,
+  textPaddingTop,
+  textPaddingBottom,
   index = 0,
   scrollX,
 }: Props) {
@@ -107,6 +113,9 @@ export default function OnboardingSlide({
         <Animated.View
           style={[
             styles.textContainerFull,
+            textPaddingHorizontal !== undefined && { paddingHorizontal: textPaddingHorizontal },
+            textPaddingTop !== undefined && { paddingTop: textPaddingTop },
+            textPaddingBottom !== undefined && { paddingBottom: textPaddingBottom },
             {
               opacity: textOpacity,
               transform: [{ translateY: textTranslateY }],
@@ -149,6 +158,9 @@ export default function OnboardingSlide({
       <Animated.View
         style={[
           styles.textContainer,
+          textPaddingHorizontal !== undefined && { paddingHorizontal: textPaddingHorizontal },
+          textPaddingTop !== undefined && { paddingTop: textPaddingTop },
+          textPaddingBottom !== undefined && { paddingBottom: textPaddingBottom },
           {
             opacity: textOpacity,
             transform: [{ translateY: textTranslateY }],
@@ -215,7 +227,7 @@ const styles = StyleSheet.create({
   },
 
   description: {
-    marginTop: 8,
+    marginTop: 6,
     textAlign: "center",
     color: Colors.secondary,
     lineHeight: 24,
