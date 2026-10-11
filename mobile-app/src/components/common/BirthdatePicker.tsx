@@ -212,7 +212,7 @@ export default function BirthdatePicker({
               hitSlop={8}
             >
               <Ionicons name="close" size={20} color={Colors.secondary} />
-            </TouchableOpacity>w
+            </TouchableOpacity>
           </View>
 
           {/* 3 Modern Columns: Month | Day | Year */}
