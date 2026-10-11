@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
   },
 
   description: {
-    marginTop: 6,
+    marginTop: 8,
     textAlign: "center",
     color: Colors.secondary,
     lineHeight: 24,
