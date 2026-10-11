@@ -6,7 +6,7 @@ import { Dimensions } from "react-native";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 // Notification banner has a 2:1 aspect ratio (6250 x 3125)
-const notificationWidth = Math.min(SCREEN_WIDTH - 24, 430);
+const notificationWidth = Math.min(Math.round(SCREEN_WIDTH * 1.2), 540);
 const notificationHeight = Math.round(notificationWidth / 2);
 
 export const onboardingData = [

@@ -58,13 +58,13 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: Spacing.sm,
+    paddingHorizontal: 0,
   },
 
   imageWrapper: {
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 36,
+    marginBottom: 28,
   },
 
   textContainer: {
