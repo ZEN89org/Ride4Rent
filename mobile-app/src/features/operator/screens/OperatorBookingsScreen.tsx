@@ -18,6 +18,7 @@ import {
 
 import { AppBottomSheet } from "@/components/common/AppBottomSheet";
 import { Skeleton } from "@/components/common/Skeleton";
+import ListPagination from "@/components/common/ListPagination";
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";
 import { useAppToast } from "@/context/ToastContext";
@@ -38,7 +39,7 @@ import {
 } from "@/services/bookingService";
 import { API_BASE_URL } from "@/services/api";
 
-type OperatorTabType = "pending" | "approved" | "ongoing" | "history";
+type OperatorTabType = "all" | "pending" | "approved" | "ongoing" | "history";
 
 const cleanDate = (d: string | null | undefined): string => {
   if (!d) return "";
@@ -232,6 +233,8 @@ export default function OperatorBookingsScreen() {
   const { isOperatorPending } = useAuth();
   const { showSuccess, showError, showModal } = useAppToast();
   const [activeTab, setActiveTab] = useState<OperatorTabType>("pending");
+  const [currentPage, setCurrentPage] = useState(1);
+  const operatorFlatListRef = React.useRef<FlatList>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -583,6 +586,9 @@ export default function OperatorBookingsScreen() {
   }, [bookings]);
 
   const filteredBookings = bookings.filter((b) => {
+    if (activeTab === "all") {
+      return true;
+    }
     if (activeTab === "history") {
       return b.status === "completed" || b.status === "rejected" || b.status === "cancelled" || b.status === "no_show";
     }
@@ -616,6 +622,16 @@ export default function OperatorBookingsScreen() {
     }
     return b.id - a.id;
   });
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab]);
+
+  const totalBookingsCount = filteredBookings.length;
+  const isPaginating = activeTab === "all" || totalBookingsCount > 15;
+  const paginatedBookings = isPaginating
+    ? filteredBookings.slice((currentPage - 1) * 15, currentPage * 15)
+    : filteredBookings;
 
   const getStatusConfig = (item: Booking) => {
     if (item.refund_status === "pending" || item.payment_status === "refund_pending") {
@@ -773,11 +789,13 @@ export default function OperatorBookingsScreen() {
 
         {/* Tab Filters */}
         <View style={styles.tabBar}>
-          {(["pending", "approved", "ongoing", "history"] as OperatorTabType[]).map((tab) => {
+          {(["all", "pending", "approved", "ongoing", "history"] as OperatorTabType[]).map((tab) => {
             const isActive = activeTab === tab;
             const count = bookings.filter((b) =>
-              tab === "history"
-                ? b.status === "completed" || b.status === "rejected" || b.status === "cancelled"
+              tab === "all"
+                ? true
+                : tab === "history"
+                ? b.status === "completed" || b.status === "rejected" || b.status === "cancelled" || b.status === "no_show"
                 : tab === "pending"
                 ? b.status === "pending_payment" ||
                   b.status === "pending_verification" ||
@@ -803,7 +821,7 @@ export default function OperatorBookingsScreen() {
                 activeOpacity={0.7}
               >
                 <Text style={[styles.tabItemText, isActive && styles.tabItemTextActive]}>
-                  {tab.charAt(0).toUpperCase() + tab.slice(1)} {count > 0 ? `(${count})` : ""}
+                  {tab === "all" ? "All" : tab.charAt(0).toUpperCase() + tab.slice(1)} {count > 0 ? `(${count})` : ""}
                 </Text>
               </TouchableOpacity>
             );
@@ -938,7 +956,8 @@ export default function OperatorBookingsScreen() {
           </View>
         ) : (
           <FlatList
-            data={filteredBookings}
+            ref={operatorFlatListRef}
+            data={paginatedBookings}
             keyExtractor={(item) => String(item.id)}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.list}
@@ -951,6 +970,20 @@ export default function OperatorBookingsScreen() {
                 }}
                 colors={[Colors.primary]}
               />
+            }
+            ListFooterComponent={
+              isPaginating && totalBookingsCount > 15 ? (
+                <ListPagination
+                  currentPage={currentPage}
+                  totalItems={totalBookingsCount}
+                  pageSize={15}
+                  itemName="bookings"
+                  onPageChange={(page) => {
+                    setCurrentPage(page);
+                    operatorFlatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+                  }}
+                />
+              ) : null
             }
             renderItem={({ item }) => {
               const statusCfg = getStatusConfig(item);

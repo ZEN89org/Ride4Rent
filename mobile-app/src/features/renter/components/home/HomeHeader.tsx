@@ -73,7 +73,11 @@ export default function HomeHeader({
           )}
         </TouchableOpacity>
 
-        <View style={styles.userInfo}>
+        <TouchableOpacity
+          style={styles.userInfo}
+          onPress={onProfilePress}
+          activeOpacity={0.8}
+        >
           <Text
             style={styles.username}
             numberOfLines={1}
@@ -84,7 +88,7 @@ export default function HomeHeader({
           <Text style={styles.subtitle}>
             Discover vehicles and stores.
           </Text>
-        </View>
+        </TouchableOpacity>
 
         <View style={styles.actions}>
           <TouchableOpacity

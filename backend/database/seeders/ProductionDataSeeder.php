@@ -22,6 +22,12 @@ class ProductionDataSeeder extends Seeder
             return;
         }
 
+        // SAFETY GUARD: Never truncate if the database already contains user accounts!
+        if (Schema::hasTable('users') && DB::table('users')->count() > 0) {
+            $this->command?->info("Database already initialized with existing records. Skipping destructive truncate/seed to protect user data.");
+            return;
+        }
+
         $driver = DB::connection()->getDriverName();
 
         // Tables to truncate and re-populate (in order of dependencies)

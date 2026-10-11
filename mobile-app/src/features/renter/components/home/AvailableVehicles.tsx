@@ -35,9 +35,10 @@ import { matchesVehicleSearch } from "@/utils/vehicleSearch";
 
 interface AvailableVehiclesProps {
   searchQuery?: string;
+  onViewMore?: () => void;
 }
 
-export default function AvailableVehicles({ searchQuery = "" }: AvailableVehiclesProps) {
+export default function AvailableVehicles({ searchQuery = "", onViewMore }: AvailableVehiclesProps) {
   const { isGuest } = useAuth();
   const { isFavorite, toggleFavorite } = useFavorites();
 
@@ -130,7 +131,11 @@ export default function AvailableVehicles({ searchQuery = "" }: AvailableVehicle
   }, []);
 
   const handleViewMore = () => {
-    router.push("/(tabs)/search");
+    if (onViewMore) {
+      onViewMore();
+      return;
+    }
+    router.navigate("/(tabs)/search" as any);
   };
 
   const handleViewVehicle = (vehicle: any) => {
@@ -167,7 +172,8 @@ export default function AvailableVehicles({ searchQuery = "" }: AvailableVehicle
           <TouchableOpacity
             style={styles.viewMoreButton}
             onPress={handleViewMore}
-            activeOpacity={0.8}
+            activeOpacity={0.7}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
             <Text style={styles.viewMoreText}>
               View More
@@ -184,7 +190,7 @@ export default function AvailableVehicles({ searchQuery = "" }: AvailableVehicle
 
         <View style={styles.carouselContainer}>
 
-          <View style={styles.topShadow} />
+          <View pointerEvents="none" style={styles.topShadow} />
 
           {loading ? (
             <View style={{ flexDirection: "row", paddingHorizontal: Spacing.lg, gap: Spacing.sm }}>
@@ -224,7 +230,7 @@ export default function AvailableVehicles({ searchQuery = "" }: AvailableVehicle
             />
           )}
 
-          <View style={styles.bottomShadow} />
+          <View pointerEvents="none" style={styles.bottomShadow} />
 
         </View>
 

@@ -48,8 +48,8 @@ if [ "$RUN_MIGRATIONS" != "false" ]; then
     php artisan migrate --force || true
 fi
 
-# Sync initial database records if data_dump.json is present
-if [ -f "database/data_dump.json" ]; then
+# Sync initial database records only if explicitly requested
+if [ -f "database/data_dump.json" ] && [ "$SEED_PRODUCTION_DATA" = "true" ]; then
     echo "Syncing database records..."
     php artisan db:seed --class="Database\\Seeders\\ProductionDataSeeder" --force || true
 fi

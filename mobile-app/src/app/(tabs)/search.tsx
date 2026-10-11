@@ -18,6 +18,7 @@ import { useFavorites } from "@/context/FavoritesContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import AuthRequiredBottomSheet from "@/features/auth/components/AuthRequiredBottomSheet";
 import NearVehicleCard, { NearVehicleItem } from "@/features/renter/components/home/NearVehicleCard";
+import ListPagination from "@/components/common/ListPagination";
 import { getAvailableVehicles } from "@/features/operator/services/vehicleService";
 import { Vehicle } from "@/features/operator/types/vehicle";
 
@@ -25,6 +26,7 @@ import { matchesVehicleSearch } from "@/utils/vehicleSearch";
 
 const CATEGORIES = ["All", "Sedan", "SUV", "Van", "Hatchback", "Automatic", "Manual"];
 const PRICE_SORTS = ["Default", "Price: Low to High", "Price: High to Low"];
+const ITEMS_PER_PAGE = 15;
 
 export default function Search() {
   const params = useLocalSearchParams<{ query?: string }>();
@@ -37,6 +39,8 @@ export default function Search() {
   const [sortOption, setSortOption] = useState("Default");
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const flatListRef = React.useRef<FlatList>(null);
 
   useEffect(() => {
     if (params.query) {
@@ -80,6 +84,16 @@ export default function Search() {
   } else if (sortOption === "Price: High to Low") {
     filteredVehicles = [...filteredVehicles].sort((a, b) => Number(b.price_per_day) - Number(a.price_per_day));
   }
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedCategory, sortOption]);
+
+  const totalItems = filteredVehicles.length;
+  const paginatedVehicles = filteredVehicles.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
 
   const handleViewVehicle = (vehicle: NearVehicleItem) => {
     router.push(`/vehicles/${vehicle.id}` as any);
@@ -178,10 +192,23 @@ export default function Search() {
           </View>
         ) : (
           <FlatList
-            data={filteredVehicles}
+            ref={flatListRef}
+            data={paginatedVehicles}
             keyExtractor={(item) => String(item.id)}
             contentContainerStyle={styles.list}
             showsVerticalScrollIndicator={false}
+            ListFooterComponent={
+              <ListPagination
+                currentPage={currentPage}
+                totalItems={totalItems}
+                pageSize={ITEMS_PER_PAGE}
+                itemName="vehicles"
+                onPageChange={(page) => {
+                  setCurrentPage(page);
+                  flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+                }}
+              />
+            }
             renderItem={({ item }) => {
               const formattedItem: NearVehicleItem = {
                 id: String(item.id),

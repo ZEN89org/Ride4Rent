@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/common/Skeleton";
+import ListPagination from "@/components/common/ListPagination";
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";
 import { useAppToast } from "@/context/ToastContext";
@@ -25,6 +26,8 @@ export default function OperatorVehiclesScreen() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const vehiclesFlatListRef = React.useRef<FlatList>(null);
 
   const profile = (user as any)?.operatorProfile ?? (user as any)?.operator_profile;
 
@@ -152,7 +155,8 @@ export default function OperatorVehiclesScreen() {
           </View>
         ) : (
           <FlatList
-            data={vehicles}
+            ref={vehiclesFlatListRef}
+            data={vehicles.length > 15 ? vehicles.slice((currentPage - 1) * 15, currentPage * 15) : vehicles}
             keyExtractor={(item) => String(item.id)}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.list}
@@ -165,6 +169,20 @@ export default function OperatorVehiclesScreen() {
                 }}
                 colors={[Colors.primary]}
               />
+            }
+            ListFooterComponent={
+              vehicles.length > 15 ? (
+                <ListPagination
+                  currentPage={currentPage}
+                  totalItems={vehicles.length}
+                  pageSize={15}
+                  itemName="vehicles"
+                  onPageChange={(page) => {
+                    setCurrentPage(page);
+                    vehiclesFlatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+                  }}
+                />
+              ) : null
             }
             renderItem={({ item }) => (
               <TouchableOpacity

@@ -21,6 +21,7 @@ import { AppBottomSheet } from "@/components/common/AppBottomSheet";
 import PrimaryButton from "@/components/common/PrimaryButton";
 import ScreenContainer from "@/components/common/ScreenContainer";
 import { Skeleton } from "@/components/common/Skeleton";
+import ListPagination from "@/components/common/ListPagination";
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";
 import { useAppToast } from "@/context/ToastContext";
@@ -82,6 +83,8 @@ export default function Bookings() {
   const auth = useAuth();
   const { showSuccess, showError, showModal } = useAppToast();
   const [activeTab, setActiveTab] = useState<TabType>("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const bookingsFlatListRef = React.useRef<FlatList>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -113,6 +116,8 @@ export default function Bookings() {
   const [extensionPaymentRef, setExtensionPaymentRef] = useState("");
   const [extensionError, setExtensionError] = useState("");
   const [submittingExtension, setSubmittingExtension] = useState(false);
+  const [showExtQrInline, setShowExtQrInline] = useState(false);
+  const [copiedExtPhone, setCopiedExtPhone] = useState(false);
 
   const loadBookings = React.useCallback(async (silent = false) => {
     try {
@@ -514,6 +519,7 @@ export default function Bookings() {
       setSelectedBookingForExtension(null);
       setExtensionPaymentRef("");
       setExtensionError("");
+      setShowExtQrInline(false);
       showSuccess(
         "Extension Submitted",
         `Requested +${extensionDays} ${extensionDays === 1 ? "day" : "days"} extension. Sent to host for verification.`
@@ -553,6 +559,16 @@ export default function Bookings() {
     if (activeTab === "past") return b.status === "completed" || b.status === "cancelled" || b.status === "rejected" || b.status === "no_show";
     return b.status === activeTab;
   });
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab]);
+
+  const totalBookingsCount = filteredBookings.length;
+  const isPaginating = activeTab === "all" || totalBookingsCount > 15;
+  const paginatedBookings = isPaginating
+    ? filteredBookings.slice((currentPage - 1) * 15, currentPage * 15)
+    : filteredBookings;
 
   const getStatusConfig = (item: Booking) => {
     if (item.refund_status === "pending" || item.payment_status === "refund_pending") {
@@ -697,11 +713,26 @@ export default function Bookings() {
           </View>
         ) : (
           <FlatList
-            data={filteredBookings}
+            ref={bookingsFlatListRef}
+            data={paginatedBookings}
             keyExtractor={(item) => String(item.id)}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.list}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadBookings} colors={[Colors.primary]} />}
+            ListFooterComponent={
+              isPaginating && totalBookingsCount > 15 ? (
+                <ListPagination
+                  currentPage={currentPage}
+                  totalItems={totalBookingsCount}
+                  pageSize={15}
+                  itemName="bookings"
+                  onPageChange={(page) => {
+                    setCurrentPage(page);
+                    bookingsFlatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+                  }}
+                />
+              ) : null
+            }
             renderItem={({ item }) => {
               const statusCfg = getStatusConfig(item);
               const vehicleName = item.vehicle?.name || "Vehicle";
@@ -1650,199 +1681,424 @@ export default function Bookings() {
         {/* Modal 4: Rental Extension Modal */}
         <AppBottomSheet
           visible={!!selectedBookingForExtension}
-          onClose={() => setSelectedBookingForExtension(null)}
+          onClose={() => {
+            setSelectedBookingForExtension(null);
+            setShowExtQrInline(false);
+            setExtensionPaymentRef("");
+            setExtensionError("");
+          }}
           position="bottom"
           showHandle={false}
-          sheetStyle={styles.modalCardLarge}
+          sheetStyle={[styles.modalCardLarge, { paddingHorizontal: 24, paddingTop: 14, paddingBottom: 24 }]}
         >
-          <View style={styles.modalHeader}>
+          {/* Drag Indicator */}
+          <View style={{ alignItems: "center", marginBottom: 8 }}>
+            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.border }} />
+          </View>
+
+          {/* Top Row with Close Icon */}
+          <View style={{ flexDirection: "row", justifyContent: "flex-end", marginBottom: 4 }}>
+            <TouchableOpacity onPress={() => {
+              setSelectedBookingForExtension(null);
+              setShowExtQrInline(false);
+              setExtensionPaymentRef("");
+              setExtensionError("");
+            }}>
+              <Ionicons name="close-circle" size={26} color={Colors.secondary} />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets={true}
+            contentContainerStyle={{ paddingBottom: 60 }}
+          >
+            {(() => {
+              if (!selectedBookingForExtension) return null;
+              const dailyRate = Number(
+                selectedBookingForExtension.vehicle?.price_per_day ||
+                selectedBookingForExtension.total_price ||
+                1000
+              );
+              const extraAmount = dailyRate * extensionDays;
+              const curEnd = new Date(selectedBookingForExtension.end_date);
+              const newEnd = new Date(curEnd.getTime() + extensionDays * 24 * 60 * 60 * 1000);
+              const newEndDateStr = newEnd.toISOString().split("T")[0];
+
+              const operator = selectedBookingForExtension.operator || (selectedBookingForExtension.vehicle as any)?.operator;
+              const operatorProfile = operator?.operator_profile || (selectedBookingForExtension.vehicle as any)?.operator_profile;
+              const operatorPayment = selectedBookingForExtension.operator_payment_info;
+
+              const businessName =
+                operatorProfile?.business_name ||
+                operator?.name ||
+                "Host";
+
+              const accountName =
+                operatorPayment?.account_name ||
+                operatorProfile?.payment_account_name ||
+                operatorProfile?.business_name ||
+                operator?.name ||
+                "Operator Account";
+
+              const accountNumber =
+                operatorPayment?.account_number ||
+                operatorProfile?.payment_account_number ||
+                operator?.phone_number ||
+                operator?.mobile_number ||
+                "";
+
+              return (
                 <View>
-                  <Text style={styles.modalTitle}>Extend Rental Duration</Text>
-                  <Text style={styles.modalSub}>
-                    {selectedBookingForExtension?.vehicle?.name || "Vehicle"} • Booking #{selectedBookingForExtension?.id}
-                  </Text>
-                </View>
-                <TouchableOpacity onPress={() => setSelectedBookingForExtension(null)}>
-                  <Ionicons name="close-circle" size={26} color={Colors.secondary} />
-                </TouchableOpacity>
-              </View>
+                  {/* 1. HERO AMOUNT (Clean, Focused, Zero Clutter) */}
+                  <View style={{ alignItems: "center", marginBottom: 20 }}>
+                    <Text style={{ fontFamily: FontFamily.semiBold, fontSize: 11.5, color: Colors.secondary, textTransform: "uppercase", letterSpacing: 0.8 }}>
+                      Additional Rental Fee
+                    </Text>
+                    <Text style={{ fontFamily: FontFamily.bold, fontSize: 38, color: Colors.dark, marginVertical: 2, letterSpacing: -0.5 }}>
+                      ₱{extraAmount.toLocaleString()}
+                    </Text>
+                    <Text style={{ fontFamily: FontFamily.medium, fontSize: 13, color: Colors.dark }}>
+                      {selectedBookingForExtension?.vehicle?.name}
+                    </Text>
+                    <Text style={{ fontFamily: FontFamily.regular, fontSize: 11.5, color: Colors.secondary, marginTop: 2 }}>
+                      +{extensionDays} {extensionDays === 1 ? "day" : "days"} extension • New return date: {newEndDateStr}
+                    </Text>
+                  </View>
 
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
-                {(() => {
-                  if (!selectedBookingForExtension) return null;
-                  const dailyRate = Number(
-                    selectedBookingForExtension.vehicle?.price_per_day ||
-                    selectedBookingForExtension.total_price ||
-                    1000
-                  );
-                  const extraAmount = dailyRate * extensionDays;
-                  const curEnd = new Date(selectedBookingForExtension.end_date);
-                  const newEnd = new Date(curEnd.getTime() + extensionDays * 24 * 60 * 60 * 1000);
-                  const newEndDateStr = newEnd.toISOString().split("T")[0];
-
-                  const operator = selectedBookingForExtension.operator || (selectedBookingForExtension.vehicle as any)?.operator;
-                  const operatorProfile = operator?.operator_profile || (selectedBookingForExtension.vehicle as any)?.operator_profile;
-                  const operatorPayment = selectedBookingForExtension.operator_payment_info;
-
-                  const businessName =
-                    operatorProfile?.business_name ||
-                    operator?.name ||
-                    "Host";
-
-                  const accountName =
-                    operatorPayment?.account_name ||
-                    operatorProfile?.payment_account_name ||
-                    operatorProfile?.business_name ||
-                    operator?.name ||
-                    "Operator Account";
-
-                  const accountNumber =
-                    operatorPayment?.account_number ||
-                    operatorProfile?.payment_account_number ||
-                    operator?.phone_number ||
-                    operator?.mobile_number ||
-                    "09XX-XXX-XXXX";
-
-                  return (
-                    <View>
-                      {/* Extension Duration Selector */}
-                      <Text style={styles.modalFieldLabel}>Select Additional Days</Text>
-                      <View style={styles.extensionDaysRow}>
-                        {[1, 2, 3, 5, 7].map((days) => (
-                          <TouchableOpacity
-                            key={days}
+                  {/* 2. DURATION SELECTOR PILLS */}
+                  <View style={{ marginBottom: 18 }}>
+                    <Text style={{ fontFamily: FontFamily.semiBold, fontSize: 11.5, color: Colors.secondary, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>
+                      Select Additional Days
+                    </Text>
+                    <View style={styles.extensionDaysRow}>
+                      {[1, 2, 3, 5, 7].map((days) => (
+                        <TouchableOpacity
+                          key={days}
+                          style={[
+                            styles.extensionDayPill,
+                            extensionDays === days && styles.extensionDayPillActive,
+                          ]}
+                          onPress={() => setExtensionDays(days)}
+                          activeOpacity={0.8}
+                        >
+                          <Text
                             style={[
-                              styles.extensionDayPill,
-                              extensionDays === days && styles.extensionDayPillActive,
+                              styles.extensionDayText,
+                              extensionDays === days && styles.extensionDayTextActive,
                             ]}
-                            onPress={() => setExtensionDays(days)}
-                            activeOpacity={0.8}
                           >
-                            <Text
-                              style={[
-                                styles.extensionDayText,
-                                extensionDays === days && styles.extensionDayTextActive,
-                              ]}
-                            >
-                              +{days} {days === 1 ? "Day" : "Days"}
+                            +{days} {days === 1 ? "Day" : "Days"}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* 3. DEDICATED GCASH PAYMENT DESTINATION (Matching Settle Payment) */}
+                  <View style={{
+                    backgroundColor: Colors.white,
+                    borderRadius: 16,
+                    borderWidth: 1,
+                    borderColor: Colors.border,
+                    padding: 16,
+                    marginBottom: 20,
+                  }}>
+                    {/* GCash Header */}
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 }}>
+                      <Image
+                        source={GCASH_IMG}
+                        style={{ width: 38, height: 38, borderRadius: 10 }}
+                        contentFit="cover"
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontFamily: FontFamily.bold, fontSize: 15, color: Colors.dark }}>
+                          GCash Payment
+                        </Text>
+                        <Text style={{ fontFamily: FontFamily.regular, fontSize: 11.5, color: Colors.secondary }}>
+                          Send extension fee to {businessName}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Recipient Number & Copy Button Row */}
+                    <View style={{
+                      backgroundColor: Colors.inputBackground,
+                      borderRadius: 12,
+                      paddingHorizontal: 14,
+                      paddingVertical: 11,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      marginBottom: 12,
+                    }}>
+                      <View style={{ flex: 1, paddingRight: 8 }}>
+                        <Text style={{ fontFamily: FontFamily.medium, fontSize: 11, color: Colors.secondary }}>
+                          {accountName ? `Account Name: ${accountName}` : "Host GCash Number"}
+                        </Text>
+                        <Text style={{ fontFamily: FontFamily.bold, fontSize: 15, color: Colors.dark, marginTop: 1, letterSpacing: 0.5 }}>
+                          {accountNumber || "Contact host for GCash number"}
+                        </Text>
+                      </View>
+
+                      {accountNumber ? (
+                        <TouchableOpacity
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 4,
+                            backgroundColor: copiedExtPhone ? "#ECFDF5" : Colors.white,
+                            borderWidth: 1,
+                            borderColor: copiedExtPhone ? "#A7F3D0" : Colors.border,
+                            paddingHorizontal: 11,
+                            paddingVertical: 7,
+                            borderRadius: 8,
+                          }}
+                          onPress={async () => {
+                            await copyToClipboard(accountNumber);
+                            setCopiedExtPhone(true);
+                            showSuccess("Copied", `${accountNumber} copied to clipboard!`);
+                            setTimeout(() => setCopiedExtPhone(false), 2000);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons
+                            name={copiedExtPhone ? "checkmark" : "copy-outline"}
+                            size={13}
+                            color={copiedExtPhone ? "#047857" : Colors.dark}
+                          />
+                          <Text style={{
+                            fontFamily: FontFamily.bold,
+                            fontSize: 11.5,
+                            color: copiedExtPhone ? "#047857" : Colors.dark,
+                          }}>
+                            {copiedExtPhone ? "Copied" : "Copy"}
+                          </Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+
+                    {/* Responsive, Spacious View QR Button & Prominent Inline Display */}
+                    {operatorPayment?.qr_code_url ? (
+                      <View style={{ marginBottom: 14 }}>
+                        <TouchableOpacity
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            backgroundColor: showExtQrInline ? "#FEF3C7" : Colors.inputBackground,
+                            borderWidth: 1,
+                            borderColor: showExtQrInline ? Colors.primary : Colors.border,
+                            borderRadius: 12,
+                            paddingHorizontal: 14,
+                            paddingVertical: 12,
+                          }}
+                          onPress={() => setShowExtQrInline((prev) => !prev)}
+                          activeOpacity={0.7}
+                        >
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+                            <View style={{
+                              width: 34,
+                              height: 34,
+                              borderRadius: 8,
+                              backgroundColor: showExtQrInline ? Colors.primary : "#E5E7EB",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}>
+                              <Ionicons
+                                name="qr-code"
+                                size={18}
+                                color={showExtQrInline ? Colors.white : Colors.secondary}
+                              />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={{ fontFamily: FontFamily.bold, fontSize: 13, color: Colors.dark }}>
+                                {showExtQrInline ? "Hide Operator QR Code" : "View Operator QR Code"}
+                              </Text>
+                              <Text style={{ fontFamily: FontFamily.regular, fontSize: 11, color: Colors.secondary }}>
+                                {showExtQrInline ? "Tap to close QR preview" : "Tap to view and save QR for payment"}
+                              </Text>
+                            </View>
+                          </View>
+                          <Ionicons
+                            name={showExtQrInline ? "chevron-up" : "chevron-down"}
+                            size={18}
+                            color={Colors.secondary}
+                          />
+                        </TouchableOpacity>
+
+                        {/* Prominent Inline QR View */}
+                        {showExtQrInline ? (
+                          <View style={{
+                            marginTop: 10,
+                            backgroundColor: "#F9FAFB",
+                            borderRadius: 14,
+                            borderWidth: 1,
+                            borderColor: Colors.border,
+                            padding: 16,
+                            alignItems: "center",
+                          }}>
+                            <Text style={{
+                              fontFamily: FontFamily.bold,
+                              fontSize: 13.5,
+                              color: Colors.dark,
+                              marginBottom: 3,
+                            }}>
+                              Scan or Upload in GCash
                             </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
+                            <Text style={{
+                              fontFamily: FontFamily.regular,
+                              fontSize: 11.5,
+                              color: Colors.secondary,
+                              textAlign: "center",
+                              marginBottom: 14,
+                              paddingHorizontal: 8,
+                            }}>
+                              Save this QR code to your device and upload it directly inside the GCash QR reader.
+                            </Text>
 
-                      {/* Calculation Summary Box */}
-                      <View style={styles.extSummaryCard}>
-                        <View style={styles.extSummaryRow}>
-                          <Text style={styles.extSummaryLabel}>Current End Date</Text>
-                          <Text style={styles.extSummaryVal}>{cleanDate(selectedBookingForExtension.end_date)}</Text>
-                        </View>
-                        <View style={styles.extSummaryRow}>
-                          <Text style={styles.extSummaryLabel}>New Return Date</Text>
-                          <Text style={[styles.extSummaryVal, { color: "#2563EB", fontFamily: FontFamily.bold }]}>
-                            {newEndDateStr}
-                          </Text>
-                        </View>
-                        <View style={styles.extSummaryRow}>
-                          <Text style={styles.extSummaryLabel}>Rate per Day</Text>
-                          <Text style={styles.extSummaryVal}>₱{dailyRate.toLocaleString()}</Text>
-                        </View>
-                        <View style={styles.extSummaryDivider} />
-                        <View style={styles.extSummaryRow}>
-                          <Text style={[styles.extSummaryLabel, { fontFamily: FontFamily.bold, color: Colors.dark }]}>
-                            Additional Rental Fee
-                          </Text>
-                          <Text style={styles.extSummaryTotalVal}>
-                            ₱{extraAmount.toLocaleString()}
-                          </Text>
-                        </View>
-                      </View>
+                            <View style={{
+                              backgroundColor: Colors.white,
+                              padding: 12,
+                              borderRadius: 14,
+                              borderWidth: 1,
+                              borderColor: Colors.border,
+                              shadowColor: "#000",
+                              shadowOffset: { width: 0, height: 2 },
+                              shadowOpacity: 0.08,
+                              shadowRadius: 6,
+                              elevation: 2,
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}>
+                              <Image
+                                source={{ uri: operatorPayment.qr_code_url }}
+                                style={{ width: 220, height: 220, borderRadius: 8 }}
+                                contentFit="contain"
+                              />
+                            </View>
 
-                      {/* Host Payment Card */}
-                      <View style={styles.hostPaymentCard}>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                          <Ionicons name="shield-checkmark" size={16} color="#10B981" />
-                          <Text style={styles.hostPaymentTitle}>Pay Host for Extension</Text>
-                        </View>
-                        <View style={styles.hostPaymentRow}>
-                          <Text style={styles.hostPaymentLabel}>Recipient:</Text>
-                          <Text style={styles.hostPaymentVal}>{businessName}</Text>
-                        </View>
-                        <View style={styles.hostPaymentRow}>
-                          <Text style={styles.hostPaymentLabel}>Account Name:</Text>
-                          <Text style={styles.hostPaymentVal}>{accountName}</Text>
-                        </View>
-                        <View style={styles.hostPaymentRow}>
-                          <Text style={styles.hostPaymentLabel}>Account Number:</Text>
-                          <Text style={[styles.hostPaymentVal, { fontFamily: FontFamily.bold, color: Colors.primary }]}>
-                            {accountNumber}
-                          </Text>
-                        </View>
-
-                        {/* Payment Method Pills */}
-                        <Text style={[styles.modalFieldLabel, { marginTop: 10 }]}>Payment Method Used</Text>
-                        <View style={styles.paymentMethodsGrid}>
-                          {[
-                            { id: "gcash", label: "GCash" },
-                            { id: "maya", label: "Maya" },
-                            { id: "bank_transfer", label: "Bank Transfer" },
-                            { id: "cash", label: "Cash to Host" },
-                          ].map((m) => (
                             <TouchableOpacity
-                              key={m.id}
-                              style={[
-                                styles.paymentMethodPill,
-                                extensionPaymentMethod === m.id && styles.paymentMethodActive,
-                              ]}
-                              onPress={() => setExtensionPaymentMethod(m.id)}
-                              activeOpacity={0.75}
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: 8,
+                                backgroundColor: qrSavedSuccess ? "#FFF6DA" : Colors.primary,
+                                borderRadius: 10,
+                                paddingVertical: 11,
+                                paddingHorizontal: 16,
+                                marginTop: 14,
+                                width: "100%",
+                                borderWidth: 1,
+                                borderColor: qrSavedSuccess ? "#FDE68A" : Colors.primary,
+                                opacity: savingQr ? 0.7 : 1,
+                              }}
+                              onPress={() => handleSaveQr(operatorPayment.qr_code_url!)}
+                              disabled={savingQr}
+                              activeOpacity={0.8}
                             >
-                              <Text
-                                style={[
-                                  styles.paymentMethodText,
-                                  extensionPaymentMethod === m.id && styles.paymentMethodTextActive,
-                                ]}
-                              >
-                                {m.label}
+                              {savingQr ? (
+                                <ActivityIndicator size="small" color={qrSavedSuccess ? Colors.dark : Colors.white} />
+                              ) : qrSavedSuccess ? (
+                                <Ionicons name="checkmark-circle" size={18} color="#92400E" />
+                              ) : (
+                                <Ionicons name="download-outline" size={18} color={Colors.white} />
+                              )}
+                              <Text style={{
+                                fontFamily: FontFamily.bold,
+                                fontSize: 13,
+                                color: qrSavedSuccess ? "#92400E" : Colors.white,
+                              }}>
+                                {savingQr
+                                  ? "Saving to Gallery..."
+                                  : qrSavedSuccess
+                                  ? "Saved to Gallery!"
+                                  : "Save QR Code to Gallery"}
                               </Text>
                             </TouchableOpacity>
-                          ))}
-                        </View>
+                          </View>
+                        ) : null}
                       </View>
+                    ) : null}
 
-                      {/* Payment Ref Input */}
-                      <Text style={styles.modalFieldLabel}>Transaction Reference # / Receipt ID</Text>
+                    {/* Reference Input */}
+                    <View>
+                      <Text style={{ fontFamily: FontFamily.semiBold, fontSize: 11.5, color: Colors.secondary, marginBottom: 6 }}>
+                        GCash Reference Number
+                      </Text>
                       <TextInput
-                        style={[
-                          styles.modalInput,
-                          extensionError ? styles.modalInputError : null,
-                        ]}
-                        placeholder="e.g. GCash / Maya Ref No."
+                        style={{
+                          backgroundColor: Colors.inputBackground,
+                          borderRadius: 12,
+                          paddingHorizontal: 14,
+                          paddingVertical: 12,
+                          fontFamily: FontFamily.medium,
+                          fontSize: 13,
+                          color: Colors.dark,
+                          borderWidth: 1,
+                          borderColor: extensionError ? Colors.error : (extensionPaymentRef ? Colors.primary : "transparent"),
+                        }}
+                        placeholder="Enter GCash Reference No."
                         placeholderTextColor={Colors.secondary}
                         value={extensionPaymentRef}
-                        onChangeText={(t) => {
-                          setExtensionPaymentRef(t);
+                        onChangeText={(val) => {
+                          setExtensionPaymentRef(val);
                           if (extensionError) setExtensionError("");
                         }}
                       />
-
                       {extensionError ? (
-                        <View style={styles.inlineErrorRow}>
-                          <Ionicons name="alert-circle" size={15} color="#EF4444" />
-                          <Text style={styles.inlineErrorText}>{extensionError}</Text>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginTop: 6 }}>
+                          <Ionicons name="alert-circle" size={14} color={Colors.error} />
+                          <Text style={{ fontFamily: FontFamily.medium, fontSize: 11.5, color: Colors.error }}>
+                            {extensionError}
+                          </Text>
                         </View>
                       ) : null}
-
-                      <View style={{ marginTop: Spacing.lg }}>
-                        <PrimaryButton
-                          title={submittingExtension ? "Submitting..." : `Request Extension (₱${extraAmount.toLocaleString()})`}
-                          onPress={handleRequestExtension}
-                          loading={submittingExtension}
-                        />
-                      </View>
                     </View>
-                  );
-                })()}
-              </ScrollView>
+                  </View>
+
+                  {/* 4. PRIMARY ACTION BUTTON (Without duplicate price in title) */}
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: Colors.primary,
+                      borderRadius: 14,
+                      height: 50,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      shadowColor: Colors.shadow,
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.1,
+                      shadowRadius: 4,
+                      elevation: 3,
+                    }}
+                    onPress={handleRequestExtension}
+                    disabled={submittingExtension}
+                    activeOpacity={0.88}
+                  >
+                    {submittingExtension ? (
+                      <>
+                        <ActivityIndicator size="small" color={Colors.white} />
+                        <Text style={{ fontFamily: FontFamily.bold, fontSize: 14, color: Colors.white }}>
+                          Submitting Request...
+                        </Text>
+                      </>
+                    ) : (
+                      <>
+                        <Ionicons name="checkmark-circle" size={18} color={Colors.white} />
+                        <Text style={{ fontFamily: FontFamily.bold, fontSize: 14, color: Colors.white }}>
+                          Request Extension
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              );
+            })()}
+          </ScrollView>
         </AppBottomSheet>
       </View>
     </ScreenContainer>

@@ -41,6 +41,18 @@ export default function Home() {
     router.push("/notifications" as any);
   };
 
+  const handleProfilePress = () => {
+    if (isGuest) {
+      setShowAuthSheet(true);
+      return;
+    }
+    if (user?.role === "operator") {
+      router.push("/operator-profile" as any);
+      return;
+    }
+    router.push("/profile" as any);
+  };
+
   const handleMenuPress = () => {
     openSideNav();
   };
@@ -65,11 +77,15 @@ export default function Home() {
           onSearchSubmit={handleSearchSubmit}
           onNotificationPress={handleNotificationPress}
           onMenuPress={handleMenuPress}
+          onProfilePress={handleProfilePress}
         />
 
         <HomeTipsCarousel />
 
-        <AvailableVehicles searchQuery={search} />
+        <AvailableVehicles
+          searchQuery={search}
+          onViewMore={() => router.navigate("/(tabs)/search" as any)}
+        />
 
         <TopRatedVehicles
           onViewPress={(vehicle) => {
