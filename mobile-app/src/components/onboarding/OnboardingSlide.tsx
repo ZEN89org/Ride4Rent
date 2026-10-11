@@ -1,4 +1,5 @@
 import {
+  Animated,
   Dimensions,
   ImageSourcePropType,
   StyleSheet,
@@ -23,6 +24,11 @@ interface Props {
   title: string;
   description: string;
   isFullTop?: boolean;
+  contentFit?: "contain" | "cover";
+  contentPosition?: "top" | "center";
+  textPaddingTop?: number;
+  index?: number;
+  scrollX?: Animated.Value;
 }
 
 export default function OnboardingSlide({
@@ -32,44 +38,123 @@ export default function OnboardingSlide({
   title,
   description,
   isFullTop = false,
+  contentFit = "contain",
+  contentPosition = "center",
+  textPaddingTop,
+  index = 0,
+  scrollX,
 }: Props) {
+  // Smooth animated interpolations when transitioning between slides
+  let textOpacity: any = 1;
+  let textTranslateY: any = 0;
+  let imageScale: any = 1;
+  let imageOpacity: any = 1;
+
+  if (scrollX) {
+    const inputRange = [
+      (index - 1) * width,
+      index * width,
+      (index + 1) * width,
+    ];
+
+    textOpacity = scrollX.interpolate({
+      inputRange,
+      outputRange: [0, 1, 0],
+      extrapolate: "clamp",
+    });
+
+    textTranslateY = scrollX.interpolate({
+      inputRange,
+      outputRange: [18, 0, 18],
+      extrapolate: "clamp",
+    });
+
+    imageScale = scrollX.interpolate({
+      inputRange,
+      outputRange: [0.94, 1, 0.94],
+      extrapolate: "clamp",
+    });
+
+    imageOpacity = scrollX.interpolate({
+      inputRange,
+      outputRange: [0.5, 1, 0.5],
+      extrapolate: "clamp",
+    });
+  }
+
   if (isFullTop) {
     return (
       <View style={[styles.containerFull, { width }]}>
-        <View style={[styles.topFullImageWrapper, { height: imageHeight }]}>
+        <Animated.View
+          style={[
+            styles.topFullImageWrapper,
+            {
+              height: imageHeight,
+              opacity: imageOpacity,
+              transform: [{ scale: imageScale }],
+            },
+          ]}
+        >
           <Image
             source={image}
-            contentFit="contain"
+            contentFit={contentFit}
+            contentPosition={contentPosition}
             style={styles.topFullImage}
           />
-        </View>
+        </Animated.View>
 
-        <View style={styles.textContainerFull}>
+        <Animated.View
+          style={[
+            styles.textContainerFull,
+            textPaddingTop !== undefined && { paddingTop: textPaddingTop },
+            {
+              opacity: textOpacity,
+              transform: [{ translateY: textTranslateY }],
+            },
+          ]}
+        >
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.description}>{description}</Text>
-        </View>
+        </Animated.View>
       </View>
     );
   }
 
   return (
     <View style={[styles.container, { width }]}>
-      <View style={styles.imageWrapper}>
+      <Animated.View
+        style={[
+          styles.imageWrapper,
+          {
+            opacity: imageOpacity,
+            transform: [{ scale: imageScale }],
+          },
+        ]}
+      >
         <Image
           source={image}
-          contentFit="contain"
+          contentFit={contentFit}
+          contentPosition={contentPosition}
           style={{
             width: imageWidth,
             height: imageHeight,
             alignSelf: "center",
           }}
         />
-      </View>
+      </Animated.View>
 
-      <View style={styles.textContainer}>
+      <Animated.View
+        style={[
+          styles.textContainer,
+          {
+            opacity: textOpacity,
+            transform: [{ translateY: textTranslateY }],
+          },
+        ]}
+      >
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.description}>{description}</Text>
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -85,7 +170,7 @@ const styles = StyleSheet.create({
   containerFull: {
     flex: 1,
     width: "100%",
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
     alignItems: "center",
     paddingHorizontal: 0,
   },
@@ -113,7 +198,8 @@ const styles = StyleSheet.create({
 
   textContainerFull: {
     flex: 1,
-    justifyContent: "center",
+    justifyContent: "flex-start",
+    paddingTop: Spacing.md,
     paddingHorizontal: Spacing.xl,
     alignItems: "center",
     paddingBottom: Spacing.md,

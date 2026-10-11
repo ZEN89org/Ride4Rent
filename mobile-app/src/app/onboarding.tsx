@@ -1,6 +1,7 @@
   import { router } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
+  Animated,
   FlatList,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -8,115 +9,132 @@ import {
   View,
 } from "react-native";
 
-  import {
+import {
   requestLocationPermission,
   requestNotificationPermission,
 } from "@/services/permissionService";
 
-  import Pagination from "@/components/common/Pagination";
+import Pagination from "@/components/common/Pagination";
 import PrimaryButton from "@/components/common/PrimaryButton";
 import ScreenContainer from "@/components/common/ScreenContainer";
 import SecondaryButton from "@/components/common/SecondaryButton";
 import OnboardingSlide from "@/components/onboarding/OnboardingSlide";
 
-  import { onboardingData } from "@/constants/onboarding";
+import { onboardingData } from "@/constants/onboarding";
 import { Spacing } from "@/constants/theme";
 import { setFirstLaunchComplete } from "@/features/auth/storage/authStorage";
 
-  export default function Onboarding() {
-    const flatListRef = useRef<FlatList>(null);
+export default function Onboarding() {
+  const flatListRef = useRef<FlatList>(null);
+  const scrollX = useRef(new Animated.Value(0)).current;
 
-    const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
-    const isLastSlide =
-      currentIndex === onboardingData.length - 1;
+  const isLastSlide =
+    currentIndex === onboardingData.length - 1;
 
-    const currentSlide =
-      onboardingData[currentIndex];
+  const currentSlide =
+    onboardingData[currentIndex];
 
-    const onScroll = (
-      event: NativeSyntheticEvent<NativeScrollEvent>
-    ) => {
+  const onScroll = (
+    event: NativeSyntheticEvent<NativeScrollEvent>
+  ) => {
+    const width = event.nativeEvent.layoutMeasurement.width;
+    if (width > 0) {
       const index = Math.round(
-        event.nativeEvent.contentOffset.x /
-          event.nativeEvent.layoutMeasurement.width
+        event.nativeEvent.contentOffset.x / width
       );
-
-      setCurrentIndex(index);
-    };
-
-    const goToNextSlide = () => {
-      if (!isLastSlide) {
-        flatListRef.current?.scrollToIndex({
-          index: currentIndex + 1,
-          animated: true,
-        });
-
-        return;
+      if (index >= 0 && index < onboardingData.length) {
+        setCurrentIndex(index);
       }
+    }
+  };
 
-      completeOnboarding();
-    };
+  const goToNextSlide = () => {
+    if (!isLastSlide) {
+      flatListRef.current?.scrollToIndex({
+        index: currentIndex + 1,
+        animated: true,
+      });
 
-    const completeOnboarding = async () => {
-      await setFirstLaunchComplete();
+      return;
+    }
 
-      router.replace("/current-location");
-    };
+    completeOnboarding();
+  };
 
+  const completeOnboarding = async () => {
+    await setFirstLaunchComplete();
 
-    const handleAllow = async () => {
-      if (currentSlide.permission === "notification") {
-        await requestNotificationPermission();
-      }
+    router.replace("/current-location");
+  };
 
-      if (currentSlide.permission === "location") {
-        await requestLocationPermission();
-      }
+  const handleAllow = async () => {
+    if (currentSlide.permission === "notification") {
+      await requestNotificationPermission();
+    }
 
-      goToNextSlide();
-    };
+    if (currentSlide.permission === "location") {
+      await requestLocationPermission();
+    }
 
-    const handleDeny = () => {
-      goToNextSlide();
-    };
+    goToNextSlide();
+  };
 
-    const handleSkip = async () => {
-      await setFirstLaunchComplete();
+  const handleDeny = () => {
+    goToNextSlide();
+  };
 
-      router.replace("/current-location");
-    };
+  const handleSkip = async () => {
+    await setFirstLaunchComplete();
 
-    return (
-      <ScreenContainer edges={["bottom"]}>
-        <FlatList
-          ref={flatListRef}
-          data={onboardingData}
-          horizontal
-          pagingEnabled
-          contentContainerStyle={{
-            flexGrow: 1,
-          }}
-          showsHorizontalScrollIndicator={false}
-          keyExtractor={(item) => item.id}
-          onMomentumScrollEnd={onScroll}
-          renderItem={({ item }) => (
-            <OnboardingSlide
-              image={item.image}
-              imageWidth={item.imageWidth}
-              imageHeight={item.imageHeight}
-              title={item.title}
-              description={item.description}
-              isFullTop={item.isFullTop}
-            />
-          )}
-        />
+    router.replace("/current-location");
+  };
 
-        <View style={styles.footer}>
-          <Pagination
-            currentIndex={currentIndex}
-            total={onboardingData.length}
+  return (
+    <ScreenContainer edges={["bottom"]}>
+      <Animated.FlatList
+        ref={flatListRef as any}
+        data={onboardingData}
+        horizontal
+        pagingEnabled
+        contentContainerStyle={{
+          flexGrow: 1,
+        }}
+        showsHorizontalScrollIndicator={false}
+        keyExtractor={(item) => item.id}
+        scrollEventThrottle={16}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+          {
+            useNativeDriver: false,
+            listener: onScroll,
+          }
+        )}
+        onMomentumScrollEnd={onScroll}
+        renderItem={({ item, index }) => (
+          <OnboardingSlide
+            image={item.image}
+            imageWidth={item.imageWidth}
+            imageHeight={item.imageHeight}
+            title={item.title}
+            description={item.description}
+            isFullTop={item.isFullTop}
+            contentFit={item.contentFit}
+            contentPosition={item.contentPosition}
+            textPaddingTop={item.textPaddingTop}
+            index={index}
+            scrollX={scrollX}
           />
+        )}
+      />
+
+      <View style={styles.footer}>
+        <Pagination
+          currentIndex={currentIndex}
+          total={onboardingData.length}
+          scrollX={scrollX}
+        />
 
           <View style={styles.buttonRow}>
             {isLastSlide ? (
