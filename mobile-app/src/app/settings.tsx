@@ -13,6 +13,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants, { ExecutionEnvironment } from "expo-constants";
+import { isRunningInExpoGo } from "expo";
+import { Platform } from "react-native";
 
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";
@@ -21,14 +23,24 @@ import { useAppToast } from "@/context/ToastContext";
 const STORAGE_KEY_NOTIFS = "@settings_notifications";
 const STORAGE_KEY_LOCATION = "@settings_location";
 
-const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+const isExpoGo = (() => {
+  try {
+    return (
+      isRunningInExpoGo?.() ||
+      Constants.executionEnvironment === ExecutionEnvironment.StoreClient ||
+      (Constants as any)?.appOwnership === "expo"
+    );
+  } catch {
+    return false;
+  }
+})();
 
 let Notifications: any = null;
-if (!isExpoGo) {
+if (!isExpoGo || Platform.OS !== "android") {
   try {
     Notifications = require("expo-notifications");
   } catch (e) {
-    console.log("expo-notifications module not loaded:", e);
+    Notifications = null;
   }
 }
 

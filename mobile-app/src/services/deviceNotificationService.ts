@@ -1,9 +1,34 @@
 import { Platform } from "react-native";
 import { router } from "expo-router";
-import * as Notifications from "expo-notifications";
+import Constants, { ExecutionEnvironment } from "expo-constants";
+import { isRunningInExpoGo } from "expo";
+
+const isExpoGo = (() => {
+  try {
+    return (
+      isRunningInExpoGo?.() ||
+      Constants.executionEnvironment === ExecutionEnvironment.StoreClient ||
+      (Constants as any)?.appOwnership === "expo"
+    );
+  } catch {
+    return false;
+  }
+})();
+
+let Notifications: typeof import("expo-notifications") | null = null;
+
+// Remote push notifications were removed from Expo Go on Android in SDK 53+.
+// Statically importing or loading expo-notifications inside Expo Go on Android throws an error.
+if (!isExpoGo || Platform.OS !== "android") {
+  try {
+    Notifications = require("expo-notifications");
+  } catch (e) {
+    Notifications = null;
+  }
+}
 
 try {
-  if (typeof Notifications.setNotificationHandler === "function") {
+  if (Notifications && typeof Notifications.setNotificationHandler === "function") {
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
         shouldShowAlert: true,
@@ -23,7 +48,11 @@ try {
  */
 export const setupNotificationChannel = async (): Promise<void> => {
   try {
-    if (Platform.OS === "android" && typeof Notifications.setNotificationChannelAsync === "function") {
+    if (
+      Platform.OS === "android" &&
+      Notifications &&
+      typeof Notifications.setNotificationChannelAsync === "function"
+    ) {
       await Notifications.setNotificationChannelAsync("ride4rent_alerts", {
         name: "Ride4Rent Urgent Alerts",
         importance: Notifications.AndroidImportance?.MAX ?? 5,

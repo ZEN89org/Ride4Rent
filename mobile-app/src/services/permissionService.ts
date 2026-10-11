@@ -1,25 +1,53 @@
 import * as Location from "expo-location";
-import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
+import Constants, { ExecutionEnvironment } from "expo-constants";
+import { isRunningInExpoGo } from "expo";
+
+const isExpoGo = (() => {
+  try {
+    return (
+      isRunningInExpoGo?.() ||
+      Constants.executionEnvironment === ExecutionEnvironment.StoreClient ||
+      (Constants as any)?.appOwnership === "expo"
+    );
+  } catch {
+    return false;
+  }
+})();
+
+let Notifications: typeof import("expo-notifications") | null = null;
+if (!isExpoGo || Platform.OS !== "android") {
+  try {
+    Notifications = require("expo-notifications");
+  } catch (e) {
+    Notifications = null;
+  }
+}
 
 export const requestNotificationPermission = async (): Promise<boolean> => {
+  if (!Notifications || typeof Notifications.getPermissionsAsync !== "function") {
+    return true;
+  }
+
   try {
     if (Platform.OS === "android") {
       try {
-        await Notifications.setNotificationChannelAsync("default", {
-          name: "Ride4Rent Notifications",
-          importance: Notifications.AndroidImportance?.DEFAULT ?? 3,
-        });
+        if (typeof Notifications.setNotificationChannelAsync === "function") {
+          await Notifications.setNotificationChannelAsync("default", {
+            name: "Ride4Rent Notifications",
+            importance: Notifications.AndroidImportance?.DEFAULT ?? 3,
+          });
 
-        await Notifications.setNotificationChannelAsync("ride4rent_alerts", {
-          name: "Ride4Rent Urgent Alerts",
-          importance: Notifications.AndroidImportance?.MAX ?? 5,
-          vibrationPattern: [0, 250, 250, 250],
-          lightColor: "#FEC103",
-          enableLights: true,
-          enableVibrate: true,
-          showBadge: true,
-        });
+          await Notifications.setNotificationChannelAsync("ride4rent_alerts", {
+            name: "Ride4Rent Urgent Alerts",
+            importance: Notifications.AndroidImportance?.MAX ?? 5,
+            vibrationPattern: [0, 250, 250, 250],
+            lightColor: "#FEC103",
+            enableLights: true,
+            enableVibrate: true,
+            showBadge: true,
+          });
+        }
       } catch (channelError) {
         console.log("Channel setup skipped:", channelError);
       }
