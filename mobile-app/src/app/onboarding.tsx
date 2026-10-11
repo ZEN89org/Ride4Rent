@@ -1,5 +1,5 @@
   import { router } from "expo-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   FlatList,
   NativeScrollEvent,
@@ -63,6 +63,16 @@ import { setFirstLaunchComplete } from "@/features/auth/storage/authStorage";
 
       router.replace("/current-location");
     };
+
+    // Prompt for notification permission when viewing slide 1
+    useEffect(() => {
+      if (currentIndex === 0 && currentSlide?.permission === "notification") {
+        const timer = setTimeout(() => {
+          requestNotificationPermission().catch(() => {});
+        }, 600);
+        return () => clearTimeout(timer);
+      }
+    }, [currentIndex, currentSlide]);
 
     const handleAllow = async () => {
       if (currentSlide.permission === "notification") {

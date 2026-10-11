@@ -55,7 +55,14 @@ class AuthController extends Controller
         ]);
 
         // Dispatch Email
-        MailService::sendVerificationOtp($email, $otp);
+        $mailSent = MailService::sendVerificationOtp($email, $otp);
+
+        if (!$mailSent) {
+            return response()->json([
+                'success' => false,
+                'message' => "Could not deliver verification email to {$email}. Please check backend mail settings (BREVO_API_KEY required on Railway).",
+            ], 500);
+        }
 
         return response()->json([
             'success' => true,
@@ -94,7 +101,14 @@ class AuthController extends Controller
         ]);
 
         // Dispatch Password Reset Email
-        MailService::sendPasswordResetOtp($email, $otp);
+        $mailSent = MailService::sendPasswordResetOtp($email, $otp);
+
+        if (!$mailSent) {
+            return response()->json([
+                'success' => false,
+                'message' => "Could not deliver password reset email to {$email}. Please verify backend email configuration.",
+            ], 500);
+        }
 
         return response()->json([
             'success' => true,

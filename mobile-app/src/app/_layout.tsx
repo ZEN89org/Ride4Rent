@@ -5,6 +5,7 @@ import {
   Poppins_700Bold,
 } from "@expo-google-fonts/poppins";
 import { useFonts } from "expo-font";
+import * as SplashScreen from "expo-splash-screen";
 import { Stack } from "expo-router";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import { Platform, StatusBar as RNStatusBar } from "react-native";
@@ -13,6 +14,8 @@ import { FavoritesProvider } from "../context/FavoritesContext";
 import { ToastProvider } from "../context/ToastContext";
 import { NotificationProvider } from "../context/NotificationContext";
 import { Colors } from "../constants/colors";
+
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({

@@ -4,6 +4,9 @@ import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  AppState,
+  Linking,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -44,6 +47,7 @@ export default function CurrentLocation() {
   const [address, setAddress] = useState<AddressData | null>(null);
   const [loading, setLoading] = useState(true);
   const [locationError, setLocationError] = useState(false);
+  const [permissionDenied, setPermissionDenied] = useState(false);
   const [recenterLoading, setRecenterLoading] = useState(false);
 
   const reverseGeocode = async (latitude: number, longitude: number) => {
@@ -87,6 +91,27 @@ export default function CurrentLocation() {
     await reverseGeocode(latitude, longitude);
   };
 
+  const handleRequestPermission = async () => {
+    try {
+      setLoading(true);
+      const perm = await Location.getForegroundPermissionsAsync();
+      if (perm.canAskAgain) {
+        const req = await Location.requestForegroundPermissionsAsync();
+        if (req.status === "granted") {
+          setPermissionDenied(false);
+          await getCurrentLocation();
+          return;
+        }
+      }
+      setLoading(false);
+      // If user denied permanently or cannot ask again, open settings
+      Linking.openSettings();
+    } catch {
+      setLoading(false);
+      Linking.openSettings();
+    }
+  };
+
   const getCurrentLocation = async (shouldRecenterMap = false) => {
     try {
       if (shouldRecenterMap) {
@@ -101,16 +126,14 @@ export default function CurrentLocation() {
       if (permission.status !== "granted") {
         const requestedPermission = await Location.requestForegroundPermissionsAsync();
         if (requestedPermission.status !== "granted") {
-          // Fall back gracefully to default Mindoro coordinates so map still works
-          const fallback = DEFAULT_MINDORO_COORDS;
-          setMapInitialRegion(fallback);
-          setRegion(fallback);
-          reverseGeocode(fallback.latitude, fallback.longitude);
+          setPermissionDenied(true);
           setLoading(false);
           setRecenterLoading(false);
           return;
         }
       }
+
+      setPermissionDenied(false);
 
       // 1. Try last known position for instant loading
       const lastKnown = await Location.getLastKnownPositionAsync();
@@ -155,13 +178,7 @@ export default function CurrentLocation() {
       setRecenterLoading(false);
     } catch (error) {
       console.log("Current location error:", error);
-      // If we don't have a region yet, fall back to default coordinates
-      if (!region) {
-        const fallback = DEFAULT_MINDORO_COORDS;
-        setMapInitialRegion(fallback);
-        setRegion(fallback);
-        reverseGeocode(fallback.latitude, fallback.longitude);
-      }
+      setLocationError(true);
       setLoading(false);
       setRecenterLoading(false);
     }
@@ -443,14 +460,38 @@ export default function CurrentLocation() {
   };
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      getCurrentLocation();
-    }, 0);
+    getCurrentLocation();
 
-    return () => clearTimeout(timer);
+    // Auto-detect when user returns from phone Settings after enabling location
+    const subscription = AppState.addEventListener("change", (nextAppState) => {
+      if (nextAppState === "active") {
+        Location.getForegroundPermissionsAsync().then((perm) => {
+          if (perm.status === "granted") {
+            setPermissionDenied(false);
+            getCurrentLocation();
+          }
+        });
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, []);
 
-  const handleRecenter = () => {
+  const handleRecenter = async () => {
+    const perm = await Location.getForegroundPermissionsAsync();
+    if (perm.status !== "granted") {
+      Alert.alert(
+        "Location Access Required",
+        "Please enable location permission so Ride4Rent can center on your current position.",
+        [
+          { text: "Open Settings", onPress: () => Linking.openSettings() },
+          { text: "Cancel", style: "cancel" },
+        ]
+      );
+      return;
+    }
     getCurrentLocation(true);
   };
 
@@ -459,6 +500,17 @@ export default function CurrentLocation() {
   };
 
   const handleConfirmLocation = () => {
+    if (permissionDenied || !region) {
+      Alert.alert(
+        "Location Required",
+        "Please enable location permissions and select your location before proceeding.",
+        [
+          { text: "Enable Location", onPress: handleRequestPermission },
+          { text: "Cancel", style: "cancel" },
+        ]
+      );
+      return;
+    }
     router.replace("/(tabs)/home");
   };
 
@@ -520,6 +572,35 @@ export default function CurrentLocation() {
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={Colors.primary} />
             <Text style={styles.loadingText}>Finding your location...</Text>
+          </View>
+        ) : permissionDenied ? (
+          <View style={styles.permissionContainer}>
+            <View style={styles.permissionIconBadge}>
+              <Ionicons name="location-outline" size={42} color={Colors.dark} />
+            </View>
+
+            <Text style={styles.permissionTitle}>Location Access Required</Text>
+
+            <Text style={styles.permissionText}>
+              Ride4Rent needs your location permission to locate where you are on the map, set your pickup point, and show nearby rental vehicles.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.enableLocationBtn}
+              activeOpacity={0.85}
+              onPress={handleRequestPermission}
+            >
+              <Ionicons name="navigate" size={17} color={Colors.dark} />
+              <Text style={styles.enableLocationBtnText}>Enable Location</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.openSettingsBtn}
+              activeOpacity={0.7}
+              onPress={() => Linking.openSettings()}
+            >
+              <Text style={styles.openSettingsBtnText}>Open Device Settings</Text>
+            </TouchableOpacity>
           </View>
         ) : locationError ? (
           <View style={styles.errorContainer}>
@@ -729,6 +810,82 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: Colors.primary,
+  },
+
+  permissionContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: Spacing.xl,
+    backgroundColor: "#F8FAFC",
+  },
+
+  permissionIconBadge: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: Colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: Spacing.lg,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+  },
+
+  permissionTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 18,
+    color: Colors.dark,
+    textAlign: "center",
+  },
+
+  permissionText: {
+    marginTop: Spacing.sm,
+    fontFamily: FontFamily.regular,
+    fontSize: 14,
+    color: Colors.secondary,
+    textAlign: "center",
+    lineHeight: 22,
+    maxWidth: 320,
+  },
+
+  enableLocationBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: Spacing.xl,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: 14,
+    borderRadius: 25,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+
+  enableLocationBtnText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 15,
+    color: Colors.dark,
+  },
+
+  openSettingsBtn: {
+    marginTop: Spacing.md,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+
+  openSettingsBtnText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 13,
+    color: Colors.secondary,
+    textDecorationLine: "underline",
   },
 
   loadingContainer: {

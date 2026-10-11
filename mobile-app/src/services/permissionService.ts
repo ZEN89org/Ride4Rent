@@ -5,25 +5,28 @@ import { Platform } from "react-native";
 export const requestNotificationPermission = async (): Promise<boolean> => {
   try {
     if (Platform.OS === "android") {
-      await Notifications.setNotificationChannelAsync("default", {
-        name: "Ride4Rent Notifications",
-        importance: Notifications.AndroidImportance?.DEFAULT ?? 3,
-      });
+      try {
+        await Notifications.setNotificationChannelAsync("default", {
+          name: "Ride4Rent Notifications",
+          importance: Notifications.AndroidImportance?.DEFAULT ?? 3,
+        });
 
-      await Notifications.setNotificationChannelAsync("ride4rent_alerts", {
-        name: "Ride4Rent Urgent Alerts",
-        importance: Notifications.AndroidImportance?.MAX ?? 5,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: "#FEC103",
-        enableLights: true,
-        enableVibrate: true,
-        showBadge: true,
-      });
+        await Notifications.setNotificationChannelAsync("ride4rent_alerts", {
+          name: "Ride4Rent Urgent Alerts",
+          importance: Notifications.AndroidImportance?.MAX ?? 5,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: "#FEC103",
+          enableLights: true,
+          enableVibrate: true,
+          showBadge: true,
+        });
+      } catch (channelError) {
+        console.log("Channel setup skipped:", channelError);
+      }
     }
 
     const current = await Notifications.getPermissionsAsync();
-
-    if (current.granted) {
+    if (current?.granted || current?.status === "granted") {
       return true;
     }
 
@@ -35,10 +38,10 @@ export const requestNotificationPermission = async (): Promise<boolean> => {
       },
     });
 
-    return result.granted || result.status === "granted";
+    return result?.granted === true || result?.status === "granted";
   } catch (error) {
-    console.log("Notification permission handled gracefully:", error);
-    return true;
+    console.log("Notification permission request error:", error);
+    return false;
   }
 };
 

@@ -30,13 +30,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const knownNotificationIds = useRef<Set<string>>(new Set());
   const isInitialFetch = useRef<boolean>(true);
 
-  // Initialize notifications channel, request permission, and register tap handlers on mount
+  // Initialize notifications channel and register tap handlers on mount
   useEffect(() => {
-    const init = async () => {
-      await setupNotificationChannel();
-      await requestDeviceNotificationPermission();
-    };
-    init();
+    setupNotificationChannel().catch(() => {});
     const cleanupTapListener = registerNotificationTapListener();
     return () => {
       cleanupTapListener();
