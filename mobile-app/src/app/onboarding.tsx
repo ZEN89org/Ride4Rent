@@ -88,7 +88,7 @@ import { setFirstLaunchComplete } from "@/features/auth/storage/authStorage";
     };
 
     return (
-      <ScreenContainer>
+      <ScreenContainer edges={["bottom"]}>
         <FlatList
           ref={flatListRef}
           data={onboardingData}
@@ -107,6 +107,7 @@ import { setFirstLaunchComplete } from "@/features/auth/storage/authStorage";
               imageHeight={item.imageHeight}
               title={item.title}
               description={item.description}
+              isFullTop={item.isFullTop}
             />
           )}
         />
