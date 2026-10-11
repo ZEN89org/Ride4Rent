@@ -12,13 +12,13 @@ const notificationHeight = Math.round(notificationWidth / 2);
 // Slide 2: Location banner cropped to visible artwork (1280 x 1386)
 const locationBannerHeight = Math.min(
   Math.round(SCREEN_WIDTH * (1386 / 1280)),
-  Math.round(SCREEN_HEIGHT * 0.5)
+  Math.round(SCREEN_HEIGHT * 0.9)
 );
 
 // Slide 3: Vehicle showcase banner cropped to visible artwork (1280 x 1180) fitting edge-to-edge
 const vehicleBannerHeight = Math.min(
   Math.round(SCREEN_WIDTH * (1180 / 1280)),
-  Math.round(SCREEN_HEIGHT * 0.5)
+  Math.round(SCREEN_HEIGHT * 0.9)
 );
 
 export interface OnboardingItem {
@@ -43,7 +43,7 @@ export const onboardingData: OnboardingItem[] = [
     id: "1",
     title: "Enable Notifications",
     description:
-      "This is required for getting notifications about your rentals.",
+      "Never miss an update about your ride, from booking approval to pickup time and return reminders.",
     image: onboarding1,
     imageWidth: notificationWidth,
     imageHeight: notificationHeight,
@@ -56,7 +56,7 @@ export const onboardingData: OnboardingItem[] = [
     id: "2",
     title: "Allow Location Services",
     description:
-      "Location services make address searches more precise, helping you save time and speed up the rental process.",
+      "Make your rental experience faster and easier with convenient location-based searches on Ride4Rent.",
     image: onboarding2,
     imageWidth: SCREEN_WIDTH,
     imageHeight: locationBannerHeight,
@@ -73,7 +73,7 @@ export const onboardingData: OnboardingItem[] = [
     id: "3",
     title: "Find Your Perfect Ride",
     description:
-      "Browse available vehicles from trusted rental operators. Compare prices, features, and availability in one place.",
+      "Find a vehicle that fits your needs and budget, making every trip easier and more convenient.",
     image: onboarding3,
     imageWidth: SCREEN_WIDTH,
     imageHeight: vehicleBannerHeight,

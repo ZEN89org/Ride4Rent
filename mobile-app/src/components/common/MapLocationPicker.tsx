@@ -284,8 +284,8 @@ export default function MapLocationPicker({
   </div>
   <div class="center-pin-wrapper">
     <svg class="pin-svg" width="40" height="48" viewBox="0 0 24 24" fill="none">
-      <path d="M12 0C7.58 0 4 3.58 4 8c0 5.25 8 16 8 16s8-10.75 8-16c0-4.42-3.58-8-8-8z" fill="#FEC103"/>
-      <circle cx="12" cy="8" r="3.5" fill="#1A1A1A"/>
+      <path d="M12 0C7.58 0 4 3.58 4 8c0 5.25 8 16 8 16s8-10.75 8-16c0-4.42-3.58-8-8-8z" fill="#FEC103" stroke="#FFFFFF" stroke-width="1.2"/>
+      <circle cx="12" cy="8" r="3.5" fill="#FFFFFF"/>
     </svg>
     <div class="pin-shadow"></div>
   </div>

@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { router } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -370,7 +370,7 @@ export default function CurrentLocation() {
       height: 24px;
       border-radius: 50%;
       background: #FEC103;
-      border: 3px solid #1A1A1A;
+      border: 3px solid #FFFFFF;
       box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
       z-index: 10;
     }
@@ -383,7 +383,7 @@ export default function CurrentLocation() {
       top: 50%;
       transform: translate(-50%, -50%);
       border-radius: 50%;
-      background: #1A1A1A;
+      background: #FFFFFF;
     }
     @keyframes locationPulse {
       0% { transform: scale(0.6); opacity: 0.9; }
@@ -647,14 +647,12 @@ export default function CurrentLocation() {
           </View>
         ) : permissionDenied ? (
           <View style={styles.permissionContainer}>
-            <View style={styles.permissionIconBadge}>
-              <Ionicons name="location-outline" size={42} color={Colors.dark} />
-            </View>
+
 
             <Text style={styles.permissionTitle}>Location Access Required</Text>
 
             <Text style={styles.permissionText}>
-              Ride4Rent needs your location permission to locate where you are on the map, set your pickup point, and show nearby rental vehicles.
+             Ride4Rent uses your location to show nearby rental vehicles on the map.
             </Text>
 
             <TouchableOpacity
@@ -662,17 +660,11 @@ export default function CurrentLocation() {
               activeOpacity={0.85}
               onPress={handleRequestPermission}
             >
-              <Ionicons name="navigate" size={17} color={Colors.dark} />
+              <Ionicons name="navigate" size={17} color={Colors.white} />
               <Text style={styles.enableLocationBtnText}>Enable Location</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.openSettingsBtn}
-              activeOpacity={0.7}
-              onPress={() => Linking.openSettings()}
-            >
-              <Text style={styles.openSettingsBtnText}>Open Device Settings</Text>
-            </TouchableOpacity>
+
           </View>
         ) : locationError ? (
           <View style={styles.errorContainer}>
@@ -871,8 +863,8 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    borderWidth: 2,
-    borderColor: Colors.dark,
+    borderWidth: 3,
+    borderColor: Colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -944,7 +936,7 @@ const styles = StyleSheet.create({
   enableLocationBtnText: {
     fontFamily: FontFamily.bold,
     fontSize: 15,
-    color: Colors.dark,
+    color: Colors.white,
   },
 
   openSettingsBtn: {
@@ -1006,7 +998,7 @@ const styles = StyleSheet.create({
 
   retryText: {
     fontFamily: FontFamily.bold,
-    color: Colors.dark,
+    color: Colors.white,
   },
 
   sheetHandle: {

@@ -63,7 +63,7 @@ export default function Index() {
 
   return (
     <View style={styles.container}>
-      <AppLogo size={300} />
+      <AppLogo size={200} />
     </View>
   );
 }
