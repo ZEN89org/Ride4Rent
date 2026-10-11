@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Linking,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -8,6 +10,7 @@ import {
 } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 
 import { Colors } from "@/constants/colors";
@@ -15,10 +18,11 @@ import {
   MUNICIPALITY_COORDINATES,
   resolveCoordinatesFromAddress,
 } from "@/constants/orientalMindoroLocations";
-import { FontFamily, FontSize, Spacing } from "@/constants/theme";
+import { FontFamily, FontSize, Radius, Spacing } from "@/constants/theme";
 import { getBookingLocation } from "@/services/bookingService";
 
 export default function LiveTrackingScreen() {
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     bookingId?: string;
     vehicleName?: string;
@@ -218,6 +222,29 @@ export default function LiveTrackingScreen() {
     }
   };
 
+  const handleOpenDirections = () => {
+    const lat = initialCoordinates.latitude;
+    const lng = initialCoordinates.longitude;
+    const label = encodeURIComponent(params.address || vehicleName || "Pickup Location");
+    const url = Platform.select({
+      ios: `maps:0,0?q=${label}@${lat},${lng}`,
+      android: `geo:0,0?q=${lat},${lng}(${label})`,
+      default: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
+    });
+
+    Linking.canOpenURL(url!)
+      .then((supported) => {
+        if (supported) {
+          Linking.openURL(url!);
+        } else {
+          Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`);
+        }
+      })
+      .catch(() => {
+        Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`);
+      });
+  };
+
   // Compile clean, human-readable single paragraph address
   const getSingleParagraphAddress = () => {
     if (isPickupView) {
@@ -247,12 +274,6 @@ export default function LiveTrackingScreen() {
   const createMapHtml = () => {
     const lat = initialCoordinates.latitude;
     const lng = initialCoordinates.longitude;
-    const pinColor = "#FEC103";
-    const pulseColor = "rgba(254, 193, 3, 0.45)";
-
-    const svgIcon = isPickupView
-      ? `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`
-      : `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>`;
 
     return `
 <!DOCTYPE html>
@@ -273,56 +294,75 @@ export default function LiveTrackingScreen() {
       user-select: none;
       -webkit-user-select: none;
     }
+    .leaflet-control-attribution { display: none !important; }
+    .leaflet-control-zoom { display: none !important; }
 
-    /* Marker: Golden Circular Pin with Pulse */
-    .marker-wrap {
+    /* Center Marker Pin with Golden Pulse matching Current Location map */
+    .location-marker-wrapper {
       position: relative;
-      width: 52px;
-      height: 52px;
+      width: 64px;
+      height: 64px;
       display: flex;
       align-items: center;
       justify-content: center;
-    }
-    .marker-pulse {
-      position: absolute;
-      width: 50px;
-      height: 50px;
-      border-radius: 50%;
-      background: ${pulseColor};
-      animation: pinPulse 2s cubic-bezier(0.2, 0.9, 0.3, 1) infinite;
-    }
-    @keyframes pinPulse {
-      0% { transform: scale(0.6); opacity: 0.95; }
-      75% { transform: scale(1.35); opacity: 0.1; }
-      100% { transform: scale(1.4); opacity: 0; }
-    }
-    .marker-pin {
-      position: relative;
-      width: 42px;
-      height: 42px;
-      border-radius: 50%;
-      background: ${pinColor};
-      border: 3px solid #FFFFFF;
-      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10;
       cursor: pointer;
-      transition: transform 0.2s ease;
     }
-    .marker-pin:active {
-      transform: scale(0.92);
+    .location-glow {
+      position: absolute;
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      background: rgba(254, 193, 3, 0.16);
+      animation: locationPulse 2.2s cubic-bezier(0.2, 0.9, 0.3, 1) infinite;
+    }
+    .location-glow-inner {
+      position: absolute;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: rgba(254, 193, 3, 0.32);
+      animation: locationPulseInner 2.2s cubic-bezier(0.2, 0.9, 0.3, 1) infinite;
+    }
+    .location-marker {
+      position: relative;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #FEC103;
+      border: 3px solid #FFFFFF;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+      z-index: 10;
+    }
+    .location-marker::after {
+      content: "";
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: #FFFFFF;
+    }
+    @keyframes locationPulse {
+      0% { transform: scale(0.6); opacity: 0.9; }
+      75% { transform: scale(1.3); opacity: 0.1; }
+      100% { transform: scale(1.35); opacity: 0; }
+    }
+    @keyframes locationPulseInner {
+      0% { transform: scale(0.7); opacity: 0.8; }
+      60% { transform: scale(1.15); opacity: 0; }
+      100% { transform: scale(1.2); opacity: 0; }
     }
 
-    /* Bubble Chat Popup with Tip pointing to Pin */
+    /* Bubble Popup with Tip pointing to Pin */
     .leaflet-popup {
       margin-bottom: 6px;
     }
     .leaflet-popup-content-wrapper {
       background: #FFFFFF !important;
       border-radius: 14px !important;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22) !important;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18) !important;
       padding: 3px !important;
     }
     .leaflet-popup-content {
@@ -331,35 +371,7 @@ export default function LiveTrackingScreen() {
     }
     .leaflet-popup-tip {
       background: #FFFFFF !important;
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15) !important;
-    }
-    .leaflet-container a.leaflet-popup-close-button {
-      top: 8px !important;
-      right: 10px !important;
-      color: #94A3B8 !important;
-      font-size: 16px !important;
-      font-weight: 700 !important;
-    }
-    .leaflet-container a.leaflet-popup-close-button:hover {
-      color: #0F172A !important;
-    }
-
-    /* Zoom control styling */
-    .leaflet-control-zoom {
-      top: 14px !important;
-      left: 14px !important;
-      border: none !important;
-      border-radius: 10px !important;
-      overflow: hidden !important;
-      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18) !important;
-    }
-    .leaflet-control-zoom a {
-      width: 36px !important;
-      height: 36px !important;
-      line-height: 36px !important;
-      font-size: 16px !important;
-      color: #0F172A !important;
-      background: #FFFFFF !important;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12) !important;
     }
   </style>
 </head>
@@ -370,10 +382,10 @@ export default function LiveTrackingScreen() {
   <script>
     const initLat = ${lat};
     const initLng = ${lng};
-    let currentMode = "streets";
+    let currentMode = "${activeLayer}";
 
     window.map = L.map("map", {
-      zoomControl: true,
+      zoomControl: false,
       attributionControl: false,
       dragging: true,
       touchZoom: true,
@@ -381,14 +393,14 @@ export default function LiveTrackingScreen() {
       scrollWheelZoom: true,
     }).setView([initLat, initLng], 16);
 
-    // 1. Watermark-free, official Esri World Street Map (high-definition streets, barangays, POIs)
+    // 1. Watermark-free, official Esri World Street Map (consistent with Current Location)
     const streetsLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
       maxZoom: 19,
       minZoom: 3,
       keepBuffer: 6,
     });
 
-    // 2. High-Resolution Google Hybrid Satellite with Roads & Place Labels (maxZoom 20, zero missing tiles)
+    // 2. High-Resolution Google Hybrid Satellite with Roads & Place Labels
     const satelliteLayer = L.tileLayer("https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", {
       subdomains: ["mt0", "mt1", "mt2", "mt3"],
       maxZoom: 20,
@@ -396,45 +408,34 @@ export default function LiveTrackingScreen() {
       keepBuffer: 6,
     });
 
-    // Default start with Streets
-    streetsLayer.addTo(window.map);
+    if (currentMode === "satellite") {
+      satelliteLayer.addTo(window.map);
+    } else {
+      streetsLayer.addTo(window.map);
+    }
 
     function switchLayer(mode) {
       currentMode = mode;
-
       if (mode === "streets") {
         window.map.removeLayer(satelliteLayer);
         if (!window.map.hasLayer(streetsLayer)) streetsLayer.addTo(window.map);
-        window.map.flyTo([initLat, initLng], 16, { animate: true, duration: 0.5 });
       } else if (mode === "satellite") {
         window.map.removeLayer(streetsLayer);
         satelliteLayer.addTo(window.map);
-        window.map.flyTo([initLat, initLng], 17, { animate: true, duration: 0.5 });
       }
-
-      setTimeout(function() {
-        if (window.map) window.map.invalidateSize();
-      }, 150);
+      setTimeout(function() { if (window.map) window.map.invalidateSize(); }, 100);
     }
 
-    // Circular Golden Pin Marker with Bubble Chat
-    const customIcon = L.divIcon({
+    const markerIcon = L.divIcon({
       className: "",
-      html: \`
-        <div class="marker-wrap">
-          <div class="marker-pulse"></div>
-          <div class="marker-pin">
-            ${svgIcon}
-          </div>
-        </div>
-      \`,
-      iconSize: [52, 52],
-      iconAnchor: [26, 26],
-      popupAnchor: [0, -28],
+      html: '<div class="location-marker-wrapper"><div class="location-glow"></div><div class="location-glow-inner"></div><div class="location-marker"></div></div>',
+      iconSize: [64, 64],
+      iconAnchor: [32, 32],
+      popupAnchor: [0, -22],
     });
 
     const marker = L.marker([initLat, initLng], {
-      icon: customIcon,
+      icon: markerIcon,
       interactive: true,
     }).addTo(window.map);
 
@@ -444,8 +445,8 @@ export default function LiveTrackingScreen() {
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 2px; min-width: 170px;">
         <div style="font-size: 13px; font-weight: 800; color: #0F172A; margin-bottom: 3px;">\${titleText}</div>
         <div style="font-size: 11px; color: #475569; line-height: 1.35; margin-bottom: 6px;">\${descText}</div>
-        <div style="display: inline-block; font-size: 9.5px; font-weight: 700; color: #0F172A; background: #FEC103; padding: 2px 7px; border-radius: 4px;">
-          ${isPickupView ? "Official Garage & Warehouse Hub" : "Active GPS Vehicle"}
+        <div style="display: inline-block; font-size: 9.5px; font-weight: 700; color: #FFFFFF; background: #FEC103; padding: 2px 7px; border-radius: 4px;">
+          ${isPickupView ? "Official Garage Hub" : "Active GPS Vehicle"}
         </div>
       </div>
     \`).openPopup();
@@ -453,14 +454,12 @@ export default function LiveTrackingScreen() {
     function handleReactNativeMessage(event) {
       try {
         const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
-
         if (data.type === "UPDATE_LOCATION" || data.type === "RECENTER_TO_LOCATION") {
-          const lat = Number(data.latitude);
-          const lng = Number(data.longitude);
-
-          if (Number.isFinite(lat) && Number.isFinite(lng)) {
-            marker.setLatLng([lat, lng]);
-            window.map.flyTo([lat, lng], currentMode === "satellite" ? 17 : 16, {
+          const mLat = Number(data.latitude);
+          const mLng = Number(data.longitude);
+          if (Number.isFinite(mLat) && Number.isFinite(mLng)) {
+            marker.setLatLng([mLat, mLng]);
+            window.map.flyTo([mLat, mLng], currentMode === "satellite" ? 17 : 16, {
               animate: true,
               duration: 0.8,
             });
@@ -497,79 +496,82 @@ export default function LiveTrackingScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Top Header Bar */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => router.back()}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="arrow-back" size={20} color={Colors.dark} />
-        </TouchableOpacity>
+      {/* Top Header Bar matching Current Location screen */}
+      <View style={[styles.header, { paddingTop: Math.max(insets.top + 8, 48) }]}>
+        <View style={styles.headerTopRow}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => router.back()}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={20} color={Colors.dark} />
+          </TouchableOpacity>
 
-        <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {screenTitle}
-          </Text>
-          <Text style={styles.headerSubtitle} numberOfLines={1}>
-            {vehicleName}
-          </Text>
+          <TouchableOpacity
+            style={styles.recenterHeaderBtn}
+            onPress={handleRecenter}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="locate" size={19} color={Colors.dark} />
+          </TouchableOpacity>
         </View>
 
-        <TouchableOpacity
-          style={styles.recenterHeaderBtn}
-          onPress={handleRecenter}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="locate" size={19} color={Colors.dark} />
-        </TouchableOpacity>
+        <Text style={styles.title}>{screenTitle}</Text>
+
+        <Text style={styles.description}>
+          {isPickupView
+            ? vehicleName
+              ? `Official garage & meetup location for ${vehicleName}.`
+              : "Official garage & meetup location designated by the host."
+            : `Live GPS telemetry for ${vehicleName}.`}
+        </Text>
+
+        {/* Street and Satellite view toggle under title and submessage (identical to current-location) */}
+        <View style={styles.layerSelector}>
+          <TouchableOpacity
+            style={[styles.layerButton, activeLayer === "streets" && styles.layerButtonActive]}
+            onPress={() => handleLayerSwitch("streets")}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name="map"
+              size={13}
+              color={activeLayer === "streets" ? Colors.white : Colors.secondary}
+            />
+            <Text
+              style={[
+                styles.layerButtonText,
+                activeLayer === "streets" && styles.layerButtonTextActive,
+              ]}
+            >
+              Streets
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.layerButton, activeLayer === "satellite" && styles.layerButtonActive]}
+            onPress={() => handleLayerSwitch("satellite")}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name="earth"
+              size={13}
+              color={activeLayer === "satellite" ? Colors.white : Colors.secondary}
+            />
+            <Text
+              style={[
+                styles.layerButtonText,
+                activeLayer === "satellite" && styles.layerButtonTextActive,
+              ]}
+            >
+              Satellite
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* Single, Unified Layer Switcher Bar in Container */}
-      <View style={styles.layerBar}>
-        <TouchableOpacity
-          style={[styles.layerPill, activeLayer === "streets" && styles.layerPillActive]}
-          onPress={() => handleLayerSwitch("streets")}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name="map"
-            size={14}
-            color={activeLayer === "streets" ? Colors.white : Colors.secondary}
-          />
-          <Text
-            style={[
-              styles.layerPillText,
-              activeLayer === "streets" && styles.layerPillTextActive,
-            ]}
-          >
-            Streets
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.layerPill, activeLayer === "satellite" && styles.layerPillActive]}
-          onPress={() => handleLayerSwitch("satellite")}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name="earth"
-            size={14}
-            color={activeLayer === "satellite" ? Colors.white : Colors.secondary}
-          />
-          <Text
-            style={[
-              styles.layerPillText,
-              activeLayer === "satellite" && styles.layerPillTextActive,
-            ]}
-          >
-            Satellite
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Interactive Map View */}
-      <View style={styles.mapWrapper}>
+      {/* Map Container matching Current Location screen */}
+      <View style={styles.mapContainer}>
         {loading && !initialCoordinates ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={Colors.primary} />
@@ -597,6 +599,15 @@ export default function LiveTrackingScreen() {
           />
         )}
 
+        {/* Floating instruction helper on map */}
+        <View pointerEvents="none" style={styles.mapInstruction}>
+          <Text style={styles.mapInstructionText}>
+            {isPickupView
+              ? "Official garage & pickup base on map"
+              : "Live vehicle location on map"}
+          </Text>
+        </View>
+
         {/* Live Telemetry Speed Badge (only for active GPS tracking) */}
         {!isPickupView && (
           <View style={styles.floatingSpeedBadge}>
@@ -613,50 +624,52 @@ export default function LiveTrackingScreen() {
           </View>
         )}
 
-        {/* Floating Recenter Button */}
+        {/* Floating Recenter Button matching current-location */}
         <TouchableOpacity
-          style={styles.floatingRecenterBtn}
+          activeOpacity={0.8}
+          style={styles.myLocationButton}
           onPress={handleRecenter}
-          activeOpacity={0.85}
         >
-          <Ionicons name="navigate" size={19} color={Colors.dark} />
+          <View style={styles.myLocationIcon}>
+            <View style={styles.myLocationDot} />
+          </View>
         </TouchableOpacity>
       </View>
 
-      {/* Bottom Location Card */}
-      <View style={styles.bottomCard}>
-        <View style={styles.cardHeaderRow}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            <Ionicons
-              name={isPickupView ? "location" : "navigate-circle"}
-              size={18}
-              color={Colors.primary}
-            />
-            <Text style={styles.cardHeaderTitle}>
-              {isPickupView ? "PICKUP & GARAGE ADDRESS" : "CURRENT LOCATION"}
-            </Text>
-          </View>
+      {/* Bottom Sheet matching Current Location screen */}
+      <View style={[styles.bottomSheet, { paddingBottom: Math.max(insets.bottom + 12, Spacing.xl) }]}>
+        <View style={styles.sheetHandle} />
+
+        <View style={styles.sheetTitleRow}>
+          <Text style={styles.locationTitle}>
+            {isPickupView ? "Pickup & Meetup Location" : "Current Vehicle Location"}
+          </Text>
 
           {!isPickupView && trackingData?.last_updated_human && (
-            <Text style={styles.timestampText}>
-              {trackingData.last_updated_human}
-            </Text>
+            <Text style={styles.timestampText}>{trackingData.last_updated_human}</Text>
           )}
         </View>
 
-        {/* Single Paragraph Address Text */}
-        <Text style={styles.addressParagraph}>
-          {getSingleParagraphAddress()}
-        </Text>
+        <Text style={styles.addressText}>{getSingleParagraphAddress()}</Text>
 
-        {isPickupView && (
-          <View style={styles.badgesRow}>
-            <View style={styles.infoBadge}>
-              <Ionicons name="business-outline" size={12} color="#D97706" />
-              <Text style={styles.infoBadgeText}>Host Garage / Warehouse</Text>
-            </View>
-          </View>
-        )}
+        {isPickupView ? (
+          <Text style={styles.locationText}>
+            {vehicleName
+              ? `Official garage base for ${vehicleName} • Oriental Mindoro`
+              : "Official garage and handover point"}
+          </Text>
+        ) : null}
+
+        {isPickupView ? (
+          <TouchableOpacity
+            style={styles.confirmButton}
+            onPress={handleOpenDirections}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="navigate" size={17} color={Colors.white} />
+            <Text style={styles.confirmText}>Get Directions</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     </View>
   );
@@ -668,15 +681,15 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
   },
   header: {
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.md,
+    backgroundColor: Colors.white,
+  },
+  headerTopRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingTop: 52,
-    paddingBottom: 10,
-    paddingHorizontal: Spacing.md,
-    backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
-    zIndex: 10,
+    justifyContent: "space-between",
+    marginBottom: Spacing.sm,
   },
   backBtn: {
     width: 38,
@@ -688,77 +701,59 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E2E8F0",
   },
-  headerTitleContainer: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  headerTitle: {
-    fontFamily: FontFamily.bold,
-    fontSize: 15,
-    color: Colors.dark,
-  },
-  headerSubtitle: {
-    fontFamily: FontFamily.regular,
-    fontSize: 12,
-    color: Colors.secondary,
-    marginTop: 1,
-  },
   recenterHeaderBtn: {
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: "#FFFBEB",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#FEF3C7",
-  },
-  layerBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 8,
-    paddingHorizontal: Spacing.md,
     backgroundColor: "#F8FAFC",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E2E8F0",
-    gap: 12,
-    zIndex: 9,
-  },
-  layerPill: {
-    flex: 1,
-    maxWidth: 160,
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: Colors.white,
     borderWidth: 1,
     borderColor: "#E2E8F0",
   },
-  layerPillActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
+  title: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.heading,
+    color: Colors.dark,
   },
-  layerPillText: {
-    fontFamily: FontFamily.medium,
-    fontSize: 12,
+  description: {
+    marginTop: Spacing.xs,
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.body,
+    color: Colors.secondary,
+    lineHeight: 22,
+  },
+  layerSelector: {
+    flexDirection: "row",
+    backgroundColor: "#F1F5F9",
+    borderRadius: Radius.full,
+    padding: 3,
+    marginTop: Spacing.sm,
+    alignSelf: "flex-start",
+    gap: 4,
+  },
+  layerButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingVertical: 5,
+    paddingHorizontal: 11,
+    borderRadius: Radius.full,
+  },
+  layerButtonActive: {
+    backgroundColor: Colors.dark,
+  },
+  layerButtonText: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 11.5,
     color: Colors.secondary,
   },
-  layerPillTextActive: {
-    fontFamily: FontFamily.bold,
+  layerButtonTextActive: {
     color: Colors.white,
   },
-  mapWrapper: {
+  mapContainer: {
     flex: 1,
+    overflow: "hidden",
     position: "relative",
     backgroundColor: "#E8E6DF",
   },
@@ -769,19 +764,72 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    alignItems: "center",
     backgroundColor: Colors.white,
   },
   loadingText: {
+    marginTop: 10,
     fontFamily: FontFamily.medium,
     fontSize: 13,
     color: Colors.secondary,
   },
+  mapInstruction: {
+    position: "absolute",
+    top: Spacing.md,
+    left: Spacing.lg,
+    right: Spacing.lg,
+    alignItems: "center",
+  },
+  mapInstructionText: {
+    backgroundColor: "rgba(255,255,255,0.96)",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: 18,
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+    color: Colors.dark,
+    overflow: "hidden",
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+  },
+  myLocationButton: {
+    position: "absolute",
+    right: Spacing.lg,
+    bottom: Spacing.lg,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+  },
+  myLocationIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 3,
+    borderColor: Colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  myLocationDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.primary,
+  },
   floatingSpeedBadge: {
     position: "absolute",
-    top: 14,
+    top: 54,
     left: 14,
     backgroundColor: "rgba(255, 255, 255, 0.96)",
     paddingHorizontal: 12,
@@ -823,80 +871,67 @@ const styles = StyleSheet.create({
     fontSize: 9.5,
     color: "#166534",
   },
-  floatingRecenterBtn: {
-    position: "absolute",
-    bottom: 16,
-    right: 14,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  bottomSheet: {
     backgroundColor: Colors.white,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.14,
-    shadowRadius: 5,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  bottomCard: {
-    backgroundColor: Colors.white,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
-    paddingBottom: Spacing.lg,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    elevation: 10,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 6,
-    borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
   },
-  cardHeaderRow: {
+  sheetHandle: {
+    alignSelf: "center",
+    width: 42,
+    height: 4,
+    borderRadius: 10,
+    backgroundColor: "#D9D9D9",
+    marginBottom: Spacing.md,
+  },
+  sheetTitleRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
   },
-  cardHeaderTitle: {
+  locationTitle: {
     fontFamily: FontFamily.bold,
-    fontSize: 11,
-    color: Colors.secondary,
-    letterSpacing: 0.6,
+    fontSize: FontSize.body,
+    color: Colors.dark,
   },
   timestampText: {
     fontFamily: FontFamily.medium,
     fontSize: 11,
     color: "#10B981",
   },
-  addressParagraph: {
+  addressText: {
+    marginTop: 4,
     fontFamily: FontFamily.medium,
-    fontSize: 14,
+    fontSize: 15,
     color: Colors.dark,
-    lineHeight: 21,
+    lineHeight: 22,
   },
-  badgesRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 10,
+  locationText: {
+    marginTop: 3,
+    fontFamily: FontFamily.regular,
+    fontSize: 13,
+    color: Colors.secondary,
   },
-  infoBadge: {
-    flexDirection: "row",
+  confirmButton: {
+    marginTop: Spacing.md,
+    backgroundColor: Colors.primary,
+    paddingVertical: Spacing.md,
+    borderRadius: 25,
     alignItems: "center",
-    gap: 5,
-    backgroundColor: "#FEF3C7",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
   },
-  infoBadgeText: {
-    fontFamily: FontFamily.medium,
-    fontSize: 10.5,
-    color: "#92400E",
+  confirmText: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.body,
+    color: Colors.white,
   },
 });
