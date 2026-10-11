@@ -128,6 +128,7 @@ export default function Onboarding() {
             textPaddingHorizontal={item.textPaddingHorizontal}
             textPaddingTop={item.textPaddingTop}
             textPaddingBottom={item.textPaddingBottom}
+            textJustifyContent={item.textJustifyContent}
             index={index}
             scrollX={scrollX}
           />

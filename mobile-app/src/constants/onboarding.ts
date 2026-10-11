@@ -9,13 +9,17 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const notificationWidth = Math.min(Math.round(SCREEN_WIDTH * 1), 540);
 const notificationHeight = Math.round(notificationWidth / 2);
 
-// Slide 2: Location banner (1280 x 1506) - scaled proportionally to match Slide 1's visual weight
-const locationHeight = Math.min(Math.round(SCREEN_HEIGHT * 0.40), 340);
-const locationWidth = Math.min(SCREEN_WIDTH, 540);
+// Slide 2: Location banner cropped to visible artwork (1280 x 1386) for 0% gap to text
+const locationBannerHeight = Math.min(
+  Math.round(SCREEN_WIDTH * (1386 / 1280)),
+  Math.round(SCREEN_HEIGHT * 0.5)
+);
 
-// Slide 3: Vehicle showcase (1280 x 1355) - scaled proportionally to match Slide 1's visual weight
-const vehicleHeight = Math.min(Math.round(SCREEN_HEIGHT * 0.38), 320);
-const vehicleWidth = Math.min(SCREEN_WIDTH, 540);
+// Slide 3: Vehicle showcase banner (1280 x 1355) fitting edge-to-edge
+const vehicleBannerHeight = Math.min(
+  Math.round(SCREEN_WIDTH * (1355 / 1280)),
+  Math.round(SCREEN_HEIGHT * 0.48)
+);
 
 export interface OnboardingItem {
   id: string;
@@ -30,6 +34,7 @@ export interface OnboardingItem {
   textPaddingHorizontal?: number;
   textPaddingTop?: number;
   textPaddingBottom?: number;
+  textJustifyContent?: "flex-start" | "center" | "flex-end";
   permission: string | null;
 }
 
@@ -53,11 +58,15 @@ export const onboardingData: OnboardingItem[] = [
     description:
       "Location services make address searches more precise, helping you save time and speed up the rental process.",
     image: onboarding2,
-    imageWidth: locationWidth,
-    imageHeight: locationHeight,
-    isFullTop: false,
-    contentFit: "contain" as const,
-    contentPosition: "center" as const,
+    imageWidth: SCREEN_WIDTH,
+    imageHeight: locationBannerHeight,
+    isFullTop: true,
+    contentFit: "cover" as const,
+    contentPosition: "top" as const,
+    textPaddingHorizontal: 24,
+    textPaddingTop: 0,
+    textPaddingBottom: 0,
+    textJustifyContent: "flex-start" as const,
     permission: "location",
   },
   {
@@ -66,11 +75,12 @@ export const onboardingData: OnboardingItem[] = [
     description:
       "Browse available vehicles from trusted rental operators. Compare prices, features, and availability in one place.",
     image: onboarding3,
-    imageWidth: vehicleWidth,
-    imageHeight: vehicleHeight,
-    isFullTop: false,
-    contentFit: "contain" as const,
-    contentPosition: "center" as const,
+    imageWidth: SCREEN_WIDTH,
+    imageHeight: vehicleBannerHeight,
+    isFullTop: true,
+    contentFit: "cover" as const,
+    contentPosition: "top" as const,
+    textJustifyContent: "center" as const,
     permission: null,
   },
 ];

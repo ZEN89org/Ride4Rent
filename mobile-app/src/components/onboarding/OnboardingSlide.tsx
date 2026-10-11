@@ -29,6 +29,7 @@ interface Props {
   textPaddingHorizontal?: number;
   textPaddingTop?: number;
   textPaddingBottom?: number;
+  textJustifyContent?: "flex-start" | "center" | "flex-end";
   index?: number;
   scrollX?: Animated.Value;
 }
@@ -45,6 +46,7 @@ export default function OnboardingSlide({
   textPaddingHorizontal,
   textPaddingTop,
   textPaddingBottom,
+  textJustifyContent,
   index = 0,
   scrollX,
 }: Props) {
@@ -113,6 +115,7 @@ export default function OnboardingSlide({
         <Animated.View
           style={[
             styles.textContainerFull,
+            textJustifyContent !== undefined && { justifyContent: textJustifyContent },
             textPaddingHorizontal !== undefined && { paddingHorizontal: textPaddingHorizontal },
             textPaddingTop !== undefined && { paddingTop: textPaddingTop },
             textPaddingBottom !== undefined && { paddingBottom: textPaddingBottom },
@@ -158,6 +161,7 @@ export default function OnboardingSlide({
       <Animated.View
         style={[
           styles.textContainer,
+          textJustifyContent !== undefined && { justifyContent: textJustifyContent },
           textPaddingHorizontal !== undefined && { paddingHorizontal: textPaddingHorizontal },
           textPaddingTop !== undefined && { paddingTop: textPaddingTop },
           textPaddingBottom !== undefined && { paddingBottom: textPaddingBottom },
@@ -185,7 +189,7 @@ const styles = StyleSheet.create({
   containerFull: {
     flex: 1,
     width: "100%",
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
     alignItems: "center",
     paddingHorizontal: 0,
   },
