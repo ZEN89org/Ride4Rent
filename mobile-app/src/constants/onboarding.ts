@@ -9,16 +9,16 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const notificationWidth = Math.min(Math.round(SCREEN_WIDTH * 1), 540);
 const notificationHeight = Math.round(notificationWidth / 2);
 
-// Slide 2: Location banner cropped to visible artwork (1280 x 1386) for 0% gap to text
+// Slide 2: Location banner cropped to visible artwork (1280 x 1386)
 const locationBannerHeight = Math.min(
   Math.round(SCREEN_WIDTH * (1386 / 1280)),
   Math.round(SCREEN_HEIGHT * 0.5)
 );
 
-// Slide 3: Vehicle showcase banner (1280 x 1355) fitting edge-to-edge
+// Slide 3: Vehicle showcase banner cropped to visible artwork (1280 x 1180) fitting edge-to-edge
 const vehicleBannerHeight = Math.min(
-  Math.round(SCREEN_WIDTH * (1355 / 1280)),
-  Math.round(SCREEN_HEIGHT * 0.48)
+  Math.round(SCREEN_WIDTH * (1180 / 1280)),
+  Math.round(SCREEN_HEIGHT * 0.5)
 );
 
 export interface OnboardingItem {
@@ -64,7 +64,7 @@ export const onboardingData: OnboardingItem[] = [
     contentFit: "cover" as const,
     contentPosition: "top" as const,
     textPaddingHorizontal: 24,
-    textPaddingTop: 0,
+    textPaddingTop: 16,
     textPaddingBottom: 0,
     textJustifyContent: "flex-start" as const,
     permission: "location",
@@ -80,7 +80,10 @@ export const onboardingData: OnboardingItem[] = [
     isFullTop: true,
     contentFit: "cover" as const,
     contentPosition: "top" as const,
-    textJustifyContent: "center" as const,
+    textPaddingHorizontal: 24,
+    textPaddingTop: 16,
+    textPaddingBottom: 0,
+    textJustifyContent: "flex-start" as const,
     permission: null,
   },
 ];
