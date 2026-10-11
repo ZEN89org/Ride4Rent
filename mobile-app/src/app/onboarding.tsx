@@ -107,6 +107,7 @@ import { setFirstLaunchComplete } from "@/features/auth/storage/authStorage";
               imageHeight={item.imageHeight}
               title={item.title}
               description={item.description}
+              hasGlowShadow={item.hasGlowShadow}
             />
           )}
         />
