@@ -112,6 +112,11 @@ export default function CurrentLocation() {
     }
   };
 
+  const DEFAULT_SERVICE_HUB = {
+    latitude: 13.4115, // Calapan City, Oriental Mindoro
+    longitude: 121.1803,
+  };
+
   const getCurrentLocation = async (shouldRecenterMap = false) => {
     try {
       if (shouldRecenterMap) {
@@ -122,10 +127,14 @@ export default function CurrentLocation() {
 
       setLocationError(false);
 
+      // 1. Verify Foreground Permission
       const permission = await Location.getForegroundPermissionsAsync();
-      if (permission.status !== "granted") {
+      let isGranted = permission.status === "granted";
+
+      if (!isGranted) {
         const requestedPermission = await Location.requestForegroundPermissionsAsync();
-        if (requestedPermission.status !== "granted") {
+        isGranted = requestedPermission.status === "granted";
+        if (!isGranted) {
           setPermissionDenied(true);
           setLoading(false);
           setRecenterLoading(false);
@@ -135,50 +144,113 @@ export default function CurrentLocation() {
 
       setPermissionDenied(false);
 
-      // 1. Try last known position for instant loading
-      const lastKnown = await Location.getLastKnownPositionAsync();
-      if (lastKnown && !shouldRecenterMap) {
-        const fastLoc = {
-          latitude: lastKnown.coords.latitude,
-          longitude: lastKnown.coords.longitude,
-        };
-        setMapInitialRegion(fastLoc);
-        setRegion(fastLoc);
-        reverseGeocode(fastLoc.latitude, fastLoc.longitude);
-        setLoading(false);
+      // 2. Check if hardware Location Services (GPS) is enabled on the device
+      try {
+        const servicesEnabled = await Location.hasServicesEnabledAsync();
+        if (!servicesEnabled) {
+          Alert.alert(
+            "Device Location is Off",
+            "Please turn on Location / GPS in your device quick settings for live pinpointing. Showing default regional hub on map.",
+            [{ text: "OK" }]
+          );
+        }
+      } catch {}
+
+      let resolvedCoords: { latitude: number; longitude: number } | null = null;
+
+      // Tier 1: Try Last Known Position first for instant loading
+      try {
+        const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: 600000 });
+        if (lastKnown?.coords?.latitude && lastKnown?.coords?.longitude) {
+          resolvedCoords = {
+            latitude: lastKnown.coords.latitude,
+            longitude: lastKnown.coords.longitude,
+          };
+          if (!shouldRecenterMap && !region) {
+            setMapInitialRegion(resolvedCoords);
+            setRegion(resolvedCoords);
+            reverseGeocode(resolvedCoords.latitude, resolvedCoords.longitude);
+            setLoading(false);
+          }
+        }
+      } catch (err) {
+        console.log("Last known location fetch failed:", err);
       }
 
-      // 2. Query accurate current GPS position
-      const current = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
-      const latitude = current.coords.latitude;
-      const longitude = current.coords.longitude;
-      const newLocation = { latitude, longitude };
-
-      if (!shouldRecenterMap) {
-        setMapInitialRegion(newLocation);
+      // Tier 2: Try accurate current position with a 6-second timeout
+      try {
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000));
+        const currentPromise = Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        const current = await Promise.race([currentPromise, timeoutPromise]);
+        if (current && "coords" in current && current.coords?.latitude && current.coords?.longitude) {
+          resolvedCoords = {
+            latitude: current.coords.latitude,
+            longitude: current.coords.longitude,
+          };
+        }
+      } catch (err) {
+        console.log("Balanced accuracy location failed:", err);
       }
 
-      setRegion(newLocation);
-      await reverseGeocode(latitude, longitude);
+      // Tier 3: If still unresolved, try Lowest accuracy (Cell/WiFi, works indoors!) with 5-second timeout
+      if (!resolvedCoords) {
+        try {
+          const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000));
+          const lowPromise = Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Lowest,
+          });
+          const low = await Promise.race([lowPromise, timeoutPromise]);
+          if (low && "coords" in low && low.coords?.latitude && low.coords?.longitude) {
+            resolvedCoords = {
+              latitude: low.coords.latitude,
+              longitude: low.coords.longitude,
+            };
+          }
+        } catch (err) {
+          console.log("Lowest accuracy location failed:", err);
+        }
+      }
+
+      // Tier 4: Fallback to existing selected region or Oriental Mindoro Default Hub
+      if (!resolvedCoords) {
+        if (region) {
+          resolvedCoords = region;
+        } else {
+          resolvedCoords = DEFAULT_SERVICE_HUB;
+        }
+      }
+
+      // Apply the resolved coordinates
+      if (!shouldRecenterMap || !mapInitialRegion) {
+        setMapInitialRegion(resolvedCoords);
+      }
+      setRegion(resolvedCoords);
+      await reverseGeocode(resolvedCoords.latitude, resolvedCoords.longitude);
 
       if (shouldRecenterMap && webViewRef.current) {
         webViewRef.current.postMessage(
           JSON.stringify({
             type: "RECENTER_TO_LOCATION",
-            latitude,
-            longitude,
+            latitude: resolvedCoords.latitude,
+            longitude: resolvedCoords.longitude,
           })
         );
       }
 
       setLoading(false);
       setRecenterLoading(false);
+      setLocationError(false);
     } catch (error) {
-      console.log("Current location error:", error);
-      setLocationError(true);
+      console.log("Current location error caught:", error);
+      // Fallback to default hub so the user can still view the map and drag the pin
+      if (!region) {
+        setMapInitialRegion(DEFAULT_SERVICE_HUB);
+        setRegion(DEFAULT_SERVICE_HUB);
+        reverseGeocode(DEFAULT_SERVICE_HUB.latitude, DEFAULT_SERVICE_HUB.longitude);
+      }
+      setLocationError(false);
       setLoading(false);
       setRecenterLoading(false);
     }

@@ -1,7 +1,8 @@
 import { useEffect } from "react";
-import { View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import AppLogo from "@/components/common/AppLogo";
 import {
   getToken,
   getUser,
@@ -12,9 +13,18 @@ export default function Index() {
   useEffect(() => {
     let isMounted = true;
 
+    // Immediately hide the native OS splash screen so our unified in-app splash with AppLogo takes over smoothly
+    SplashScreen.hideAsync().catch(() => {});
+
     const initialize = async () => {
+      // Allow the app logo splash to display smoothly for 1.8 seconds on startup
+      const minSplashTime = new Promise((resolve) => setTimeout(resolve, 1800));
+
       try {
-        const firstLaunch = await isFirstLaunch();
+        const [firstLaunch] = await Promise.all([
+          isFirstLaunch(),
+          minSplashTime,
+        ]);
 
         if (firstLaunch) {
           if (isMounted) {
@@ -42,8 +52,6 @@ export default function Index() {
         }
       } catch {
         if (isMounted) router.replace("/auth");
-      } finally {
-        await SplashScreen.hideAsync().catch(() => {});
       }
     };
 
@@ -54,5 +62,18 @@ export default function Index() {
     };
   }, []);
 
-  return <View style={{ flex: 1, backgroundColor: "#FFFFFF" }} />;
+  return (
+    <View style={styles.container}>
+      <AppLogo size={220} />
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+});
