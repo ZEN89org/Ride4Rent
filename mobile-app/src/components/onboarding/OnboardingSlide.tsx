@@ -22,7 +22,6 @@ interface Props {
   imageHeight: number;
   title: string;
   description: string;
-  hasGlowShadow?: boolean;
 }
 
 export default function OnboardingSlide({
@@ -31,29 +30,10 @@ export default function OnboardingSlide({
   imageHeight,
   title,
   description,
-  hasGlowShadow = false,
 }: Props) {
   return (
     <View style={[styles.container, { width }]}>
-      <View
-        style={[
-          styles.imageWrapper,
-          hasGlowShadow && styles.glowContainer,
-        ]}
-      >
-        {hasGlowShadow && (
-          <View
-            style={[
-              styles.glowBackdrop,
-              {
-                width: imageWidth * 0.94,
-                height: imageHeight * 0.62,
-                top: imageHeight * 0.28,
-              },
-            ]}
-          />
-        )}
-
+      <View style={styles.imageWrapper}>
         <Image
           source={image}
           contentFit="contain"
@@ -85,25 +65,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 36,
-  },
-
-  glowContainer: {
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.32,
-    shadowRadius: 22,
-    elevation: 10,
-  },
-
-  glowBackdrop: {
-    position: "absolute",
-    borderRadius: 24,
-    backgroundColor: "rgba(0, 0, 0, 0.08)",
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.38,
-    shadowRadius: 24,
-    elevation: 14,
   },
 
   textContainer: {

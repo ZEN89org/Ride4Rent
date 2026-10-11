@@ -18,7 +18,6 @@ export const onboardingData = [
     image: onboarding1,
     imageWidth: notificationWidth,
     imageHeight: notificationHeight,
-    hasGlowShadow: true,
     permission: "notification",
   },
   {
@@ -29,7 +28,6 @@ export const onboardingData = [
     image: onboarding2,
     imageWidth: 280,
     imageHeight: 250,
-    hasGlowShadow: false,
     permission: "location",
   },
   {
@@ -40,7 +38,6 @@ export const onboardingData = [
     image: onboarding3,
     imageWidth: Math.min(SCREEN_WIDTH - 32, 380),
     imageHeight: Math.round(Math.min(SCREEN_WIDTH - 32, 380) * 0.5),
-    hasGlowShadow: false,
     permission: null,
   },
 ];
