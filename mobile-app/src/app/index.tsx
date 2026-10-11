@@ -1,13 +1,13 @@
-import { useEffect } from "react";
-import { StyleSheet, View } from "react-native";
-import { router } from "expo-router";
-import * as SplashScreen from "expo-splash-screen";
 import AppLogo from "@/components/common/AppLogo";
 import {
   getToken,
   getUser,
   isFirstLaunch,
 } from "@/features/auth/storage/authStorage";
+import { router } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
+import { useEffect } from "react";
+import { StyleSheet, View } from "react-native";
 
 export default function Index() {
   useEffect(() => {
@@ -17,8 +17,7 @@ export default function Index() {
     SplashScreen.hideAsync().catch(() => {});
 
     const initialize = async () => {
-      // Allow the app logo splash to display smoothly for 1.8 seconds on startup
-      const minSplashTime = new Promise((resolve) => setTimeout(resolve, 1800));
+      const minSplashTime = new Promise((resolve) => setTimeout(resolve, 5000));
 
       try {
         const [firstLaunch] = await Promise.all([
@@ -64,7 +63,7 @@ export default function Index() {
 
   return (
     <View style={styles.container}>
-      <AppLogo size={220} />
+      <AppLogo size={300} />
     </View>
   );
 }
