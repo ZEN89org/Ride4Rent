@@ -39,7 +39,7 @@ export default function OnboardingSlide({
         <View style={[styles.topFullImageWrapper, { height: imageHeight }]}>
           <Image
             source={image}
-            contentFit="fill"
+            contentFit="contain"
             style={styles.topFullImage}
           />
         </View>

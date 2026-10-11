@@ -9,8 +9,11 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const notificationWidth = Math.min(Math.round(SCREEN_WIDTH * 1), 540);
 const notificationHeight = Math.round(notificationWidth / 2);
 
-// Location slide 2: Full view top image fitting top, left, and right
-const locationBannerHeight = Math.round(SCREEN_HEIGHT * 0.44);
+// Location slide 2: True portrait aspect ratio (5313 x 6250) fitting left and right without stretching
+const locationBannerHeight = Math.min(
+  Math.round(SCREEN_WIDTH * (6250 / 5313)),
+  Math.round(SCREEN_HEIGHT * 0.52)
+);
 
 export const onboardingData = [
   {
