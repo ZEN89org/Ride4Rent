@@ -84,7 +84,7 @@ class MailService
     {
         $senderName = env('MAIL_FROM_NAME', 'Ride4Rent');
         $replyToEmail = env('MAIL_FROM_ADDRESS', 'ride4rentph@gmail.com');
-        $brevoSenderEmail = env('BREVO_SENDER_EMAIL', 'magnayevince29@gmail.com');
+        $brevoSenderEmail = env('BREVO_SENDER_EMAIL', 'ride4rentph@gmail.com');
 
         // 1. Try Brevo HTTPS API (works on cloud hosts with blocked SMTP ports)
         $brevoApiKey = env('BREVO_API_KEY');
