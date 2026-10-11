@@ -36,6 +36,7 @@ import {
   startTrip,
   updateBookingStatus,
 } from "@/services/bookingService";
+import { API_BASE_URL } from "@/services/api";
 
 type OperatorTabType = "pending" | "approved" | "ongoing" | "history";
 
@@ -82,6 +83,13 @@ const resolveVehicleImage = (vehicle: any): string => {
   return DEFAULT_CAR_FALLBACK;
 };
 
+const resolveStorageUrl = (path?: string | null): string | null => {
+  if (!path) return null;
+  if (path.startsWith("http://") || path.startsWith("https://")) return path;
+  const baseDomain = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
+  return `${baseDomain}/storage/${path.replace(/^\//, "")}`;
+};
+
 export default function OperatorBookingsScreen() {
   const { isOperatorPending } = useAuth();
   const { showSuccess, showError, showModal } = useAppToast();
@@ -96,6 +104,7 @@ export default function OperatorBookingsScreen() {
   // Dedicated Verify & Approve Booking Modal State
   const [verifyModalBooking, setVerifyModalBooking] = useState<Booking | null>(null);
   const [submittingVerifyApprove, setSubmittingVerifyApprove] = useState<boolean>(false);
+  const [licensePreviewUri, setLicensePreviewUri] = useState<string | null>(null);
 
   // Process Refund Modal State
   const [refundModalBooking, setRefundModalBooking] = useState<Booking | null>(null);
@@ -1321,7 +1330,7 @@ export default function OperatorBookingsScreen() {
           onClose={() => setSelectedRenter(null)}
           position="bottom"
           showHandle={true}
-          sheetStyle={styles.modalCard}
+          sheetStyle={[styles.modalCard, { maxHeight: "88%" }]}
         >
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Renter Profile</Text>
@@ -1330,9 +1339,16 @@ export default function OperatorBookingsScreen() {
             </TouchableOpacity>
           </View>
 
-          <View style={styles.renterModalBody}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            style={{ width: "100%" }}
+            contentContainerStyle={styles.renterModalBody}
+          >
             {selectedRenter?.profile_photo ? (
-              <Image source={{ uri: selectedRenter.profile_photo }} style={styles.renterAvatarLg} />
+              <Image
+                source={{ uri: resolveStorageUrl(selectedRenter.profile_photo) || selectedRenter.profile_photo }}
+                style={styles.renterAvatarLg}
+              />
             ) : (
               <View style={styles.renterAvatarLg}>
                 <Ionicons name="person" size={32} color={Colors.dark} />
@@ -1345,11 +1361,113 @@ export default function OperatorBookingsScreen() {
             <Text style={styles.renterEmailLg}>{selectedRenter?.email}</Text>
             <Text style={styles.renterPhoneLg}>{selectedRenter?.mobile_number || "No contact number"}</Text>
 
-            <View style={styles.verifiedPill}>
-              <Ionicons name="checkmark-circle" size={14} color="#10B981" />
-              <Text style={styles.verifiedText}>Verified Customer</Text>
+            <View
+              style={[
+                styles.verifiedPill,
+                !selectedRenter?.is_drivers_license_verified && { backgroundColor: "#FEF3C7" },
+              ]}
+            >
+              <Ionicons
+                name={selectedRenter?.is_drivers_license_verified ? "checkmark-circle" : "time-outline"}
+                size={14}
+                color={selectedRenter?.is_drivers_license_verified ? "#10B981" : "#D97706"}
+              />
+              <Text
+                style={[
+                  styles.verifiedText,
+                  !selectedRenter?.is_drivers_license_verified && { color: "#92400E" },
+                ]}
+              >
+                {selectedRenter?.is_drivers_license_verified
+                  ? "Verified Driver"
+                  : "License Pending Host Verification"}
+              </Text>
             </View>
-          </View>
+
+            {/* Renter Driver's License Photos */}
+            {(selectedRenter?.drivers_license_front ||
+              selectedRenter?.drivers_license_front_url ||
+              selectedRenter?.drivers_license_back ||
+              selectedRenter?.drivers_license_back_url) && (
+              <View style={[styles.verifyLicenseSection, { marginTop: 14, marginBottom: 0 }]}>
+                <View style={styles.verifyLicenseSectionHeader}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Ionicons name="card-outline" size={15} color={Colors.dark} />
+                    <Text style={styles.verifyLicenseSectionTitle}>Driver's License Photos</Text>
+                  </View>
+                  <Text style={{ fontSize: 11, color: Colors.secondary, fontFamily: FontFamily.medium }}>
+                    Tap to inspect
+                  </Text>
+                </View>
+
+                <View style={styles.licensePhotosRow}>
+                  {(() => {
+                    const fUri = resolveStorageUrl(
+                      selectedRenter?.drivers_license_front_url || selectedRenter?.drivers_license_front
+                    );
+                    return (
+                      <TouchableOpacity
+                        style={styles.licenseCardItem}
+                        activeOpacity={fUri ? 0.8 : 1}
+                        onPress={() => fUri && setLicensePreviewUri(fUri)}
+                      >
+                        <View style={styles.licenseCardItemHeader}>
+                          <Text style={styles.licenseCardItemLabel}>FRONT</Text>
+                          {fUri && <Ionicons name="scan-outline" size={13} color={Colors.primary} />}
+                        </View>
+                        {fUri ? (
+                          <View style={styles.licenseThumbContainer}>
+                            <Image source={{ uri: fUri }} style={styles.licenseThumbImage} contentFit="cover" />
+                            <View style={styles.licenseThumbOverlay}>
+                              <Ionicons name="expand-outline" size={13} color={Colors.white} />
+                              <Text style={styles.licenseThumbOverlayText}>Zoom</Text>
+                            </View>
+                          </View>
+                        ) : (
+                          <View style={styles.licenseThumbEmpty}>
+                            <Ionicons name="image-outline" size={22} color={Colors.secondary} />
+                            <Text style={styles.licenseThumbEmptyText}>None</Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })()}
+
+                  {(() => {
+                    const bUri = resolveStorageUrl(
+                      selectedRenter?.drivers_license_back_url || selectedRenter?.drivers_license_back
+                    );
+                    return (
+                      <TouchableOpacity
+                        style={styles.licenseCardItem}
+                        activeOpacity={bUri ? 0.8 : 1}
+                        onPress={() => bUri && setLicensePreviewUri(bUri)}
+                      >
+                        <View style={styles.licenseCardItemHeader}>
+                          <Text style={styles.licenseCardItemLabel}>BACK</Text>
+                          {bUri && <Ionicons name="scan-outline" size={13} color={Colors.primary} />}
+                        </View>
+                        {bUri ? (
+                          <View style={styles.licenseThumbContainer}>
+                            <Image source={{ uri: bUri }} style={styles.licenseThumbImage} contentFit="cover" />
+                            <View style={styles.licenseThumbOverlay}>
+                              <Ionicons name="expand-outline" size={13} color={Colors.white} />
+                              <Text style={styles.licenseThumbOverlayText}>Zoom</Text>
+                            </View>
+                          </View>
+                        ) : (
+                          <View style={styles.licenseThumbEmpty}>
+                            <Ionicons name="image-outline" size={22} color={Colors.secondary} />
+                            <Text style={styles.licenseThumbEmptyText}>None</Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })()}
+                </View>
+              </View>
+            )}
+          </ScrollView>
         </AppBottomSheet>
 
         {/* Dedicated Professional & Minimal Verify & Approve Bottom Sheet */}
@@ -1358,108 +1476,375 @@ export default function OperatorBookingsScreen() {
           onClose={() => setVerifyModalBooking(null)}
           position="bottom"
           showHandle={true}
-          sheetStyle={styles.verifyModalCard}
+          sheetStyle={[styles.verifyModalCard, { maxHeight: "90%" }]}
         >
-          {/* Top Drama Glow Icon */}
-              <View style={styles.verifyGlowCircle}>
-                <Ionicons name="shield-checkmark" size={32} color={Colors.dark} />
-              </View>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ alignItems: "center", paddingBottom: 12 }}
+            style={{ width: "100%" }}
+          >
+            {/* Top Drama Glow Icon */}
+            <View style={styles.verifyGlowCircle}>
+              <Ionicons name="shield-checkmark" size={32} color={Colors.dark} />
+            </View>
 
-              <Text style={styles.verifyModalHeading}>Verify & Approve Reservation</Text>
-              <Text style={styles.verifyModalSubheading}>
-                Review renter and reservation credentials before confirming handover schedule
-              </Text>
+            <Text style={styles.verifyModalHeading}>Verify & Approve Reservation</Text>
+            <Text style={styles.verifyModalSubheading}>
+              Inspect the renter's driver's license credentials before approving pickup schedule
+            </Text>
 
-              {/* Renter & Vehicle Summary Card */}
-              <View style={styles.verifySummaryCard}>
-                <View style={styles.verifyRow}>
-                  <Text style={styles.verifyLabel}>Renter</Text>
-                  <Text style={styles.verifyValue} numberOfLines={1}>
-                    {verifyModalBooking?.renter ? `${verifyModalBooking.renter.first_name || ""} ${verifyModalBooking.renter.last_name || ""}`.trim() : "Verified Renter"}
-                  </Text>
-                </View>
-
-                <View style={styles.verifyDivider} />
-
-                <View style={styles.verifyRow}>
-                  <Text style={styles.verifyLabel}>Vehicle</Text>
-                  <Text style={styles.verifyValue} numberOfLines={1}>
-                    {verifyModalBooking?.vehicle?.name || "Vehicle"}
-                  </Text>
-                </View>
-
-                <View style={styles.verifyDivider} />
-
-                <View style={styles.verifyRow}>
-                  <Text style={styles.verifyLabel}>Rental Schedule</Text>
-                  <Text style={styles.verifyValue}>
-                    {cleanDate(verifyModalBooking?.start_date)} → {cleanDate(verifyModalBooking?.end_date)} ({verifyModalBooking?.total_days} d)
-                  </Text>
-                </View>
-
-                {verifyModalBooking?.payment_reference && (
-                  <>
-                    <View style={styles.verifyDivider} />
-                    <View style={styles.verifyRow}>
-                      <Text style={styles.verifyLabel}>Payment Ref / Receipt</Text>
-                      <Text style={[styles.verifyValue, styles.verifyPaymentRef]}>
-                        #{verifyModalBooking.payment_reference}
-                      </Text>
-                    </View>
-                  </>
-                )}
-
-                <View style={styles.verifyDivider} />
-
-                <View style={styles.verifyRow}>
-                  <Text style={styles.verifyLabel}>Reservation Fee Received</Text>
-                  <Text style={styles.verifyPriceHighlight}>
-                    ₱{Number(verifyModalBooking?.reservation_fee || 500).toLocaleString()}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Operational Guarantee Notice */}
-              <View style={styles.verifyNoticeBox}>
-                <Ionicons name="lock-closed" size={14} color={Colors.dark} />
-                <Text style={styles.verifyNoticeText}>
-                  Approving will secure this vehicle in your fleet calendar and issue a pickup confirmation pass to the renter.
+            {/* Renter & Vehicle Summary Card */}
+            <View style={styles.verifySummaryCard}>
+              <View style={styles.verifyRow}>
+                <Text style={styles.verifyLabel}>Renter</Text>
+                <Text style={styles.verifyValue} numberOfLines={1}>
+                  {verifyModalBooking?.renter
+                    ? `${verifyModalBooking.renter.first_name || ""} ${verifyModalBooking.renter.last_name || ""}`.trim()
+                    : "Verified Renter"}
                 </Text>
               </View>
 
-              {/* Actions */}
-              <View style={styles.verifyActionsRow}>
-                <TouchableOpacity
-                  style={[styles.verifyCancelBtn, { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4 }]}
-                  onPress={() => {
-                    const rId = verifyModalBooking?.renter_id;
-                    const rName = verifyModalBooking?.renter
-                      ? `${verifyModalBooking.renter.first_name || ""} ${verifyModalBooking.renter.last_name || ""}`.trim()
-                      : "Renter";
-                    setVerifyModalBooking(null);
-                    if (rId) {
-                      router.push({ pathname: `/chat/${rId}`, params: { name: rName } } as any);
-                    }
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="chatbubble-ellipses-outline" size={15} color={Colors.dark} />
-                  <Text style={styles.verifyCancelBtnText}>Chat Renter</Text>
-                </TouchableOpacity>
+              <View style={styles.verifyDivider} />
 
-                <TouchableOpacity
-                  style={styles.verifyConfirmBtn}
-                  onPress={handleExecuteVerifyApprove}
-                  disabled={submittingVerifyApprove}
-                  activeOpacity={0.88}
-                >
-                  <Ionicons name="checkmark-circle" size={17} color={Colors.white} />
-                  <Text style={styles.verifyConfirmBtnText}>
-                    {submittingVerifyApprove ? "Confirming..." : "Confirm & Approve"}
-                  </Text>
-                </TouchableOpacity>
+              <View style={styles.verifyRow}>
+                <Text style={styles.verifyLabel}>Vehicle</Text>
+                <Text style={styles.verifyValue} numberOfLines={1}>
+                  {verifyModalBooking?.vehicle?.name || "Vehicle"}
+                </Text>
               </View>
+
+              <View style={styles.verifyDivider} />
+
+              <View style={styles.verifyRow}>
+                <Text style={styles.verifyLabel}>Rental Schedule</Text>
+                <Text style={styles.verifyValue}>
+                  {cleanDate(verifyModalBooking?.start_date)} → {cleanDate(verifyModalBooking?.end_date)} ({verifyModalBooking?.total_days} d)
+                </Text>
+              </View>
+
+              {verifyModalBooking?.payment_reference && (
+                <>
+                  <View style={styles.verifyDivider} />
+                  <View style={styles.verifyRow}>
+                    <Text style={styles.verifyLabel}>Payment Ref / Receipt</Text>
+                    <Text style={[styles.verifyValue, styles.verifyPaymentRef]}>
+                      #{verifyModalBooking.payment_reference}
+                    </Text>
+                  </View>
+                </>
+              )}
+
+              <View style={styles.verifyDivider} />
+
+              <View style={styles.verifyRow}>
+                <Text style={styles.verifyLabel}>Reservation Fee Received</Text>
+                <Text style={styles.verifyPriceHighlight}>
+                  ₱{Number(verifyModalBooking?.reservation_fee || 500).toLocaleString()}
+                </Text>
+              </View>
+            </View>
+
+            {/* Driver's License Inspection Section (Option A - Operator Verification) */}
+            <View style={styles.verifyLicenseSection}>
+              <View style={styles.verifyLicenseSectionHeader}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Ionicons name="card-outline" size={16} color={Colors.dark} />
+                  <Text style={styles.verifyLicenseSectionTitle}>Driver's License Inspection</Text>
+                </View>
+                <View
+                  style={[
+                    styles.licenseStatusBadge,
+                    verifyModalBooking?.renter?.is_drivers_license_verified
+                      ? styles.licenseStatusBadgeApproved
+                      : (verifyModalBooking?.renter?.drivers_license_front || verifyModalBooking?.renter?.drivers_license_front_url)
+                      ? styles.licenseStatusBadgePending
+                      : styles.licenseStatusBadgeMissing,
+                  ]}
+                >
+                  <Ionicons
+                    name={
+                      verifyModalBooking?.renter?.is_drivers_license_verified
+                        ? "checkmark-circle"
+                        : (verifyModalBooking?.renter?.drivers_license_front || verifyModalBooking?.renter?.drivers_license_front_url)
+                        ? "time-outline"
+                        : "alert-circle"
+                    }
+                    size={11}
+                    color={
+                      verifyModalBooking?.renter?.is_drivers_license_verified
+                        ? "#065F46"
+                        : (verifyModalBooking?.renter?.drivers_license_front || verifyModalBooking?.renter?.drivers_license_front_url)
+                        ? "#92400E"
+                        : "#991B1B"
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.licenseStatusBadgeText,
+                      verifyModalBooking?.renter?.is_drivers_license_verified
+                        ? styles.licenseStatusBadgeTextApproved
+                        : (verifyModalBooking?.renter?.drivers_license_front || verifyModalBooking?.renter?.drivers_license_front_url)
+                        ? styles.licenseStatusBadgeTextPending
+                        : styles.licenseStatusBadgeTextMissing,
+                    ]}
+                  >
+                    {verifyModalBooking?.renter?.is_drivers_license_verified
+                      ? "Already Verified"
+                      : (verifyModalBooking?.renter?.drivers_license_front || verifyModalBooking?.renter?.drivers_license_front_url)
+                      ? "Inspect & Verify"
+                      : "Missing Photos"}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={styles.verifyLicenseHint}>
+                Inspect front and back photos for validity, expiration date, and name match. Tap any image to zoom in full screen.
+              </Text>
+
+              {/* Front & Back Photo Cards Side-by-Side */}
+              <View style={styles.licensePhotosRow}>
+                {/* Front */}
+                {(() => {
+                  const frontUri = resolveStorageUrl(
+                    verifyModalBooking?.renter?.drivers_license_front_url ||
+                    verifyModalBooking?.renter?.drivers_license_front
+                  );
+                  return (
+                    <TouchableOpacity
+                      style={styles.licenseCardItem}
+                      activeOpacity={frontUri ? 0.8 : 1}
+                      onPress={() => frontUri && setLicensePreviewUri(frontUri)}
+                    >
+                      <View style={styles.licenseCardItemHeader}>
+                        <Text style={styles.licenseCardItemLabel}>FRONT</Text>
+                        {frontUri && <Ionicons name="scan-outline" size={13} color={Colors.primary} />}
+                      </View>
+                      {frontUri ? (
+                        <View style={styles.licenseThumbContainer}>
+                          <Image source={{ uri: frontUri }} style={styles.licenseThumbImage} contentFit="cover" />
+                          <View style={styles.licenseThumbOverlay}>
+                            <Ionicons name="expand-outline" size={13} color={Colors.white} />
+                            <Text style={styles.licenseThumbOverlayText}>Zoom</Text>
+                          </View>
+                        </View>
+                      ) : (
+                        <View style={styles.licenseThumbEmpty}>
+                          <Ionicons name="image-outline" size={24} color={Colors.secondary} />
+                          <Text style={styles.licenseThumbEmptyText}>Not provided</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })()}
+
+                {/* Back */}
+                {(() => {
+                  const backUri = resolveStorageUrl(
+                    verifyModalBooking?.renter?.drivers_license_back_url ||
+                    verifyModalBooking?.renter?.drivers_license_back
+                  );
+                  return (
+                    <TouchableOpacity
+                      style={styles.licenseCardItem}
+                      activeOpacity={backUri ? 0.8 : 1}
+                      onPress={() => backUri && setLicensePreviewUri(backUri)}
+                    >
+                      <View style={styles.licenseCardItemHeader}>
+                        <Text style={styles.licenseCardItemLabel}>BACK</Text>
+                        {backUri && <Ionicons name="scan-outline" size={13} color={Colors.primary} />}
+                      </View>
+                      {backUri ? (
+                        <View style={styles.licenseThumbContainer}>
+                          <Image source={{ uri: backUri }} style={styles.licenseThumbImage} contentFit="cover" />
+                          <View style={styles.licenseThumbOverlay}>
+                            <Ionicons name="expand-outline" size={13} color={Colors.white} />
+                            <Text style={styles.licenseThumbOverlayText}>Zoom</Text>
+                          </View>
+                        </View>
+                      ) : (
+                        <View style={styles.licenseThumbEmpty}>
+                          <Ionicons name="image-outline" size={24} color={Colors.secondary} />
+                          <Text style={styles.licenseThumbEmptyText}>Not provided</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })()}
+              </View>
+
+              {/* Optional Secondary Driver License */}
+              {(verifyModalBooking?.secondary_driver_name ||
+                verifyModalBooking?.secondary_driver_license_front ||
+                verifyModalBooking?.secondary_driver_license_back) && (
+                <View style={styles.secondaryDriverBox}>
+                  <Text style={styles.secondaryDriverTitle}>
+                    Secondary Driver: {verifyModalBooking.secondary_driver_name || "Authorized Additional Driver"}
+                  </Text>
+                  <View style={styles.licensePhotosRow}>
+                    {/* Secondary Front */}
+                    {(() => {
+                      const sFrontUri = resolveStorageUrl(verifyModalBooking.secondary_driver_license_front);
+                      return (
+                        <TouchableOpacity
+                          style={styles.licenseCardItem}
+                          activeOpacity={sFrontUri ? 0.8 : 1}
+                          onPress={() => sFrontUri && setLicensePreviewUri(sFrontUri)}
+                        >
+                          <View style={styles.licenseCardItemHeader}>
+                            <Text style={styles.licenseCardItemLabel}>SEC. FRONT</Text>
+                            {sFrontUri && <Ionicons name="scan-outline" size={13} color={Colors.primary} />}
+                          </View>
+                          {sFrontUri ? (
+                            <View style={styles.licenseThumbContainer}>
+                              <Image source={{ uri: sFrontUri }} style={styles.licenseThumbImage} contentFit="cover" />
+                              <View style={styles.licenseThumbOverlay}>
+                                <Ionicons name="expand-outline" size={13} color={Colors.white} />
+                                <Text style={styles.licenseThumbOverlayText}>Zoom</Text>
+                              </View>
+                            </View>
+                          ) : (
+                            <View style={styles.licenseThumbEmpty}>
+                              <Ionicons name="image-outline" size={22} color={Colors.secondary} />
+                              <Text style={styles.licenseThumbEmptyText}>None</Text>
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })()}
+
+                    {/* Secondary Back */}
+                    {(() => {
+                      const sBackUri = resolveStorageUrl(verifyModalBooking.secondary_driver_license_back);
+                      return (
+                        <TouchableOpacity
+                          style={styles.licenseCardItem}
+                          activeOpacity={sBackUri ? 0.8 : 1}
+                          onPress={() => sBackUri && setLicensePreviewUri(sBackUri)}
+                        >
+                          <View style={styles.licenseCardItemHeader}>
+                            <Text style={styles.licenseCardItemLabel}>SEC. BACK</Text>
+                            {sBackUri && <Ionicons name="scan-outline" size={13} color={Colors.primary} />}
+                          </View>
+                          {sBackUri ? (
+                            <View style={styles.licenseThumbContainer}>
+                              <Image source={{ uri: sBackUri }} style={styles.licenseThumbImage} contentFit="cover" />
+                              <View style={styles.licenseThumbOverlay}>
+                                <Ionicons name="expand-outline" size={13} color={Colors.white} />
+                                <Text style={styles.licenseThumbOverlayText}>Zoom</Text>
+                              </View>
+                            </View>
+                          ) : (
+                            <View style={styles.licenseThumbEmpty}>
+                              <Ionicons name="image-outline" size={22} color={Colors.secondary} />
+                              <Text style={styles.licenseThumbEmptyText}>None</Text>
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })()}
+                  </View>
+                </View>
+              )}
+            </View>
+
+            {/* Operational Guarantee Notice */}
+            <View style={styles.verifyNoticeBox}>
+              <Ionicons name="shield-checkmark" size={14} color={Colors.dark} />
+              <Text style={styles.verifyNoticeText}>
+                Approving confirms receipt of reservation fee, verifies the renter's driver license, and unlocks vehicle handover.
+              </Text>
+            </View>
+
+            {/* Actions: Decline, Chat Renter, Verify & Approve */}
+            <View style={styles.verifyActionsRow}>
+              <TouchableOpacity
+                style={styles.verifyDeclineBtn}
+                onPress={() => {
+                  const bId = verifyModalBooking?.id;
+                  setVerifyModalBooking(null);
+                  if (bId) {
+                    handleStatusChange(bId, "rejected");
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="close-circle-outline" size={16} color="#DC2626" />
+                <Text style={styles.verifyDeclineBtnText}>Decline</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.verifyCancelBtn, { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4 }]}
+                onPress={() => {
+                  const rId = verifyModalBooking?.renter_id;
+                  const rName = verifyModalBooking?.renter
+                    ? `${verifyModalBooking.renter.first_name || ""} ${verifyModalBooking.renter.last_name || ""}`.trim()
+                    : "Renter";
+                  setVerifyModalBooking(null);
+                  if (rId) {
+                    router.push({ pathname: `/chat/${rId}`, params: { name: rName } } as any);
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="chatbubble-ellipses-outline" size={15} color={Colors.dark} />
+                <Text style={styles.verifyCancelBtnText}>Chat</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.verifyConfirmBtn}
+                onPress={handleExecuteVerifyApprove}
+                disabled={submittingVerifyApprove}
+                activeOpacity={0.88}
+              >
+                <Ionicons name="checkmark-circle" size={17} color={Colors.white} />
+                <Text style={styles.verifyConfirmBtnText}>
+                  {submittingVerifyApprove ? "Approving..." : "Verify & Approve"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
         </AppBottomSheet>
+
+        {/* Full-Screen Driver's License Image Inspection Modal */}
+        <Modal
+          visible={!!licensePreviewUri}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setLicensePreviewUri(null)}
+        >
+          <View style={styles.licenseZoomBackdrop}>
+            <View style={styles.licenseZoomHeader}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Ionicons name="card" size={20} color={Colors.white} />
+                <Text style={styles.licenseZoomTitle}>Driver's License Inspection</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.licenseZoomCloseBtn}
+                onPress={() => setLicensePreviewUri(null)}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <Ionicons name="close" size={22} color={Colors.white} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.licenseZoomImageWrapper}>
+              {licensePreviewUri && (
+                <Image
+                  source={{ uri: licensePreviewUri }}
+                  style={styles.licenseZoomImage}
+                  contentFit="contain"
+                  transition={200}
+                />
+              )}
+            </View>
+
+            <View style={styles.licenseZoomFooter}>
+              <Text style={styles.licenseZoomFooterText}>
+                Inspect license details, holographic seal, and expiration date carefully before approving.
+              </Text>
+            </View>
+          </View>
+        </Modal>
       </View>
     </OperatorShell>
   );
@@ -2642,6 +3027,217 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.regular,
     fontSize: 12,
     color: "#92400E",
+    lineHeight: 16,
+  },
+  /* Driver License Inspection Styles */
+  verifyLicenseSection: {
+    width: "100%",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    marginBottom: 14,
+  },
+  verifyLicenseSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  verifyLicenseSectionTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 13.5,
+    color: Colors.dark,
+  },
+  licenseStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  licenseStatusBadgeApproved: {
+    backgroundColor: "#D1FAE5",
+  },
+  licenseStatusBadgePending: {
+    backgroundColor: "#FEF3C7",
+  },
+  licenseStatusBadgeMissing: {
+    backgroundColor: "#FEE2E2",
+  },
+  licenseStatusBadgeText: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 10.5,
+  },
+  licenseStatusBadgeTextApproved: {
+    color: "#065F46",
+  },
+  licenseStatusBadgeTextPending: {
+    color: "#92400E",
+  },
+  licenseStatusBadgeTextMissing: {
+    color: "#991B1B",
+  },
+  verifyLicenseHint: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11.5,
+    color: Colors.secondary,
+    lineHeight: 16,
+    marginBottom: 10,
+  },
+  licensePhotosRow: {
+    flexDirection: "row",
+    gap: 10,
+    width: "100%",
+  },
+  licenseCardItem: {
+    flex: 1,
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 8,
+    alignItems: "center",
+  },
+  licenseCardItemHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    width: "100%",
+    marginBottom: 6,
+    paddingHorizontal: 2,
+  },
+  licenseCardItemLabel: {
+    fontFamily: FontFamily.bold,
+    fontSize: 10,
+    color: Colors.secondary,
+    letterSpacing: 0.5,
+  },
+  licenseThumbContainer: {
+    width: "100%",
+    height: 84,
+    borderRadius: 8,
+    overflow: "hidden",
+    position: "relative",
+    backgroundColor: "#F1F5F9",
+  },
+  licenseThumbImage: {
+    width: "100%",
+    height: "100%",
+  },
+  licenseThumbOverlay: {
+    position: "absolute",
+    bottom: 4,
+    right: 4,
+    backgroundColor: "rgba(15, 23, 42, 0.72)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  licenseThumbOverlayText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 9.5,
+    color: Colors.white,
+  },
+  licenseThumbEmpty: {
+    width: "100%",
+    height: 84,
+    borderRadius: 8,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderStyle: "dashed",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 4,
+  },
+  licenseThumbEmptyText: {
+    fontFamily: FontFamily.regular,
+    fontSize: 10,
+    color: Colors.secondary,
+  },
+  secondaryDriverBox: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#E2E8F0",
+    width: "100%",
+  },
+  secondaryDriverTitle: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 11.5,
+    color: Colors.dark,
+    marginBottom: 8,
+  },
+  verifyDeclineBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 13,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  verifyDeclineBtnText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 13,
+    color: "#DC2626",
+  },
+  licenseZoomBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.94)",
+    justifyContent: "space-between",
+    paddingTop: Platform.OS === "ios" ? 54 : 36,
+    paddingBottom: Platform.OS === "ios" ? 36 : 24,
+    paddingHorizontal: 16,
+  },
+  licenseZoomHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 8,
+    paddingBottom: 12,
+  },
+  licenseZoomTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 16,
+    color: Colors.white,
+  },
+  licenseZoomCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  licenseZoomImageWrapper: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  licenseZoomImage: {
+    width: "100%",
+    height: "100%",
+  },
+  licenseZoomFooter: {
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    alignItems: "center",
+  },
+  licenseZoomFooterText: {
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    color: "#CBD5E1",
+    textAlign: "center",
     lineHeight: 16,
   },
 });

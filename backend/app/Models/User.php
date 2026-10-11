@@ -52,9 +52,35 @@ class User extends Authenticatable
         ];
     }
 
+    protected $appends = [
+        'drivers_license_front_url',
+        'drivers_license_back_url',
+    ];
+
+    public function getDriversLicenseFrontUrlAttribute(): ?string
+    {
+        if (empty($this->drivers_license_front)) {
+            return null;
+        }
+        if (str_starts_with($this->drivers_license_front, 'http')) {
+            return $this->drivers_license_front;
+        }
+        return asset('storage/' . $this->drivers_license_front);
+    }
+
+    public function getDriversLicenseBackUrlAttribute(): ?string
+    {
+        if (empty($this->drivers_license_back)) {
+            return null;
+        }
+        if (str_starts_with($this->drivers_license_back, 'http')) {
+            return $this->drivers_license_back;
+        }
+        return asset('storage/' . $this->drivers_license_back);
+    }
+
     public function operatorProfile(): HasOne
     {
         return $this->hasOne(OperatorProfile::class);
     }
-
 }

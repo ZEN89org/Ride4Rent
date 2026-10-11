@@ -49,7 +49,7 @@ class BookingController extends Controller
             ], 403);
         }
 
-        // Check Driver's License uploaded and verified
+        // Check Driver's License uploaded
         if (empty($user->drivers_license_front) || empty($user->drivers_license_back)) {
             return response()->json([
                 'success' => false,
@@ -58,20 +58,12 @@ class BookingController extends Controller
             ], 422);
         }
 
-        if (!$user->is_drivers_license_verified || $user->license_verification_status !== 'approved') {
-            $status = $user->license_verification_status ?? ($user->drivers_license_front ? 'pending' : 'unverified');
-            if ($status === 'rejected') {
-                return response()->json([
-                    'success' => false,
-                    'code' => 'LICENSE_REJECTED',
-                    'message' => "Your driver's license was rejected: " . ($user->license_rejection_reason ?? 'Please re-upload valid license photos before booking.'),
-                ], 422);
-            }
-
+        // If previously rejected by a host or admin, require re-upload
+        if ($user->license_verification_status === 'rejected') {
             return response()->json([
                 'success' => false,
-                'code' => 'LICENSE_PENDING',
-                'message' => "Your driver's license is currently under review by our Admin team. You can book vehicles as soon as it is approved.",
+                'code' => 'LICENSE_REJECTED',
+                'message' => "Your driver's license was rejected: " . ($user->license_rejection_reason ?? 'Please re-upload valid, clear license photos before booking.'),
             ], 422);
         }
 
@@ -331,6 +323,15 @@ class BookingController extends Controller
             'payment_status' => 'paid_reservation',
             'payment_method' => $validated['payment_method'] ?? $booking->payment_method ?? 'cash',
         ]);
+
+        // Verify renter's driver's license upon host approval (Option A)
+        if ($booking->renter && !$booking->renter->is_drivers_license_verified) {
+            $booking->renter->update([
+                'is_drivers_license_verified' => true,
+                'license_verification_status' => 'approved',
+                'license_rejection_reason' => null,
+            ]);
+        }
 
         // Auto update remaining available units
         if ($booking->vehicle) {
@@ -632,10 +633,19 @@ class BookingController extends Controller
 
         // Contextual notifications
         if ($newStatus === 'approved' || $newStatus === 'awaiting_pickup') {
+            // Verify renter's driver's license upon host approval (Option A)
+            if ($booking->renter && !$booking->renter->is_drivers_license_verified) {
+                $booking->renter->update([
+                    'is_drivers_license_verified' => true,
+                    'license_verification_status' => 'approved',
+                    'license_rejection_reason' => null,
+                ]);
+            }
+
             Notification::create([
                 'user_id' => $booking->renter_id,
                 'title' => 'Booking Approved',
-                'message' => 'Your reservation has been approved by the host.',
+                'message' => 'Your reservation and driver\'s license have been approved by the host.',
                 'type' => 'success',
                 'action_url' => '/(tabs)/bookings',
             ]);
@@ -728,6 +738,17 @@ class BookingController extends Controller
                     'type' => 'warning',
                     'action_url' => '/operator-bookings',
                 ]);
+
+                $rejectionReason = $request->input('rejection_reason') ?? $request->input('reason');
+                if ($rejectionReason && $booking->renter) {
+                    if (stripos($rejectionReason, 'license') !== false || stripos($rejectionReason, 'driver') !== false) {
+                        $booking->renter->update([
+                            'is_drivers_license_verified' => false,
+                            'license_verification_status' => 'rejected',
+                            'license_rejection_reason' => $rejectionReason,
+                        ]);
+                    }
+                }
 
                 return response()->json([
                     'success' => true,

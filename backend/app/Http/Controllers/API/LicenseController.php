@@ -36,13 +36,6 @@ class LicenseController extends Controller
 
         $user = $request->user();
 
-        if ($user->license_verification_status === 'pending') {
-            return response()->json([
-                'success' => false,
-                'message' => "Your driver's license is currently under review by our Admin team. You cannot re-upload photos while review is in progress.",
-            ], 422);
-        }
-
         if ($user->is_drivers_license_verified && $user->license_verification_status === 'approved') {
             return response()->json([
                 'success' => false,
@@ -76,15 +69,15 @@ class LicenseController extends Controller
         // Create in-app notification for the renter
         \App\Models\Notification::create([
             'user_id' => $user->id,
-            'title' => "License Submitted",
-            'message' => 'Your driver\'s license is pending verification.',
+            'title' => "License Uploaded",
+            'message' => 'Your driver\'s license was uploaded and will be verified by your host upon booking.',
             'type' => 'info',
             'action_url' => '/driver-license',
         ]);
 
         return response()->json([
             'success' => true,
-            'message' => "Driver's license submitted successfully for Administrator verification.",
+            'message' => "Driver's license uploaded successfully. It will be verified by your host when booking.",
             'data' => new UserResource($user),
         ]);
     }

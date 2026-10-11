@@ -172,29 +172,16 @@ export default function VehicleDetailsScreen() {
     const verificationStatus =
       user?.license_verification_status || (isVerified ? "approved" : "pending");
 
-    if (!isVerified || verificationStatus !== "approved") {
-      if (verificationStatus === "rejected") {
-        showModal(
-          "Driver's License Rejected",
-          user?.license_rejection_reason ||
-            "Your driver's license verification was rejected by Admin. Please re-upload clear photos of your license to proceed.",
-          [
-            { text: "Re-upload Now", style: "default", onPress: () => router.push("/driver-license" as any) },
-            { text: "Close", style: "cancel" },
-          ],
-          "error"
-        );
-        return;
-      }
-
+    if (verificationStatus === "rejected") {
       showModal(
-        "Verification Under Review",
-        "Your driver's license is currently under review by our Admin team. You will be able to book vehicles once your identity is verified.",
+        "Driver's License Rejected",
+        user?.license_rejection_reason ||
+          "Your driver's license was rejected. Please re-upload clear, valid photos of your license to proceed.",
         [
-          { text: "View Status", style: "default", onPress: () => router.push("/driver-license" as any) },
-          { text: "OK", style: "cancel" },
+          { text: "Re-upload Now", style: "default", onPress: () => router.push("/driver-license" as any) },
+          { text: "Close", style: "cancel" },
         ],
-        "info"
+        "error"
       );
       return;
     }

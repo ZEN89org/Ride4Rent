@@ -61,20 +61,13 @@ export default function DriverLicenseScreen() {
     (isVerified ? "approved" : user?.drivers_license_front ? "pending" : "unverified");
   const isPending = verificationStatus === "pending";
   const isRejected = verificationStatus === "rejected";
-  const canEdit = isRejected || (!isPending && !isVerified);
+  const canEdit = !isVerified;
 
   const handlePickImage = async (side: "front" | "back") => {
-    if (isPending) {
-      showError(
-        "Under Review",
-        "Your driver's license is currently being reviewed by our Admin team. You cannot change photos while review is in progress."
-      );
-      return;
-    }
     if (isVerified) {
       showError(
         "Already Verified",
-        "Your driver's license is verified and approved."
+        "Your driver's license is already verified and approved."
       );
       return;
     }
@@ -106,14 +99,6 @@ export default function DriverLicenseScreen() {
   const { refreshUnreadCount } = useNotificationCount();
 
   const handleSubmit = async () => {
-    if (isPending) {
-      showError(
-        "Under Review",
-        "Your license is currently under review by our Admin team. Please wait for verification."
-      );
-      return;
-    }
-
     if (isVerified) {
       showSuccess("Verified", "Your driver's license is already verified.");
       return;
@@ -130,7 +115,7 @@ export default function DriverLicenseScreen() {
       await updateUser(updatedUser);
       await refreshUser?.();
       await refreshUnreadCount().catch(() => {});
-      showSuccess("Submitted for Review", "Driver's license submitted! Admin will verify your information shortly.");
+      showSuccess("License Saved", "Driver's license saved! Your vehicle host will inspect and verify your license upon booking.");
       router.back();
     } catch (e: any) {
       showError("Upload Failed", e.response?.data?.message || "Could not save driver's license.");
@@ -237,14 +222,14 @@ export default function DriverLicenseScreen() {
                     styles.statusBadgeText,
                     isVerified
                       ? styles.statusTextVerified
-                      : isPending
+                      : (frontImage && backImage)
                       ? styles.statusTextPending
                       : isRejected
                       ? styles.statusTextRejected
                       : styles.statusTextUnverified,
                   ]}
                 >
-                  {isVerified ? "Verified" : isPending ? "Under Review" : isRejected ? "Rejected" : "Not Submitted"}
+                  {isVerified ? "Verified" : (frontImage && backImage) ? "Ready for Host Verification" : isRejected ? "Rejected" : "Not Submitted"}
                 </Text>
               </View>
             </View>
@@ -256,13 +241,13 @@ export default function DriverLicenseScreen() {
               ]}
             >
               {isVerified
-                ? "Your driver's license is confirmed. You have full booking access."
-                : isPending
-                ? "Photos submitted. We will notify you as soon as review finishes."
+                ? "Your driver's license is confirmed by your host. You have full booking access."
+                : (frontImage && backImage)
+                ? "Photos saved! Your vehicle host will inspect and verify your driver's license when reviewing your booking."
                 : isRejected
                 ? user?.license_rejection_reason
                   ? `Note: ${user.license_rejection_reason}`
-                  : "Photos did not match your account. Please re-upload clear photos."
+                  : "Photos were rejected. Please re-upload clear photos."
                 : "Upload front and back photos to enable booking."}
             </Text>
           </View>
@@ -375,14 +360,7 @@ export default function DriverLicenseScreen() {
 
         {/* Submit / Status Action Area */}
         <View style={styles.buttonWrapper}>
-          {isPending ? (
-            <View style={styles.pendingNoticeBox}>
-              <Ionicons name="time-outline" size={18} color="#D97706" />
-              <Text style={styles.pendingNoticeText}>
-                Review in progress. Photos cannot be changed while verification is underway.
-              </Text>
-            </View>
-          ) : isVerified ? (
+          {isVerified ? (
             <View style={styles.verifiedNoticeBox}>
               <Ionicons name="checkmark-circle" size={18} color="#059669" />
               <Text style={styles.verifiedNoticeText}>
@@ -393,10 +371,12 @@ export default function DriverLicenseScreen() {
             <PrimaryButton
               title={
                 uploading
-                  ? "Submitting..."
+                  ? "Saving..."
                   : isRejected
                   ? "Re-upload License"
-                  : "Submit License"
+                  : user?.drivers_license_front
+                  ? "Update License Photos"
+                  : "Save License Photos"
               }
               onPress={handleSubmit}
               loading={uploading}
