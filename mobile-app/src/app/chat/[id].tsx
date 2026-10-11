@@ -64,9 +64,7 @@ export default function ChatThreadScreen() {
       setLoading(true);
       const res = await getChatThread(id);
       setChatUser(res.other_user);
-      if (res.booking_context) {
-        setBookingContext(res.booking_context);
-      }
+      setBookingContext(res.booking_context || null);
       setMessages(res.messages || []);
     } catch (e) {
       console.log("Error loading chat thread:", e);
@@ -80,7 +78,7 @@ export default function ChatThreadScreen() {
     try {
       const res = await getChatThread(id);
       if (res.other_user) setChatUser(res.other_user);
-      if (res.booking_context) setBookingContext(res.booking_context);
+      setBookingContext(res.booking_context || null);
       if (Array.isArray(res.messages)) {
         setMessages((prev) => {
           if (res.messages.length === 0 && prev.length > 0) {
@@ -319,8 +317,10 @@ export default function ChatThreadScreen() {
         </View>
       </View>
 
-      {/* Active Booking & Payment Context Card (collapsible) */}
-      {bookingContext && (
+      {/* Active Booking & Payment Context Card (collapsible - only shown when pending payment and unpaid) */}
+      {bookingContext &&
+        bookingContext.status === "pending_payment" &&
+        bookingContext.payment_status === "unpaid" && (
         <View style={styles.contextBanner}>
           <TouchableOpacity
             style={styles.contextHeader}

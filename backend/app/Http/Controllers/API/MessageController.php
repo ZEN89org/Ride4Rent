@@ -123,14 +123,17 @@ class MessageController extends Controller
 
         $otherUser = User::with('operatorProfile')->find($otherUserId);
 
-        // Find active/recent booking between these 2 users (renter + operator)
+        // Find active unpaid booking awaiting payment settlement between these 2 users (renter + operator)
         $booking = Booking::with(['vehicle', 'operator.operatorProfile'])
             ->where(function ($q) use ($userId, $otherUserId) {
-                $q->where('renter_id', $userId)->where('operator_id', $otherUserId);
+                $q->where(function ($sub) use ($userId, $otherUserId) {
+                    $sub->where('renter_id', $userId)->where('operator_id', $otherUserId);
+                })->orWhere(function ($sub) use ($userId, $otherUserId) {
+                    $sub->where('renter_id', $otherUserId)->where('operator_id', $userId);
+                });
             })
-            ->orWhere(function ($q) use ($userId, $otherUserId) {
-                $q->where('renter_id', $otherUserId)->where('operator_id', $userId);
-            })
+            ->where('status', 'pending_payment')
+            ->where('payment_status', 'unpaid')
             ->latest()
             ->first();
 
@@ -163,6 +166,8 @@ class MessageController extends Controller
                 'profile_photo' => $otherUser->profile_photo
                     ? (str_starts_with($otherUser->profile_photo, 'http') ? $otherUser->profile_photo : $host . '/storage/' . $otherUser->profile_photo)
                     : null,
+                'business_contact_number' => $otherUser->operatorProfile?->business_contact_number,
+                'mobile_number' => $otherUser->mobile_number,
             ] : null,
             'booking_context' => $bookingContext,
             'data' => $messages,
