@@ -82,8 +82,9 @@ class MailService
      */
     private static function dispatchEmail(string $toEmail, string $subject, string $htmlContent, $mailable): bool
     {
-        $senderEmail = env('MAIL_FROM_ADDRESS', 'ride4rentph@gmail.com');
         $senderName = env('MAIL_FROM_NAME', 'Ride4Rent');
+        $replyToEmail = env('MAIL_FROM_ADDRESS', 'ride4rentph@gmail.com');
+        $brevoSenderEmail = env('BREVO_SENDER_EMAIL', 'magnayevince29@gmail.com');
 
         // 1. Try Brevo HTTPS API (works on cloud hosts with blocked SMTP ports)
         $brevoApiKey = env('BREVO_API_KEY');
@@ -96,7 +97,11 @@ class MailService
                 ])->timeout(6)->post('https://api.brevo.com/v3/smtp/email', [
                     'sender' => [
                         'name' => $senderName,
-                        'email' => $senderEmail,
+                        'email' => $brevoSenderEmail,
+                    ],
+                    'replyTo' => [
+                        'name' => $senderName,
+                        'email' => $replyToEmail,
                     ],
                     'to' => [
                         ['email' => $toEmail],
@@ -106,7 +111,7 @@ class MailService
                 ]);
 
                 if ($response->successful()) {
-                    Log::info("Email successfully sent to {$toEmail} via Brevo HTTPS API.");
+                    Log::info("Email successfully sent to {$toEmail} via Brevo HTTPS API (sender: {$brevoSenderEmail}).");
                     return true;
                 } else {
                     Log::warning("Brevo API returned error ({$response->status()}): " . $response->body());
