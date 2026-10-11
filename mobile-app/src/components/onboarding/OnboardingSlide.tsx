@@ -26,7 +26,6 @@ interface Props {
   isFullTop?: boolean;
   contentFit?: "contain" | "cover";
   contentPosition?: "top" | "center";
-  textPaddingTop?: number;
   index?: number;
   scrollX?: Animated.Value;
 }
@@ -40,7 +39,6 @@ export default function OnboardingSlide({
   isFullTop = false,
   contentFit = "contain",
   contentPosition = "center",
-  textPaddingTop,
   index = 0,
   scrollX,
 }: Props) {
@@ -106,7 +104,6 @@ export default function OnboardingSlide({
         <Animated.View
           style={[
             styles.textContainerFull,
-            textPaddingTop !== undefined && { paddingTop: textPaddingTop },
             {
               opacity: textOpacity,
               transform: [{ translateY: textTranslateY }],
@@ -170,7 +167,7 @@ const styles = StyleSheet.create({
   containerFull: {
     flex: 1,
     width: "100%",
-    justifyContent: "flex-start",
+    justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 0,
   },
@@ -198,8 +195,7 @@ const styles = StyleSheet.create({
 
   textContainerFull: {
     flex: 1,
-    justifyContent: "flex-start",
-    paddingTop: Spacing.md,
+    justifyContent: "center",
     paddingHorizontal: Spacing.xl,
     alignItems: "center",
     paddingBottom: Spacing.md,

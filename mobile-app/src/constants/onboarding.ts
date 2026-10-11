@@ -15,10 +15,10 @@ const locationBannerHeight = Math.min(
   Math.round(SCREEN_HEIGHT * 0.52)
 );
 
-// Vehicle showcase slide 3: Visual artwork height excluding 1400px bottom transparent padding (5313 x 4250)
+// Vehicle showcase slide 3: True aspect ratio (5313 x 5625) fitting left and right without stretching
 const vehicleBannerHeight = Math.min(
-  Math.round(SCREEN_WIDTH * (4250 / 5313)),
-  Math.round(SCREEN_HEIGHT * 0.44)
+  Math.round(SCREEN_WIDTH * (5625 / 5313)),
+  Math.round(SCREEN_HEIGHT * 0.52)
 );
 
 export const onboardingData = [
@@ -46,7 +46,6 @@ export const onboardingData = [
     isFullTop: true,
     contentFit: "contain" as const,
     contentPosition: "top" as const,
-    textPaddingTop: 20,
     permission: "location",
   },
   {
@@ -58,9 +57,8 @@ export const onboardingData = [
     imageWidth: SCREEN_WIDTH,
     imageHeight: vehicleBannerHeight,
     isFullTop: true,
-    contentFit: "cover" as const,
+    contentFit: "contain" as const,
     contentPosition: "top" as const,
-    textPaddingTop: 8,
     permission: null,
   },
 ];
