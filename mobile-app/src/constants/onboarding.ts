@@ -9,16 +9,16 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const notificationWidth = Math.min(Math.round(SCREEN_WIDTH * 1), 540);
 const notificationHeight = Math.round(notificationWidth / 2);
 
-// Location slide 2: True portrait aspect ratio (5313 x 6250) fitting left and right without stretching
+// Location slide 2: True portrait aspect ratio (1280 x 1506) fitting left and right edge-to-edge
 const locationBannerHeight = Math.min(
-  Math.round(SCREEN_WIDTH * (6250 / 5313)),
-  Math.round(SCREEN_HEIGHT * 0.52)
+  Math.round(SCREEN_WIDTH * (1506 / 1280)),
+  Math.round(SCREEN_HEIGHT * 0.48)
 );
 
-// Vehicle showcase slide 3: True aspect ratio (5313 x 5625) fitting left and right without stretching
+// Vehicle showcase slide 3: True aspect ratio (1280 x 1355) fitting left and right edge-to-edge
 const vehicleBannerHeight = Math.min(
-  Math.round(SCREEN_WIDTH * (5625 / 5313)),
-  Math.round(SCREEN_HEIGHT * 0.52)
+  Math.round(SCREEN_WIDTH * (1355 / 1280)),
+  Math.round(SCREEN_HEIGHT * 0.48)
 );
 
 export const onboardingData = [
@@ -44,7 +44,7 @@ export const onboardingData = [
     imageWidth: SCREEN_WIDTH,
     imageHeight: locationBannerHeight,
     isFullTop: true,
-    contentFit: "contain" as const,
+    contentFit: "cover" as const,
     contentPosition: "top" as const,
     permission: "location",
   },
@@ -57,7 +57,7 @@ export const onboardingData = [
     imageWidth: SCREEN_WIDTH,
     imageHeight: vehicleBannerHeight,
     isFullTop: true,
-    contentFit: "contain" as const,
+    contentFit: "cover" as const,
     contentPosition: "top" as const,
     permission: null,
   },

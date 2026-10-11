@@ -103,6 +103,9 @@ export default function Onboarding() {
         }}
         showsHorizontalScrollIndicator={false}
         keyExtractor={(item) => item.id}
+        initialNumToRender={3}
+        maxToRenderPerBatch={3}
+        windowSize={3}
         scrollEventThrottle={16}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { x: scrollX } } }],

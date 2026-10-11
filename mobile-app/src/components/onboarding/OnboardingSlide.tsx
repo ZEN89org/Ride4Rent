@@ -97,6 +97,9 @@ export default function OnboardingSlide({
             source={image}
             contentFit={contentFit}
             contentPosition={contentPosition}
+            priority="high"
+            cachePolicy="memory-disk"
+            transition={0}
             style={styles.topFullImage}
           />
         </Animated.View>
@@ -132,6 +135,9 @@ export default function OnboardingSlide({
           source={image}
           contentFit={contentFit}
           contentPosition={contentPosition}
+          priority="high"
+          cachePolicy="memory-disk"
+          transition={0}
           style={{
             width: imageWidth,
             height: imageHeight,
