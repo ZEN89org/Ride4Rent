@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
+use App\Models\ConversationState;
 use App\Models\Message;
 use App\Models\User;
 use App\Models\Vehicle;
@@ -27,10 +28,19 @@ class MessageController extends Controller
                 Message::where('receiver_id', $userId)->pluck('sender_id')
             )
             ->unique();
+        $conversationStates = ConversationState::where('user_id', $userId)
+            ->whereIn('other_user_id', $otherUserIds)
+            ->get()
+            ->keyBy('other_user_id');
 
         $conversations = [];
 
         foreach ($otherUserIds as $otherId) {
+            $state = $conversationStates->get($otherId);
+            if ($state?->deleted_at) {
+                continue;
+            }
+
             $otherUser = User::with('operatorProfile')->find($otherId);
             if (!$otherUser) continue;
 
@@ -70,6 +80,7 @@ class MessageController extends Controller
                 'last_message' => $displayMsg ?? '',
                 'last_time' => $lastMsg?->created_at?->diffForHumans() ?? '',
                 'unread_count' => $unreadCount,
+                'archived' => (bool) $state?->archived_at,
             ];
         }
 
@@ -231,6 +242,17 @@ class MessageController extends Controller
             'is_read' => false,
         ]);
 
+        ConversationState::where(function ($query) use ($request, $validated) {
+            $query->where('user_id', $request->user()->id)
+                ->where('other_user_id', $validated['receiver_id']);
+        })->orWhere(function ($query) use ($request, $validated) {
+            $query->where('user_id', $validated['receiver_id'])
+                ->where('other_user_id', $request->user()->id);
+        })->update([
+            'archived_at' => null,
+            'deleted_at' => null,
+        ]);
+
         $host = $request->getSchemeAndHttpHost();
         $fullImageUrl = $imagePath ? $host . '/storage/' . $imagePath : null;
 
@@ -280,6 +302,67 @@ class MessageController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Message deleted successfully.',
+        ]);
+    }
+
+    public function archiveConversation(Request $request, int $userId): JsonResponse
+    {
+        $state = $this->conversationStateFor($request, $userId);
+        $state->archived_at = now();
+        $state->deleted_at = null;
+        $state->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Conversation archived.',
+        ]);
+    }
+
+    public function restoreConversation(Request $request, int $userId): JsonResponse
+    {
+        $state = $this->conversationStateFor($request, $userId);
+        $state->archived_at = null;
+        $state->deleted_at = null;
+        $state->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Conversation restored.',
+        ]);
+    }
+
+    public function deleteConversation(Request $request, int $userId): JsonResponse
+    {
+        $state = $this->conversationStateFor($request, $userId);
+        $state->archived_at = null;
+        $state->deleted_at = now();
+        $state->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Conversation removed from your messages.',
+        ]);
+    }
+
+    private function conversationStateFor(Request $request, int $otherUserId): ConversationState
+    {
+        $userId = (int) $request->user()->id;
+        abort_unless(
+            $userId !== $otherUserId
+                && User::whereKey($otherUserId)->exists()
+                && Message::where(function ($query) use ($userId, $otherUserId) {
+                    $query->where('sender_id', $userId)
+                        ->where('receiver_id', $otherUserId);
+                })->orWhere(function ($query) use ($userId, $otherUserId) {
+                    $query->where('sender_id', $otherUserId)
+                        ->where('receiver_id', $userId);
+                })->exists(),
+            404,
+        );
+
+        return ConversationState::firstOrNew([
+            'user_id' => $userId,
+            'other_user_id' => $otherUserId,
         ]);
     }
 }
