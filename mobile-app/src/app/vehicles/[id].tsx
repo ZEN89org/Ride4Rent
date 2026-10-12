@@ -24,6 +24,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import PrimaryButton from "@/components/common/PrimaryButton";
 import { AppBottomSheet } from "@/components/common/AppBottomSheet";
+import TripDateTimeSelector from "@/components/common/TripDateTimeSelector";
 import { Skeleton } from "@/components/common/Skeleton";
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";
@@ -60,8 +61,25 @@ export default function VehicleDetailsScreen() {
 
   // Booking bottom sheet state
   const [showBookingModal, setShowBookingModal] = useState(false);
-  const [startDaysFromNow, setStartDaysFromNow] = useState(0);
-  const [tripDurationDays, setTripDurationDays] = useState(2);
+  const [selectedStartDate, setSelectedStartDate] = useState(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  });
+  const [selectedEndDate, setSelectedEndDate] = useState(() => {
+    const end = new Date();
+    end.setDate(end.getDate() + 2);
+    end.setHours(0, 0, 0, 0);
+    return end;
+  });
+  const [selectedStartTime, setSelectedStartTime] = useState("10:00 AM");
+  const [selectedEndTime, setSelectedEndTime] = useState("10:00 AM");
+
+  const tripDurationDays = React.useMemo(() => {
+    const diffMs = selectedEndDate.getTime() - selectedStartDate.getTime();
+    return Math.max(1, Math.round(diffMs / (1000 * 60 * 60 * 24)));
+  }, [selectedStartDate, selectedEndDate]);
+
   const [bookingNotes, setBookingNotes] = useState("");
   const [submittingBooking, setSubmittingBooking] = useState(false);
 
@@ -186,11 +204,60 @@ export default function VehicleDetailsScreen() {
       return;
     }
 
-    // Check if user currently has an active trip in progress
+    // Check if user currently has an active trip or pending unpaid booking
     getMyBookings()
       .then((myBookings) => {
-        const activeTrip = myBookings.find((b) =>
-          [
+        const pendingUnpaid = myBookings.find(
+          (b) =>
+            (b.status === "pending_payment" || (b.status as string) === "pending") &&
+            b.payment_status !== "paid_reservation" &&
+            b.payment_status !== "paid_full"
+        );
+        if (pendingUnpaid) {
+          showModal(
+            "Pending Reservation Notice",
+            "You already have a pending vehicle reservation awaiting payment. Please settle or cancel your existing request in 'My Bookings' before reserving another vehicle.",
+            [
+              { text: "View Bookings", style: "default", onPress: () => router.push("/(tabs)/bookings") },
+              { text: "Close", style: "cancel" },
+            ],
+            "warning"
+          );
+          return;
+        }
+
+        // Duplicate reservation check for this specific vehicle
+        const existingVehicleBooking = myBookings.find(
+          (b) =>
+            Number(b.vehicle_id) === Number(vehicle?.id) &&
+            ["pending_payment", "pending_verification", "approved", "awaiting_pickup", "pickup_in_progress", "trip_in_progress", "ongoing"].includes(b.status)
+        );
+        if (existingVehicleBooking) {
+          showModal(
+            "Existing Reservation",
+            "You already have an active reservation request for this vehicle. Please manage your trip in 'My Bookings'.",
+            [
+              { text: "View Bookings", style: "default", onPress: () => router.push("/(tabs)/bookings") },
+              { text: "Close", style: "cancel" },
+            ],
+            "warning"
+          );
+          return;
+        }
+
+        const formatDateForCheck = (d: Date) => {
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, "0");
+          const day = String(d.getDate()).padStart(2, "0");
+          return `${y}-${m}-${day}`;
+        };
+        const selectedStartStr = formatDateForCheck(selectedStartDate);
+        const selectedEndStr = formatDateForCheck(selectedEndDate);
+
+        const activeTrip = myBookings.find((b) => {
+          if (["completed", "cancelled", "rejected", "refunded", "no_show"].includes(b.status)) return false;
+          const isActiveStatus = [
+            "pending_verification",
             "approved",
             "awaiting_pickup",
             "pickup_in_progress",
@@ -198,8 +265,13 @@ export default function VehicleDetailsScreen() {
             "trip_in_progress",
             "ongoing",
             "return_pending",
-          ].includes(b.status)
-        );
+          ].includes(b.status);
+          if (!isActiveStatus) return false;
+
+          const bStart = (b.start_date || "").split("T")[0];
+          const bEnd = (b.extension_end_date || b.extended_end_date || b.end_date || "").split("T")[0];
+          return bStart <= selectedEndStr && bEnd >= selectedStartStr;
+        });
 
         if (activeTrip) {
           setHasActiveTripOverlap(true);
@@ -208,21 +280,14 @@ export default function VehicleDetailsScreen() {
           setHasActiveTripOverlap(false);
           setActiveTripVehicleName("");
         }
+        setShowBookingModal(true);
       })
-      .catch(() => {})
-      .finally(() => {
+      .catch(() => {
         setShowBookingModal(true);
       });
   };
 
   const calculateFormattedDates = () => {
-    const today = new Date();
-    const startDateObj = new Date(today);
-    startDateObj.setDate(today.getDate() + startDaysFromNow);
-
-    const endDateObj = new Date(startDateObj);
-    endDateObj.setDate(startDateObj.getDate() + tripDurationDays);
-
     const formatDate = (d: Date) => {
       const y = d.getFullYear();
       const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -230,16 +295,22 @@ export default function VehicleDetailsScreen() {
       return `${y}-${m}-${day}`;
     };
 
+    const sDay = selectedStartDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const eDay = selectedEndDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const tripDays = Math.max(1, Math.round((selectedEndDate.getTime() - selectedStartDate.getTime()) / (1000 * 60 * 60 * 24)));
+
     return {
-      startDateStr: formatDate(startDateObj),
-      endDateStr: formatDate(endDateObj),
-      displayStart: startDateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      displayEnd: endDateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      startDateStr: formatDate(selectedStartDate),
+      endDateStr: formatDate(selectedEndDate),
+      displaySummary: `${sDay} – ${eDay} • ${tripDays} ${tripDays === 1 ? "Day" : "Days"}`,
+      displayStart: `${sDay} (${selectedStartTime})`,
+      displayEnd: `${eDay} (${selectedEndTime})`,
     };
   };
 
   const handleConfirmReservation = async () => {
     if (!vehicle) return;
+    if (submittingBooking) return;
     const { startDateStr, endDateStr } = calculateFormattedDates();
 
     if (hasActiveTripOverlap && (!secondaryDriverName.trim() || !secondaryDriverPhone.trim())) {
@@ -252,14 +323,35 @@ export default function VehicleDetailsScreen() {
 
     try {
       setSubmittingBooking(true);
+
+      // Re-check pending bookings before submitting to prevent concurrent multi-booking spam
+      const myBookings = await getMyBookings();
+      const pendingUnpaid = myBookings.find(
+        (b) =>
+          (b.status === "pending_payment" || (b.status as string) === "pending") &&
+          b.payment_status !== "paid_reservation" &&
+          b.payment_status !== "paid_full"
+      );
+      if (pendingUnpaid) {
+        showError(
+          "Pending Reservation Notice",
+          "You already have a pending booking request awaiting payment. Please settle or cancel it before booking another vehicle."
+        );
+        setShowBookingModal(false);
+        return;
+      }
+
       await createBooking({
         vehicle_id: vehicle.id,
         start_date: startDateStr,
         end_date: endDateStr,
-        notes: bookingNotes.trim() || undefined,
+        notes: bookingNotes.trim()
+          ? `${bookingNotes.trim()} • Schedule: ${selectedStartTime} pickup → ${selectedEndTime} return`
+          : `Schedule: ${selectedStartTime} pickup → ${selectedEndTime} return`,
+        is_multi_vehicle_rental: hasActiveTripOverlap ? true : undefined,
         secondary_driver_name: hasActiveTripOverlap ? secondaryDriverName.trim() : undefined,
         secondary_driver_phone: hasActiveTripOverlap ? secondaryDriverPhone.trim() : undefined,
-      });
+      } as any);
 
       setShowBookingModal(false);
       showSuccess("Reservation Created", "Booking request sent to host. Please settle reservation payment.");
@@ -309,7 +401,7 @@ export default function VehicleDetailsScreen() {
 
   const isFav = isFavorite(vehicle.id);
   const operator = (vehicle as any).operator;
-  const { startDateStr, endDateStr, displayStart, displayEnd } = calculateFormattedDates();
+  const { startDateStr, endDateStr, displaySummary, displayStart, displayEnd } = calculateFormattedDates();
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.container}>
@@ -837,7 +929,7 @@ export default function VehicleDetailsScreen() {
 
               <View style={styles.operatorRow}>
                 <TouchableOpacity
-                  style={{ flexDirection: "row", alignItems: "center", flex: 1, gap: 12 }}
+                  style={{ flexDirection: "row", alignItems: "center", flex: 1, gap: 12, minWidth: 0 }}
                   onPress={() => {
                     if (operator?.id) router.push(`/operator/${operator.id}` as any);
                   }}
@@ -851,11 +943,11 @@ export default function VehicleDetailsScreen() {
                     </View>
                   )}
 
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.operatorName}>
+                  <View style={{ flex: 1, minWidth: 0, paddingRight: 4 }}>
+                    <Text style={styles.operatorName} numberOfLines={1} ellipsizeMode="tail">
                       {operator?.business_name || operator?.name || "Verified Host"}
                     </Text>
-                    <Text style={styles.operatorAddress} numberOfLines={1}>
+                    <Text style={styles.operatorAddress} numberOfLines={1} ellipsizeMode="tail">
                       {vehicle.pickup_address || "Pickup address available upon booking"}
                     </Text>
                   </View>
@@ -957,6 +1049,7 @@ export default function VehicleDetailsScreen() {
         position="bottom"
         showHandle={false}
         sheetStyle={styles.modalCard}
+        renderAsOverlay={true}
       >
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Select Trip Dates</Text>
@@ -975,30 +1068,23 @@ export default function VehicleDetailsScreen() {
               contentContainerStyle={{ paddingBottom: Spacing.md }}
               style={{ maxHeight: Dimensions.get("window").height * 0.65 }}
             >
-              {/* Quick start date options (realistic dates only) */}
-              <Text style={styles.fieldLabel}>Pickup Date</Text>
-              <View style={styles.pickerRow}>
-                {[
-                  { label: "Today", days: 0 },
-                  { label: "Tomorrow", days: 1 },
-                  { label: "In 2 Days", days: 2 },
-                  { label: "In 3 Days", days: 3 },
-                  { label: "This Weekend", days: 5 },
-                ].map((opt) => (
-                  <TouchableOpacity
-                    key={opt.days}
-                    style={[styles.pickerPill, startDaysFromNow === opt.days && styles.pickerPillActive]}
-                    onPress={() => setStartDaysFromNow(opt.days)}
-                  >
-                    <Text style={[styles.pickerPillText, startDaysFromNow === opt.days && styles.pickerPillTextActive]}>
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              {/* Responsive Trip Date & Time Selection Cards & Modal (Images 1 & 2) */}
+              <Text style={styles.fieldLabel}>Pick Trip Schedule</Text>
+              <TripDateTimeSelector
+                startDate={selectedStartDate}
+                endDate={selectedEndDate}
+                startTime={selectedStartTime}
+                endTime={selectedEndTime}
+                onDateTimeChange={(start, end, sTime, eTime) => {
+                  setSelectedStartDate(start);
+                  setSelectedEndDate(end);
+                  setSelectedStartTime(sTime);
+                  setSelectedEndTime(eTime);
+                }}
+              />
 
-              {/* Duration Selector */}
-              <Text style={styles.fieldLabel}>Trip Duration</Text>
+              {/* Quick Duration Shortcuts */}
+              <Text style={[styles.fieldLabel, { marginTop: Spacing.sm }]}>Quick Duration</Text>
               <View style={styles.pickerRow}>
                 {[
                   { label: "1 Day", days: 1 },
@@ -1010,7 +1096,11 @@ export default function VehicleDetailsScreen() {
                   <TouchableOpacity
                     key={opt.days}
                     style={[styles.pickerPill, tripDurationDays === opt.days && styles.pickerPillActive]}
-                    onPress={() => setTripDurationDays(opt.days)}
+                    onPress={() => {
+                      const newEnd = new Date(selectedStartDate);
+                      newEnd.setDate(selectedStartDate.getDate() + opt.days);
+                      setSelectedEndDate(newEnd);
+                    }}
                   >
                     <Text style={[styles.pickerPillText, tripDurationDays === opt.days && styles.pickerPillTextActive]}>
                       {opt.label}
@@ -1023,7 +1113,7 @@ export default function VehicleDetailsScreen() {
               <View style={styles.dateSummaryBox}>
                 <Ionicons name="calendar-outline" size={18} color={Colors.dark} />
                 <Text style={styles.dateSummaryText}>
-                  {displayStart} → {displayEnd} ({tripDurationDays} {tripDurationDays === 1 ? "day" : "days"})
+                  {displaySummary}
                 </Text>
               </View>
 

@@ -33,7 +33,7 @@ const handleResetFirstLaunch = async () => {
 
         <PrimaryButton
           title="Continue as Guest"
-          onPress={() => router.push("/(tabs)/home")}
+          onPress={() => router.replace("/(tabs)/home")}
         />
 
         <View style={{ height: 12 }} />

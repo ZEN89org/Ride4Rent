@@ -49,6 +49,12 @@ class MessageController extends Controller
                 ->count();
 
             $displayMsg = $lastMsg?->message;
+            if ($displayMsg && str_starts_with($displayMsg, '[REPLY:')) {
+                $endBracket = strpos($displayMsg, "}]\n");
+                if ($endBracket !== false) {
+                    $displayMsg = trim(substr($displayMsg, $endBracket + 3)) ?: 'Replied to message';
+                }
+            }
             if (!$displayMsg && $lastMsg?->image_url) {
                 $displayMsg = 'Sent a photo';
             }
@@ -116,6 +122,7 @@ class MessageController extends Controller
                     'sender_id' => $msg->sender_id,
                     'text' => $msg->message ?? '',
                     'image_url' => $imageUrl,
+                    'is_read' => (bool) $msg->is_read,
                     'time' => $msg->created_at->format('h:i A'),
                     'created_at' => $msg->created_at->toIso8601String(),
                 ];
@@ -235,6 +242,7 @@ class MessageController extends Controller
                 'sender_id' => $msg->sender_id,
                 'text' => $msg->message ?? '',
                 'image_url' => $fullImageUrl,
+                'is_read' => (bool) $msg->is_read,
                 'time' => $msg->created_at->format('h:i A'),
                 'created_at' => $msg->created_at->toIso8601String(),
             ],
@@ -253,6 +261,13 @@ class MessageController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'You can only delete messages sent by you.',
+            ], 403);
+        }
+
+        if (str_contains($msg->message ?? '', 'PAYMENT RECEIPT')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Official payment receipts cannot be deleted as transaction proof.',
             ], 403);
         }
 

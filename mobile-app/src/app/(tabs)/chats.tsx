@@ -21,6 +21,18 @@ import {
   getConversations,
 } from "@/services/messageService";
 
+const cleanMessagePreview = (msg?: string | null): string => {
+  if (!msg) return "No messages yet";
+  const cleaned = msg.replace(/^\[REPLY:[\s\S]*?\]\s*/i, "").trim();
+  if (cleaned.includes("EXTENSION PAYMENT RECEIPT")) {
+    return "🧾 Extension Receipt Settled";
+  }
+  if (cleaned.includes("PAYMENT RECEIPT") || cleaned.includes("RESERVATION PAYMENT RECEIPT")) {
+    return "🧾 Payment Receipt Settled";
+  }
+  return cleaned || "Replied to a message";
+};
+
 export default function Chats() {
   const { isGuest } = useAuth();
   const [search, setSearch] = useState("");
@@ -63,6 +75,9 @@ export default function Chats() {
   );
 
   const handleOpenChat = (item: ConversationItem) => {
+    setConversations((prev) =>
+      prev.map((c) => (c.user_id === item.user_id ? { ...c, unread_count: 0 } : c))
+    );
     router.push({
       pathname: `/chat/${item.user_id}`,
       params: {
@@ -180,7 +195,7 @@ export default function Chats() {
                     ]}
                     numberOfLines={1}
                   >
-                    {item.last_message || "No messages yet"}
+                    {cleanMessagePreview(item.last_message)}
                   </Text>
                 </View>
               </TouchableOpacity>

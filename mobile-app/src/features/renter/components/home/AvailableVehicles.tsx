@@ -26,7 +26,7 @@ import {
 } from "@/features/operator/services/vehicleService";
 import { Vehicle as ApiVehicle } from "@/features/operator/types/vehicle";
 
-import { router } from "expo-router";
+import { router, useNavigation } from "expo-router";
 import { useFavorites } from "@/context/FavoritesContext";
 
 import { VehicleCardSkeleton } from "@/components/common/Skeleton";
@@ -130,12 +130,18 @@ export default function AvailableVehicles({ searchQuery = "", onViewMore }: Avai
     };
   }, []);
 
+  const navigation = useNavigation<any>();
+
   const handleViewMore = () => {
     if (onViewMore) {
       onViewMore();
       return;
     }
-    router.navigate("/(tabs)/search" as any);
+    try {
+      navigation.navigate("search");
+    } catch {
+      router.navigate("/(tabs)/search" as any);
+    }
   };
 
   const handleViewVehicle = (vehicle: any) => {
@@ -160,32 +166,26 @@ export default function AvailableVehicles({ searchQuery = "", onViewMore }: Avai
       <View style={styles.container}>
 
         <View style={styles.sectionHeader}>
-
-          <View style={{ flex: 1 }}>
-            <Text style={styles.title}>
-              {searchQuery.trim()
-                ? `Search: ${searchQuery.trim()} (${displayedVehicles.length})`
-                : "Available Vehicles Near You"}
-            </Text>
-          </View>
+          <Text style={styles.title} numberOfLines={1}>
+            {searchQuery.trim()
+              ? `Search: ${searchQuery.trim()} (${displayedVehicles.length})`
+              : "Available Vehicles Near You"}
+          </Text>
 
           <TouchableOpacity
             style={styles.viewMoreButton}
             onPress={handleViewMore}
-            activeOpacity={0.7}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            activeOpacity={0.8}
           >
             <Text style={styles.viewMoreText}>
               View More
             </Text>
-
             <Ionicons
               name="arrow-forward"
-              size={16}
-              color={Colors.primary}
+              size={13}
+              color="#0F172A"
             />
           </TouchableOpacity>
-
         </View>
 
         <View style={styles.carouselContainer}>
@@ -258,27 +258,90 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: Spacing.lg,
-    marginBottom: 8,
+    marginBottom: 10,
   },
 
   title: {
     flex: 1,
-    fontFamily: FontFamily.medium,
-    fontSize: 15,
+    fontFamily: FontFamily.bold,
+    fontSize: 16,
     color: Colors.dark,
+    marginRight: Spacing.sm,
   },
 
   viewMoreButton: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    marginLeft: Spacing.sm,
+    gap: 5,
+    backgroundColor: "#F1F5F9",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
 
   viewMoreText: {
-    fontFamily: FontFamily.medium,
+    fontFamily: FontFamily.bold,
     fontSize: 12,
-    color: Colors.dark,
+    color: "#0F172A",
+  },
+
+  carouselEndCard: {
+    width: 140,
+    height: 195,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+    borderStyle: "dashed",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 12,
+    marginRight: Spacing.lg,
+  },
+
+  carouselEndIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#FEF9C3",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+
+  carouselEndTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 13,
+    color: "#0F172A",
+  },
+
+  carouselEndSub: {
+    fontFamily: FontFamily.regular,
+    fontSize: 10,
+    color: "#64748B",
+    textAlign: "center",
+    marginTop: 2,
+    marginBottom: 10,
+  },
+
+  carouselEndPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
+  },
+
+  carouselEndPillText: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 10.5,
+    color: "#0F172A",
   },
 
   carouselContainer: {

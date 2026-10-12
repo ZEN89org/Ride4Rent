@@ -30,6 +30,7 @@ import {
   Booking,
   completeTrip,
   confirmOperatorPayment,
+  deleteBooking,
   getBookingLocation,
   getMyBookings,
   processBookingRefund,
@@ -76,6 +77,55 @@ const getEffectiveReturnDate = (item: Booking): string => {
     return cleanDate(item.extension_end_date || item.extended_end_date || item.end_date);
   }
   return cleanDate(item.end_date);
+};
+
+const formatPrettyDate = (d: string | null | undefined): string => {
+  if (!d) return "";
+  const raw = String(d).split("T")[0];
+  const parts = raw.split("-");
+  if (parts.length >= 3) {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const monthIndex = parseInt(parts[1], 10) - 1;
+    const m = months[monthIndex] || parts[1];
+    return `${m} ${parseInt(parts[2], 10)}`;
+  }
+  return d;
+};
+
+const formatPrettyTripDates = (startDateStr: string | null | undefined, endDateStr: string | null | undefined): string => {
+  if (!startDateStr) return "Flexible dates";
+  const start = formatPrettyDate(startDateStr);
+  const end = formatPrettyDate(endDateStr);
+  if (!end || start === end) return start;
+  return `${start} – ${end}`;
+};
+
+const parseDateString = (dateStr: string | null | undefined): Date => {
+  if (!dateStr) return new Date();
+  const raw = String(dateStr).split("T")[0];
+  const parts = raw.split("-");
+  if (parts.length >= 3) {
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+    return new Date(year, month, day, 0, 0, 0, 0);
+  }
+  const d = new Date(dateStr);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+const getEffectiveTripDays = (b: Booking | null | undefined): number => {
+  if (!b) return 1;
+  const start = b.start_date ? parseDateString(b.start_date) : null;
+  const effectiveEndStr = b.extension_status === "approved"
+    ? (b.extension_end_date || b.extended_end_date || b.end_date)
+    : b.end_date;
+  const end = effectiveEndStr ? parseDateString(effectiveEndStr) : null;
+  if (!start || !end) return b.total_days || 1;
+  const diffTime = end.getTime() - start.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return Math.max(1, diffDays);
 };
 
 const formatFullDate = (dStr: string | null | undefined): string => {
@@ -313,6 +363,11 @@ export default function OperatorBookingsScreen() {
     return () => clearInterval(poller);
   }, [loadOperatorBookings]);
 
+  // Reset page when tab changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab]);
+
   const handleStatusChange = (
     bookingId: number,
     newStatus: "approved" | "rejected" | "awaiting_pickup" | "pickup_in_progress" | "return_pending" | "no_show"
@@ -348,6 +403,35 @@ export default function OperatorBookingsScreen() {
               loadOperatorBookings();
             } catch (e) {
               showError("Error", "Could not update booking status.");
+            }
+          },
+        },
+      ],
+      "confirm"
+    );
+  };
+
+  const handleDeleteHistoryBooking = (booking: Booking) => {
+    if (booking.refund_status === "pending" || booking.payment_status === "refund_pending") {
+      showError("Action Prohibited", "Bookings with a pending refund cannot be removed.");
+      return;
+    }
+    const vehicleTitle = booking.vehicle?.name || "this vehicle";
+    showModal(
+      "Delete History Record",
+      `Are you sure you want to permanently delete the history record for #${booking.id} (${vehicleTitle})? This cannot be undone.`,
+      [
+        { text: "Keep", style: "cancel" },
+        {
+          text: "Yes, Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteBooking(booking.id);
+              showSuccess("Booking Deleted", `Booking #${booking.id} removed from history.`);
+              setBookings((prev) => prev.filter((b) => b.id !== booking.id));
+            } catch (e: any) {
+              showError("Delete Error", e.response?.data?.message || "Failed to delete booking.");
             }
           },
         },
@@ -410,20 +494,20 @@ export default function OperatorBookingsScreen() {
 
   const handleApproveExtension = (bookingId: number) => {
     showModal(
-      "Approve Rental Extension",
-      "Confirm receiving the extension fee and extending the rental schedule for this vehicle?",
+      "Agree to Extension Schedule",
+      "Agree to extend the rental by the requested days? Once agreed, the renter will be prompted to settle the extension payment via GCash.",
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Approve Extension",
+          text: "Agree & Request Payment",
           style: "default",
           onPress: async () => {
             try {
               await approveBookingExtension(bookingId);
-              showSuccess("Extension Approved", "Rental period updated and renter notified.");
+              showSuccess("Extension Schedule Agreed", "Renter notified to settle the extension fee.");
               loadOperatorBookings();
             } catch (e: any) {
-              showError("Error", e.response?.data?.message || "Could not approve extension.");
+              showError("Error", e.response?.data?.message || "Could not agree to extension.");
             }
           },
         },
@@ -623,10 +707,6 @@ export default function OperatorBookingsScreen() {
     return b.id - a.id;
   });
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [activeTab]);
-
   const totalBookingsCount = filteredBookings.length;
   const isPaginating = activeTab === "all" || totalBookingsCount > 15;
   const paginatedBookings = isPaginating
@@ -821,8 +901,17 @@ export default function OperatorBookingsScreen() {
                 activeOpacity={0.7}
               >
                 <Text style={[styles.tabItemText, isActive && styles.tabItemTextActive]}>
-                  {tab === "all" ? "All" : tab.charAt(0).toUpperCase() + tab.slice(1)} {count > 0 ? `(${count})` : ""}
+                  {tab === "all" ? "All" : tab.charAt(0).toUpperCase() + tab.slice(1)}
                 </Text>
+                {((tab === "pending" && count > 0) || (tab === "all" && bookings.some((b) => b.status === "pending_payment" || b.status === "pending_verification"))) && (
+                  <View
+                    style={[
+                      styles.tabIndicatorDot,
+                      styles.tabIndicatorDotPending,
+                      isActive && styles.tabIndicatorDotActive,
+                    ]}
+                  />
+                )}
               </TouchableOpacity>
             );
           })}
@@ -1012,43 +1101,23 @@ export default function OperatorBookingsScreen() {
 
               return (
                 <View style={styles.bookingCard}>
-                  {/* Card Main Row */}
-                  <View style={styles.cardMainRow}>
-                    {/* Left Date Badge */}
-                    {isOngoingItem ? (
-                      <View
-                        style={[
-                          styles.dateBadge,
-                          {
-                            borderColor: returnStatus.borderColor,
-                            backgroundColor: returnStatus.bannerBg,
-                          },
-                        ]}
-                      >
-                        <Text style={[styles.dateBadgeTag, { color: returnStatus.color }]}>
-                          {returnStatus.isOverdue ? "LATE" : "DUE"}
-                        </Text>
-                        <Text style={[styles.dateBadgeMonth, { color: returnStatus.color }]}>
-                          {returnDateInfo.month}
-                        </Text>
-                        <Text style={styles.dateBadgeDay}>{returnDateInfo.day}</Text>
-                      </View>
-                    ) : (
-                      <View style={styles.dateBadge}>
-                        <Text style={styles.dateBadgeMonth}>{dateInfo.month}</Text>
-                        <Text style={styles.dateBadgeDay}>{dateInfo.day}</Text>
-                      </View>
-                    )}
+                  {/* Top Header Row: 68x68 Vehicle Thumb + Renter/Vehicle/Dates Info + Status Pill */}
+                  <View style={styles.cardHeaderRow}>
+                    <Image
+                      source={{ uri: vehicleImageUrl }}
+                      style={styles.cardImageThumb}
+                      contentFit="cover"
+                      transition={200}
+                    />
 
-                    {/* Middle Info */}
-                    <View style={styles.cardCenterInfo}>
+                    <View style={styles.cardHeaderInfo}>
                       <TouchableOpacity
-                        style={styles.hostRow}
+                        style={styles.renterBadgeRow}
                         onPress={() => item.renter && setSelectedRenter(item.renter)}
                         activeOpacity={0.75}
                       >
                         <Ionicons name="person-circle" size={13} color={Colors.primary} />
-                        <Text style={styles.hostNameText} numberOfLines={1}>
+                        <Text style={styles.renterBadgeText} numberOfLines={1}>
                           {renterName}
                         </Text>
                         <Ionicons name="information-circle-outline" size={11} color={Colors.secondary} />
@@ -1058,411 +1127,224 @@ export default function OperatorBookingsScreen() {
                         {vehicleName}
                       </Text>
 
-                      <Text style={styles.specsSubText}>
-                        ₱{Number(item.total_price).toLocaleString()} • {item.total_days} {item.total_days === 1 ? "day" : "days"}
-                      </Text>
-
-                      {isOngoingItem && (
-                        <View style={styles.ongoingReturnQuickRow}>
-                          <Ionicons name="calendar-outline" size={12} color={returnStatus.color} />
-                          <Text style={[styles.ongoingReturnQuickText, { color: returnStatus.color }]} numberOfLines={1}>
-                            Due: {returnStatus.formattedDate.split(", ")[1] || returnStatus.formattedDate} • {returnStatus.label}
-                          </Text>
-                        </View>
-                      )}
-
-                      {activeTab === "approved" && (
-                        <View style={styles.approvedPickupQuickRow}>
-                          <Ionicons name="key-outline" size={12} color="#92400E" />
-                          <Text style={styles.approvedPickupQuickText} numberOfLines={1}>
-                            Pickup: {cleanDate(item.start_date)} • Handover Pending
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-
-                    {/* Right Status Pill & Image */}
-                    <View style={styles.cardRightCol}>
-                      <View style={[styles.statusPill, { backgroundColor: statusCfg.bg, borderColor: (statusCfg as any).border || statusCfg.bg, borderWidth: 1 }]}>
-                        <Ionicons name={statusCfg.icon} size={11} color={statusCfg.text} />
-                        <Text style={[styles.statusPillText, { color: statusCfg.text }]}>
-                          {statusCfg.label}
+                      <View style={styles.datesRow}>
+                        <Ionicons name="calendar-outline" size={12} color="#64748B" />
+                        <Text style={styles.datesText} numberOfLines={1}>
+                          {tripDatesDisplay} • {tripDays} {tripDays === 1 ? "day" : "days"}
                         </Text>
                       </View>
-                      <Image source={{ uri: vehicleImageUrl }} style={styles.vehicleThumbMini} contentFit="cover" transition={200} />
+                    </View>
+
+                    <View style={[styles.statusPill, { backgroundColor: statusCfg.bg, borderColor: (statusCfg as any).border || statusCfg.bg, borderWidth: 1 }]}>
+                      <Ionicons name={statusCfg.icon} size={11} color={statusCfg.text} />
+                      <Text style={[styles.statusPillText, { color: statusCfg.text }]}>
+                        {statusCfg.label}
+                      </Text>
                     </View>
                   </View>
 
-                  {/* Core Actionable Banners (Always Glanceable) */}
-                  {/* Ongoing Tab: Dedicated Return Schedule Banner */}
-                  {isOngoingItem && (
-                    <View
-                      style={[
-                        styles.returnScheduleBanner,
-                        {
-                          borderColor: returnStatus.borderColor,
-                          backgroundColor: returnStatus.bannerBg,
-                        },
-                      ]}
-                    >
-                      <View style={styles.returnScheduleBannerLeft}>
-                        <View
-                          style={[
-                            styles.returnIconCircle,
-                            { backgroundColor: returnStatus.iconCircleBg },
-                          ]}
-                        >
-                          <Ionicons name={returnStatus.icon} size={15} color={returnStatus.color} />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <View style={{ flexDirection: "row", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
-                            <Text style={styles.returnScheduleHeaderLabel}>EXPECTED RETURN</Text>
-                            {item.extension_status === "approved" && (
-                              <View style={styles.extendedPillBadge}>
-                                <Text style={styles.extendedPillBadgeText}>
-                                  Extended (+{item.extension_days || 1}d)
-                                </Text>
-                              </View>
-                            )}
-                          </View>
-                          <Text style={styles.returnScheduleDateText}>
-                            {returnStatus.formattedDate}
-                          </Text>
-                        </View>
-                      </View>
-                      <View
-                        style={[
-                          styles.returnStatusBadge,
-                          { backgroundColor: returnStatus.badgeBg },
-                        ]}
-                      >
-                        <Text style={[styles.returnStatusBadgeText, { color: returnStatus.color }]}>
-                          {returnStatus.badgeText}
-                        </Text>
-                      </View>
+                  {/* Concise 2-Column Metric Strip */}
+                  <View style={styles.cardMetaStrip}>
+                    <View style={styles.metaCol}>
+                      <Text style={styles.metaLabel}>TOTAL PRICE</Text>
+                      <Text style={styles.metaValue}>₱{Number(item.total_price).toLocaleString()}</Text>
                     </View>
-                  )}
+                    <View style={styles.metaDivider} />
+                    <View style={styles.metaCol}>
+                      {item.status === "pending_verification" ? (
+                        <>
+                          <Text style={styles.metaLabel}>DEPOSIT DUE</Text>
+                          <Text style={[styles.metaValue, { color: "#D97706" }]}>
+                            ₱{Number(item.reservation_fee || 500).toLocaleString()}
+                          </Text>
+                        </>
+                      ) : isOngoingItem ? (
+                        <>
+                          <Text style={styles.metaLabel}>RETURN STATUS</Text>
+                          <Text style={[styles.metaValue, { color: returnStatus.color }]}>
+                            {returnStatus.label}
+                          </Text>
+                        </>
+                      ) : item.status === "completed" ? (
+                        <>
+                          <Text style={styles.metaLabel}>FINAL SETTLED</Text>
+                          <Text style={[styles.metaValue, { color: "#059669" }]}>
+                            ₱{Number(item.final_amount_due || item.total_price).toLocaleString()}
+                          </Text>
+                        </>
+                      ) : (
+                        <>
+                          <Text style={styles.metaLabel}>RETURN DATE</Text>
+                          <Text style={styles.metaValue}>
+                            {cleanDate(effectiveReturnDateStr)}
+                          </Text>
+                        </>
+                      )}
+                    </View>
+                  </View>
 
-                  {/* Ongoing Tab: Pending Extension Request Review Box (Actionable immediately) */}
-                  {item.extension_status === "pending" && (
-                    <View style={styles.extensionReviewBox}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                        <Ionicons name="time" size={16} color="#D97706" />
-                        <Text style={styles.extensionReviewTitle}>Rental Extension Request</Text>
-                      </View>
-                      <Text style={styles.extensionReviewSub}>
-                        Renter requested +{item.extension_days || 1} {(item.extension_days || 1) === 1 ? "day" : "days"} extension until {cleanDate(item.extended_end_date)}.
-                      </Text>
-                      <View style={styles.extensionInfoRow}>
-                        <Text style={styles.extensionInfoLabel}>Extra Fee Settled:</Text>
-                        <Text style={styles.extensionInfoVal}>₱{Number(item.extension_fee || 0).toLocaleString()}</Text>
-                      </View>
-                      <View style={styles.extensionInfoRow}>
-                        <Text style={styles.extensionInfoLabel}>Payment Method:</Text>
-                        <Text style={styles.extensionInfoVal}>{item.extension_payment_method?.toUpperCase() || "GCASH"}</Text>
-                      </View>
-                      <View style={styles.extensionInfoRow}>
-                        <Text style={styles.extensionInfoLabel}>Receipt Ref #:</Text>
-                        <Text style={[styles.extensionInfoVal, { fontFamily: FontFamily.bold, color: Colors.primary }]}>
-                          {item.extension_payment_reference || "Cash to Host"}
+                  {/* Compact Alert Pill (Rendered ONLY when actionable or notice is needed) */}
+                  {item.extension_status === "pending" ? (
+                    <View style={styles.alertPillWarning}>
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                          <Ionicons name="time" size={13} color="#D97706" />
+                          <Text style={styles.alertPillWarningTitle}>Extension Requested</Text>
+                        </View>
+                        <Text style={styles.alertPillWarningDesc}>
+                          +{item.extension_days || 1}d until {cleanDate(item.extension_end_date || item.extended_end_date)} • ₱{Number(item.extension_fee || item.extension_price || ((item.vehicle as any)?.price_per_day ? Number((item.vehicle as any).price_per_day) * (item.extension_days || 1) : 0)).toLocaleString()} extra
                         </Text>
                       </View>
-
-                      <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+                      <View style={{ flexDirection: "row", gap: 6 }}>
                         <TouchableOpacity
-                          style={styles.extensionDeclineBtn}
+                          style={styles.extensionMiniDeclineBtn}
                           onPress={() => handleRejectExtension(item.id)}
                           activeOpacity={0.8}
                         >
-                          <Text style={styles.extensionDeclineText}>Decline</Text>
+                          <Text style={styles.extensionMiniDeclineText}>Decline</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                          style={styles.extensionApproveBtn}
+                          style={styles.extensionMiniApproveBtn}
                           onPress={() => handleApproveExtension(item.id)}
                           activeOpacity={0.85}
                         >
-                          <Ionicons name="checkmark-circle" size={14} color={Colors.white} />
-                          <Text style={styles.extensionApproveText}>Approve Extension</Text>
+                          <Text style={styles.extensionMiniApproveText}>Agree</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
-                  )}
-
-                  {/* Pending Tab: Refund Required Box (Actionable immediately) */}
-                  {isRefundPending && (
-                    <View style={styles.refundRequiredBox}>
-                      <View style={styles.refundRequiredHeader}>
-                        <Ionicons name="alert-circle" size={15} color="#DC2626" />
-                        <Text style={styles.refundRequiredTitle}>
-                          Action Required: Refund ₱{Number(item.refund_amount || item.reservation_fee).toLocaleString()}
-                        </Text>
-                      </View>
-                      <Text style={styles.refundRequiredDesc}>
-                        This reservation was cancelled/declined. Please return the fee to the renter:
+                  ) : item.extension_status === "payment_required" ? (
+                    <View style={styles.alertPillInfo}>
+                      <Ionicons name="hourglass-outline" size={13} color="#D97706" />
+                      <Text style={styles.alertPillInfoText}>
+                        Extension agreed (+{item.extension_days || 1}d) • Awaiting renter GCash payment
                       </Text>
-                      <View style={styles.refundInfoRow}>
-                        <Text style={styles.refundInfoLabel}>Renter:</Text>
-                        <Text style={styles.refundInfoVal}>
-                          {item.renter_refund_account_name || renterName}
-                        </Text>
-                      </View>
-                      <View style={styles.refundInfoRow}>
-                        <Text style={styles.refundInfoLabel}>{item.renter_refund_method?.toUpperCase() || "GCASH"}:</Text>
-                        <Text style={styles.refundInfoValHighlight}>
-                          {item.renter_refund_account_number || item.renter?.phone_number || "N/A"}
-                        </Text>
-                      </View>
                     </View>
-                  )}
-
-                  {/* Collapsible Secondary Details Section */}
-                  {isExpanded && (
-                    <View style={styles.expandedDetailsSection}>
-                      {/* Trip Live Metrics Banner for Ongoing & Completed */}
-                      {(item.status === "trip_in_progress" || item.status === "return_pending" || item.status === "completed") && (
-                        <View style={styles.tripMetricsBanner}>
-                          <View style={styles.metricCol}>
-                            <Text style={styles.metricLabel}>START ODOMETER</Text>
-                            <Text style={styles.metricVal}>{item.start_mileage ? `${item.start_mileage.toLocaleString()} km` : "N/A"}</Text>
-                          </View>
-                          <View style={styles.metricDivider} />
-                          <View style={styles.metricCol}>
-                            <Text style={styles.metricLabel}>START FUEL</Text>
-                            <Text style={styles.metricVal}>{item.start_fuel_level !== undefined ? `${item.start_fuel_level}%` : "N/A"}</Text>
-                          </View>
-                          <View style={styles.metricDivider} />
-                          <View style={styles.metricCol}>
-                            <Text style={styles.metricLabel}>
-                              {isOngoingItem ? "RETURN DUE" : "TRIP STARTED"}
-                            </Text>
-                            <Text style={[styles.metricVal, isOngoingItem && { color: returnStatus.color }]}>
-                              {isOngoingItem
-                                ? `${returnDateInfo.month} ${returnDateInfo.day}`
-                                : item.actual_start_time ? formatDateTime(item.actual_start_time) : "Active"}
-                            </Text>
-                          </View>
-                        </View>
-                      )}
-
-                      {/* Completed Trip Distance & Final Amount in History */}
-                      {item.status === "completed" && (item.distance_traveled !== undefined || item.final_amount_due !== undefined) && (
-                        <View style={styles.completedSummaryBox}>
-                          <View style={styles.completedSummaryCol}>
-                            <Text style={styles.completedSummaryLabel}>DISTANCE TRAVELED</Text>
-                            <Text style={styles.completedSummaryVal}>
-                              {item.distance_traveled ? `${item.distance_traveled.toLocaleString()} km` : "N/A"}
-                            </Text>
-                          </View>
-                          <View style={styles.metricDivider} />
-                          <View style={styles.completedSummaryCol}>
-                            <Text style={styles.completedSummaryLabel}>FINAL SETTLED</Text>
-                            <Text style={[styles.completedSummaryVal, { color: "#059669" }]}>
-                              ₱{Number(item.final_amount_due || item.total_price).toLocaleString()}
-                            </Text>
-                          </View>
-                        </View>
-                      )}
-
-                      {/* Rental Schedule Range for Pending & Approved */}
-                      {(activeTab === "pending" || activeTab === "approved") && (
-                        <View style={styles.scheduleDetailRow}>
-                          <Ionicons name="calendar-outline" size={13} color={Colors.secondary} />
-                          <Text style={styles.scheduleDetailLabel}>Rental Period:</Text>
-                          <Text style={styles.scheduleDetailVal}>
-                            {cleanDate(item.start_date)} → {cleanDate(item.end_date)} ({item.total_days} d)
-                          </Text>
-                        </View>
-                      )}
-
-                      {/* Multi-Vehicle Rental & Designated Driver Notice */}
-                      {item.is_multi_vehicle_rental && (
-                        <View style={styles.multiCarOperatorBox}>
-                          <View style={styles.multiCarOperatorHeader}>
-                            <Ionicons name="shield-checkmark" size={14} color="#B45309" />
-                            <Text style={styles.multiCarOperatorTitle}>Concurrent Multi-Vehicle Rental</Text>
-                          </View>
-                          <Text style={styles.multiCarOperatorDesc}>
-                            Authorized driver designated for this unit:
-                          </Text>
-                          <View style={styles.secondaryDriverInfoRow}>
-                            <Ionicons name="person-outline" size={13} color="#92400E" />
-                            <Text style={styles.secondaryDriverInfoText}>
-                              {item.secondary_driver_name || "Designated Driver"} ({item.secondary_driver_phone || "No phone"})
-                            </Text>
-                          </View>
-                        </View>
-                      )}
-
-                      {/* Reference Number / Receipt Box */}
-                      {item.payment_reference && !isRefundPending ? (
-                        <View style={styles.receiptBox}>
-                          <Ionicons name="receipt-outline" size={14} color="#92400E" />
-                          <Text style={styles.receiptBoxLabel}>Payment Ref / Receipt:</Text>
-                          <Text style={styles.receiptBoxVal} numberOfLines={1}>
-                            {item.payment_reference}
-                          </Text>
-                        </View>
-                      ) : null}
-
-                      {/* Refund Completed Box */}
-                      {isRefundCompleted && (
-                        <View style={styles.refundCompletedBox}>
-                          <Ionicons name="checkmark-circle" size={15} color="#059669" />
-                          <Text style={styles.refundCompletedText}>
-                            Refund Completed: Ref #{item.refund_reference || "N/A"} (₱{Number(item.refund_amount || item.reservation_fee).toLocaleString()})
-                          </Text>
-                        </View>
-                      )}
-
-                      {/* Extension Approved Banner */}
-                      {item.extension_status === "approved" && (
-                        <View style={styles.extensionApprovedBox}>
-                          <Ionicons name="checkmark-circle" size={15} color={Colors.dark} />
-                          <Text style={styles.extensionApprovedText}>
-                            Trip Extended (+{item.extension_days || 1} d) until {cleanDate(item.end_date)} • Extra Fee: ₱{Number(item.extension_fee || 0).toLocaleString()}
-                          </Text>
-                        </View>
-                      )}
+                  ) : isRefundPending ? (
+                    <View style={styles.alertPillDanger}>
+                      <Ionicons name="alert-circle" size={13} color="#DC2626" />
+                      <Text style={styles.alertPillDangerText}>
+                        Refund Required: ₱{Number(item.refund_amount || item.reservation_fee).toLocaleString()} to {item.renter_refund_account_name || renterName}
+                      </Text>
                     </View>
-                  )}
+                  ) : isRefundCompleted ? (
+                    <View style={styles.alertPillSuccess}>
+                      <Ionicons name="checkmark-circle" size={13} color="#059669" />
+                      <Text style={styles.alertPillSuccessText}>
+                        Refund Completed: Ref #{item.refund_reference || "N/A"}
+                      </Text>
+                    </View>
+                  ) : null}
 
-                  {/* Progressive Disclosure Toggle Button */}
-                  <TouchableOpacity
-                    style={styles.detailsToggleBtn}
-                    onPress={() => toggleExpandCard(item.id)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.detailsToggleText}>
-                      {isExpanded ? "Hide Details" : "View Details"}
-                    </Text>
-                    <Ionicons
-                      name={isExpanded ? "chevron-up" : "chevron-down"}
-                      size={13}
-                      color={Colors.secondary}
-                    />
-                  </TouchableOpacity>
-
-                  {/* Actions Section */}
-                  {(item.status === "approved" || item.status === "awaiting_pickup" || item.status === "pickup_in_progress" || item.status === "ready_to_start") ? (
-                    <View style={styles.approvedActionsContainer}>
-                      {/* Top Utility Row: Chat & Mark No-Show */}
-                      <View style={styles.approvedSecondaryRow}>
-                        {item.renter?.id ? (
-                          <TouchableOpacity
-                            style={styles.approvedChatBtn}
-                            onPress={() =>
-                              router.push({
-                                pathname: `/chat/${item.renter.id}`,
-                                params: { name: renterName },
-                              } as any)
-                            }
-                            activeOpacity={0.75}
-                          >
-                            <Ionicons name="chatbubble-ellipses-outline" size={14} color={Colors.dark} />
-                            <Text style={styles.approvedChatBtnText}>Chat Renter</Text>
-                          </TouchableOpacity>
-                        ) : null}
-
-                        <TouchableOpacity
-                          style={styles.approvedNoShowBtn}
-                          onPress={() => handleStatusChange(item.id, "no_show")}
-                          activeOpacity={0.75}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        >
-                          <Ionicons name="person-remove-outline" size={14} color="#991B1B" />
-                          <Text style={styles.approvedNoShowBtnText}>Mark No-Show</Text>
-                        </TouchableOpacity>
-                      </View>
-
-                      {/* Prominent Full-Width Handover Action */}
+                  {/* Clean Dual Action Buttons */}
+                  <View style={styles.cardActionRow}>
+                    {item.renter?.id ? (
                       <TouchableOpacity
-                        style={styles.approvedStartTripBtn}
-                        onPress={() => openStartTripModal(item)}
+                        style={styles.outlineActionBtn}
+                        onPress={() =>
+                          router.push({
+                            pathname: `/chat/${item.renter.id}`,
+                            params: { name: renterName },
+                          } as any)
+                        }
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="chatbubble-ellipses-outline" size={14} color={Colors.dark} />
+                        <Text style={styles.outlineActionText}>Chat</Text>
+                      </TouchableOpacity>
+                    ) : null}
+
+                    {isRefundPending ? (
+                      <TouchableOpacity
+                        style={[styles.primaryActionBtn, { backgroundColor: "#991B1B" }]}
+                        onPress={() => openRefundModal(item)}
                         activeOpacity={0.85}
                       >
-                        <MaterialCommunityIcons name="car-key" size={17} color={Colors.white} />
-                        <Text style={styles.approvedStartTripBtnText}>Start Trip Handover</Text>
-                        <Ionicons name="arrow-forward" size={15} color={Colors.white} />
+                        <Ionicons name="cash-outline" size={15} color={Colors.white} />
+                        <Text style={[styles.primaryActionText, { color: Colors.white }]}>Submit Refund Proof</Text>
                       </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <View style={styles.dualActionRow}>
-                      {item.renter?.id && (
+                    ) : item.status === "pending_verification" ? (
+                      <View style={{ flexDirection: "row", gap: 8, flex: 1 }}>
                         <TouchableOpacity
-                          style={styles.outlineActionBtn}
+                          style={styles.dangerActionBtn}
+                          onPress={() => handleStatusChange(item.id, "rejected")}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.dangerActionText}>Decline</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.primaryActionBtn}
+                          onPress={() => setVerifyModalBooking(item)}
+                          activeOpacity={0.85}
+                        >
+                          <Ionicons name="shield-checkmark" size={14} color={Colors.white} />
+                          <Text style={styles.primaryActionText}>Verify & Approve</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (item.status === "approved" || item.status === "awaiting_pickup" || item.status === "pickup_in_progress" || item.status === "ready_to_start") ? (
+                      <View style={{ flexDirection: "row", gap: 8, flex: 1 }}>
+                        <TouchableOpacity
+                          style={styles.subtleActionBtn}
+                          onPress={() => handleStatusChange(item.id, "no_show")}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="person-remove-outline" size={13} color="#991B1B" />
+                          <Text style={styles.subtleActionText}>No-Show</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.primaryActionBtn}
+                          onPress={() => openStartTripModal(item)}
+                          activeOpacity={0.85}
+                        >
+                          <MaterialCommunityIcons name="car-key" size={16} color={Colors.white} />
+                          <Text style={styles.primaryActionText}>Start Handover</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : isOngoingItem ? (
+                      <View style={{ flexDirection: "row", gap: 8, flex: 1 }}>
+                        <TouchableOpacity
+                          style={styles.gpsActionBtn}
                           onPress={() =>
                             router.push({
-                              pathname: `/chat/${item.renter.id}`,
-                              params: { name: renterName },
+                              pathname: "/live-tracking",
+                              params: {
+                                bookingId: item.id.toString(),
+                                vehicleName: item.vehicle?.name || "Vehicle",
+                                renterName: renterName,
+                              },
                             } as any)
                           }
                           activeOpacity={0.8}
                         >
-                          <Ionicons name="chatbubble-ellipses-outline" size={14} color={Colors.dark} />
-                          <Text style={styles.outlineActionText}>Chat</Text>
+                          <Ionicons name="navigate-circle" size={15} color={Colors.dark} />
+                          <Text style={styles.gpsActionText}>Live GPS</Text>
                         </TouchableOpacity>
-                      )}
 
-                      {isRefundPending ? (
                         <TouchableOpacity
-                          style={[styles.primaryActionBtn, { backgroundColor: "#991B1B" }]}
-                          onPress={() => openRefundModal(item)}
+                          style={styles.primaryActionBtn}
+                          onPress={() => openReturnTripModal(item)}
                           activeOpacity={0.85}
                         >
-                          <Ionicons name="cash-outline" size={15} color={Colors.white} />
-                          <Text style={[styles.primaryActionText, { color: Colors.white }]}>Submit Refund Proof</Text>
+                          <Ionicons name="clipboard-outline" size={15} color={Colors.white} />
+                          <Text style={styles.primaryActionText}>Return Check</Text>
                         </TouchableOpacity>
-                      ) : item.status === "pending_verification" ? (
-                        <View style={{ flexDirection: "row", gap: 8, flex: 1 }}>
+                      </View>
+                    ) : (item.status === "completed" || item.status === "rejected" || item.status === "cancelled" || item.status === "no_show") ? (
+                      <View style={{ flexDirection: "row", gap: 8, flex: 1, justifyContent: "flex-end" }}>
+                        {item.refund_status !== "pending" && item.payment_status !== "refund_pending" ? (
                           <TouchableOpacity
-                            style={styles.dangerActionBtn}
-                            onPress={() => handleStatusChange(item.id, "rejected")}
-                            activeOpacity={0.7}
+                            style={styles.dangerOutlineActionBtn}
+                            onPress={() => handleDeleteHistoryBooking(item)}
+                            activeOpacity={0.75}
                           >
-                            <Text style={styles.dangerActionText}>Decline</Text>
+                            <Ionicons name="trash-outline" size={14} color="#DC2626" />
+                            <Text style={styles.dangerOutlineActionText}>Delete Record</Text>
                           </TouchableOpacity>
-
-                          <TouchableOpacity
-                            style={styles.primaryActionBtn}
-                            onPress={() => setVerifyModalBooking(item)}
-                            activeOpacity={0.85}
-                          >
-                            <Ionicons name="shield-checkmark" size={14} color={Colors.white} />
-                            <Text style={styles.primaryActionText}>Verify & Approve</Text>
-                          </TouchableOpacity>
-                        </View>
-                      ) : (item.status === "trip_in_progress" || item.status === "return_pending" || item.status === "ongoing") ? (
-                        <View style={{ flexDirection: "row", gap: 8, flex: 1 }}>
-                          <TouchableOpacity
-                            style={styles.gpsActionBtn}
-                            onPress={() =>
-                              router.push({
-                                pathname: "/live-tracking",
-                                params: {
-                                  bookingId: item.id.toString(),
-                                  vehicleName: item.vehicle?.name || "Vehicle",
-                                  renterName: renterName,
-                                },
-                              } as any)
-                            }
-                            activeOpacity={0.8}
-                          >
-                            <Ionicons name="navigate-circle" size={15} color={Colors.dark} />
-                            <Text style={styles.gpsActionText}>Live GPS</Text>
-                          </TouchableOpacity>
-
-                          <TouchableOpacity
-                            style={styles.primaryActionBtn}
-                            onPress={() => openReturnTripModal(item)}
-                            activeOpacity={0.85}
-                          >
-                            <Ionicons name="clipboard-outline" size={15} color={Colors.white} />
-                            <Text style={styles.primaryActionText}>Return Check</Text>
-                          </TouchableOpacity>
-                        </View>
-                      ) : null}
-                    </View>
-                  )}
+                        ) : null}
+                      </View>
+                    ) : null}
+                  </View>
                 </View>
               );
             }}
@@ -2398,9 +2280,11 @@ const styles = StyleSheet.create({
   tabItem: {
     flex: 1,
     paddingVertical: 8,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 11,
+    gap: 4,
   },
   tabItemActive: {
     backgroundColor: Colors.white,
@@ -2418,6 +2302,50 @@ const styles = StyleSheet.create({
   tabItemTextActive: {
     fontFamily: FontFamily.bold,
     color: Colors.dark,
+  },
+  tabIndicatorDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.primary,
+  },
+  tabIndicatorDotPending: {
+    backgroundColor: "#F59E0B",
+  },
+  tabIndicatorDotActive: {
+    backgroundColor: Colors.primary,
+  },
+  dangerOutlineActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 9,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  dangerOutlineActionText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 11.5,
+    color: "#DC2626",
+  },
+  refundableBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#FFFBEB",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+  refundableBadgeText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 11,
+    color: "#B45309",
   },
   ongoingSummaryCard: {
     backgroundColor: Colors.white,
@@ -2516,114 +2444,242 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
-  cardMainRow: {
+  cardHeaderRow: {
     flexDirection: "row",
-    alignItems: "center",
     gap: 12,
-  },
-  dateBadge: {
-    width: 48,
-    minHeight: 52,
-    paddingVertical: 3,
-    borderRadius: 12,
-    backgroundColor: Colors.logoBackground,
-    borderWidth: 1,
-    borderColor: "#FDE68A",
     alignItems: "center",
-    justifyContent: "center",
   },
-  dateBadgeTag: {
-    fontFamily: FontFamily.bold,
-    fontSize: 7.5,
-    letterSpacing: 0.5,
-    marginBottom: 0,
+  cardImageThumb: {
+    width: 68,
+    height: 68,
+    borderRadius: 12,
+    backgroundColor: "#F1F5F9",
   },
-  dateBadgeMonth: {
-    fontFamily: FontFamily.bold,
-    fontSize: 9.5,
-    color: "#B45309",
-    letterSpacing: 0.5,
-  },
-  dateBadgeDay: {
-    fontFamily: FontFamily.bold,
-    fontSize: 16,
-    color: Colors.dark,
-    marginTop: -1,
-  },
-  cardCenterInfo: {
+  cardHeaderInfo: {
     flex: 1,
+    justifyContent: "center",
+    minWidth: 0,
   },
-  hostRow: {
+  renterBadgeRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    marginBottom: 2,
+    marginBottom: 3,
   },
-  hostNameText: {
+  renterBadgeText: {
     fontFamily: FontFamily.medium,
     fontSize: 11,
     color: Colors.secondary,
+    flexShrink: 1,
   },
   vehicleTitle: {
     fontFamily: FontFamily.bold,
-    fontSize: 14.5,
+    fontSize: 15,
     color: Colors.dark,
-    marginBottom: 2,
+    letterSpacing: -0.2,
+    marginBottom: 3,
   },
-  specsSubText: {
+  datesRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  datesText: {
     fontFamily: FontFamily.medium,
-    fontSize: 12,
-    color: Colors.dark,
-  },
-  ongoingReturnQuickRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: 3,
-  },
-  ongoingReturnQuickText: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: 11,
-  },
-  approvedPickupQuickRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: 3,
-  },
-  approvedPickupQuickText: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: 11,
-    color: "#B45309",
-  },
-  cardRightCol: {
-    alignItems: "flex-end",
-    gap: 6,
+    fontSize: 11.5,
+    color: "#64748B",
   },
   statusPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 4,
     borderRadius: 8,
+    alignSelf: "flex-start",
   },
   statusPillText: {
     fontFamily: FontFamily.bold,
-    fontSize: 10.5,
+    fontSize: 10,
+    letterSpacing: 0.2,
   },
-  vehicleThumbMini: {
-    width: 48,
-    height: 34,
+  // Concise Metric Strip
+  cardMetaStrip: {
+    flexDirection: "row",
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginTop: 10,
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  metaCol: {
+    flex: 1,
+  },
+  metaLabel: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 9,
+    color: "#94A3B8",
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  metaValue: {
+    fontFamily: FontFamily.bold,
+    fontSize: 13,
+    color: Colors.dark,
+  },
+  metaDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: "#E2E8F0",
+    marginHorizontal: 12,
+  },
+  // Compact Alert Pills
+  alertPillWarning: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#FFFBEB",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
     borderRadius: 8,
-    backgroundColor: Colors.inputBackground,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: 10,
+    gap: 8,
   },
-  approvedActionsContainer: {
-    marginTop: 12,
+  alertPillWarningTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 11.5,
+    color: "#92400E",
+  },
+  alertPillWarningDesc: {
+    fontFamily: FontFamily.medium,
+    fontSize: 10.5,
+    color: "#B45309",
+    marginTop: 1,
+  },
+  extensionMiniDeclineBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FEE2E2",
+  },
+  extensionMiniDeclineText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 10.5,
+    color: "#991B1B",
+  },
+  extensionMiniApproveBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: Colors.primary,
+  },
+  extensionMiniApproveText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 10.5,
+    color: Colors.white,
+  },
+  alertPillInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#FFFBEB",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    marginTop: 8,
+  },
+  alertPillInfoText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 11,
+    color: "#B45309",
+    flex: 1,
+  },
+  alertPillDanger: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    marginTop: 8,
+  },
+  alertPillDangerText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 11,
+    color: "#B91C1C",
+    flex: 1,
+  },
+  alertPillSuccess: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    marginTop: 8,
+  },
+  alertPillSuccessText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 11,
+    color: "#047857",
+    flex: 1,
+  },
+  cardActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 10,
     paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: "#F1F5F9",
-    gap: 8,
+  },
+  subtleActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FEE2E2",
+  },
+  subtleActionText: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 11.5,
+    color: "#991B1B",
+  },
+  dangerOutlineActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+    backgroundColor: "#FEF2F2",
+  },
+  dangerOutlineActionText: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 11,
+    color: "#DC2626",
   },
   approvedSecondaryRow: {
     flexDirection: "row",

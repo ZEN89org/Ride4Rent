@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { router } from "expo-router";
 import {
   Animated,
+  BackHandler,
   Pressable,
   StyleSheet,
   Text,
@@ -19,7 +21,7 @@ import {
   useSideNav,
 } from "@/context/SideNavContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type SideNavProps = {
   user?: any;
@@ -38,6 +40,16 @@ export default function SideNav({
 
   const { logout } = useAuth();
   const [loggingOut, setLoggingOut] = useState(false);
+
+  useEffect(() => {
+    if (!isVisible) return;
+    const onBackPress = () => {
+      closeSideNav();
+      return true;
+    };
+    const sub = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+    return () => sub.remove();
+  }, [isVisible, closeSideNav]);
 
   if (!isVisible) {
     return null;
@@ -121,7 +133,7 @@ export default function SideNav({
 
         await logout();
 
-        router.replace("/");
+        router.replace("/auth");
       } catch (error) {
         console.log("LOGOUT ERROR:", error);
         setLoggingOut(false);
@@ -292,8 +304,8 @@ export default function SideNav({
             />
 
             <MenuItem
-              icon="information-circle-outline"
-              label="About"
+              imageSource={require("@/assets/images/applogo.png")}
+              label="About Ride4Rent"
               onPress={
                 handleAboutPress
               }
@@ -405,13 +417,15 @@ export default function SideNav({
 }
 
 type MenuItemProps = {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon?: keyof typeof Ionicons.glyphMap;
+  imageSource?: any;
   label: string;
   onPress: () => void;
 };
 
 function MenuItem({
   icon,
+  imageSource,
   label,
   onPress,
 }: MenuItemProps) {
@@ -423,11 +437,19 @@ function MenuItem({
       <View
         style={styles.menuIcon}
       >
-        <Ionicons
-          name={icon}
-          size={21}
-          color={Colors.dark}
-        />
+        {imageSource ? (
+          <Image
+            source={imageSource}
+            style={{ width: 22, height: 22, borderRadius: 5 }}
+            contentFit="contain"
+          />
+        ) : (
+          <Ionicons
+            name={icon!}
+            size={21}
+            color={Colors.dark}
+          />
+        )}
       </View>
 
       <Text

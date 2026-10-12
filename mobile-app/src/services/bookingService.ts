@@ -67,7 +67,7 @@ export interface Booking {
   extended_end_date?: string;
   extension_price?: number;
   extension_fee?: number;
-  extension_status?: "pending" | "approved" | "rejected";
+  extension_status?: "pending" | "payment_required" | "approved" | "rejected";
   extension_payment_method?: string;
   extension_payment_reference?: string;
   extension_requested_at?: string;
@@ -240,14 +240,19 @@ export const requestBookingExtension = async (
   data: {
     extension_end_date?: string;
     extended_end_date?: string;
-    extension_payment_method: string;
+    extension_days?: number;
+    extension_notes?: string;
+    extension_payment_method?: string;
     extension_payment_reference?: string;
   }
 ): Promise<Booking> => {
   const payload = {
     extension_end_date: data.extension_end_date || data.extended_end_date,
-    extension_payment_method: data.extension_payment_method,
-    extension_payment_reference: data.extension_payment_reference || "",
+    extended_end_date: data.extended_end_date || data.extension_end_date,
+    extension_days: data.extension_days,
+    extension_notes: data.extension_notes,
+    extension_payment_method: data.extension_payment_method || "gcash",
+    extension_payment_reference: data.extension_payment_reference || "0000000000000",
   };
   const response = await api.post(`/bookings/${bookingId}/request-extension`, payload);
   return response.data.data;
@@ -260,6 +265,17 @@ export const approveBookingExtension = async (bookingId: number | string): Promi
 
 export const rejectBookingExtension = async (bookingId: number | string): Promise<Booking> => {
   const response = await api.post(`/bookings/${bookingId}/reject-extension`);
+  return response.data.data;
+};
+
+export const settleBookingExtensionPayment = async (
+  bookingId: number | string,
+  data: {
+    payment_method: string;
+    payment_reference: string;
+  }
+): Promise<Booking> => {
+  const response = await api.post(`/bookings/${bookingId}/settle-extension-payment`, data);
   return response.data.data;
 };
 

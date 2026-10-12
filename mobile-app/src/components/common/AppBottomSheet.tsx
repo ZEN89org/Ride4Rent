@@ -41,6 +41,8 @@ export type AppBottomSheetProps = {
   avoidKeyboard?: boolean;
   /** Optional title heading displayed below the handle */
   title?: string;
+  /** When true, renders as an absolute overlay View instead of a native Android Dialog/Modal to prevent nested modal conflicts. */
+  renderAsOverlay?: boolean;
 };
 
 /**
@@ -61,6 +63,7 @@ export function AppBottomSheet({
   position = "bottom",
   avoidKeyboard = true,
   title,
+  renderAsOverlay = false,
 }: AppBottomSheetProps) {
   const insets = useSafeAreaInsets();
   const [mounted, setMounted] = useState(visible);
@@ -188,7 +191,7 @@ export function AppBottomSheet({
   const WrapperComponent = avoidKeyboard ? KeyboardAvoidingView : View;
   const wrapperProps = avoidKeyboard
     ? {
-        behavior: (Platform.OS === "ios" ? "padding" : "height") as any,
+        behavior: (Platform.OS === "ios" ? "padding" : undefined) as any,
         keyboardVerticalOffset: Platform.OS === "ios" ? 10 : 0,
         style: [
           styles.keyboardLayer,
@@ -202,6 +205,53 @@ export function AppBottomSheet({
         ],
       };
 
+  const sheetContent = (
+    <View style={styles.root}>
+      {/* Animated backdrop with smooth opacity */}
+      <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={dismissOnBackdrop ? onClose : undefined}
+        />
+      </Animated.View>
+
+      <WrapperComponent pointerEvents="box-none" {...(wrapperProps as any)}>
+        <Animated.View
+          style={[
+            position === "center" ? styles.dialog : styles.sheet,
+            position === "bottom" && {
+              paddingBottom: Math.max(insets.bottom, 16) + 8,
+              transform: [{ translateY: sheetTranslateY }],
+            },
+            position === "center" && {
+              opacity: sheetOpacity,
+              transform: [{ scale: sheetScale }],
+            },
+            sheetStyle,
+          ]}
+        >
+          {/* Grab handle for bottom sheet with touch responder */}
+          {showHandle && position === "bottom" ? (
+            <View style={styles.handleContainer} {...(panResponder ? panResponder.panHandlers : {})}>
+              <View style={styles.handle} />
+            </View>
+          ) : null}
+
+          {title ? <Text style={styles.sheetTitle}>{title}</Text> : null}
+          {children}
+        </Animated.View>
+      </WrapperComponent>
+    </View>
+  );
+
+  if (renderAsOverlay) {
+    return (
+      <View style={[StyleSheet.absoluteFill, { zIndex: 9999, elevation: 9999 }]} pointerEvents="box-none">
+        {sheetContent}
+      </View>
+    );
+  }
+
   return (
     <Modal
       visible
@@ -211,42 +261,7 @@ export function AppBottomSheet({
       navigationBarTranslucent
       onRequestClose={onClose}
     >
-      <View style={styles.root}>
-        {/* Animated backdrop with smooth opacity */}
-        <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            onPress={dismissOnBackdrop ? onClose : undefined}
-          />
-        </Animated.View>
-
-        <WrapperComponent pointerEvents="box-none" {...(wrapperProps as any)}>
-          <Animated.View
-            style={[
-              position === "center" ? styles.dialog : styles.sheet,
-              position === "bottom" && {
-                paddingBottom: Math.max(insets.bottom, 16) + 8,
-                transform: [{ translateY: sheetTranslateY }],
-              },
-              position === "center" && {
-                opacity: sheetOpacity,
-                transform: [{ scale: sheetScale }],
-              },
-              sheetStyle,
-            ]}
-          >
-            {/* Grab handle for bottom sheet with touch responder */}
-            {showHandle && position === "bottom" ? (
-              <View style={styles.handleContainer} {...(panResponder ? panResponder.panHandlers : {})}>
-                <View style={styles.handle} />
-              </View>
-            ) : null}
-
-            {title ? <Text style={styles.sheetTitle}>{title}</Text> : null}
-            {children}
-          </Animated.View>
-        </WrapperComponent>
-      </View>
+      {sheetContent}
     </Modal>
   );
 }

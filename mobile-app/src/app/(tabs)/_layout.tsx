@@ -2,26 +2,25 @@ import CustomTabBar from "@/components/navigation/CustomTabBar";
 import SideNav from "@/components/navigation/SideNav";
 import {
   SIDE_NAV_WIDTH,
-  SideNavProvider,
   useSideNav,
 } from "@/context/SideNavContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import AssistantModal from "@/features/assistant/components/AssistantModal";
 import FloatingAssistantFab from "@/features/assistant/components/FloatingAssistantFab";
-import { Tabs } from "expo-router";
+import { Tabs, router } from "expo-router";
 import {
   Animated,
+  BackHandler,
   StyleSheet,
   View,
 } from "react-native";
-
 import { useEffect, useState } from "react";
-import { router } from "expo-router";
 
-function TabsContent() {
+export default function TabsLayout() {
   const {
     isVisible,
     animation,
+    closeSideNav,
   } = useSideNav();
 
   const {
@@ -33,6 +32,25 @@ function TabsContent() {
   const [assistantVisible, setAssistantVisible] = useState(false);
 
   useEffect(() => {
+    const onBackPress = () => {
+      if (isVisible) {
+        closeSideNav();
+        return true;
+      }
+      // Intercept hardware back press: navigate to home tab and prevent popping root stack to index or auth
+      router.navigate("/(tabs)/home" as any);
+      return true;
+    };
+
+    const backSub = BackHandler.addEventListener(
+      "hardwareBackPress",
+      onBackPress
+    );
+
+    return () => backSub.remove();
+  }, [isVisible, closeSideNav]);
+
+  useEffect(() => {
     if (!loading && user?.role === "operator") {
       if (user.account_status === "rejected") {
         router.replace("/operator-rejected");
@@ -41,10 +59,6 @@ function TabsContent() {
       }
     }
   }, [user, loading]);
-
-  if (!loading && user?.role === "operator") {
-    return null;
-  }
 
   const appTranslateX =
     animation.interpolate({
@@ -139,14 +153,6 @@ function TabsContent() {
         />
       )}
     </View>
-  );
-}
-
-export default function TabsLayout() {
-  return (
-    <SideNavProvider>
-      <TabsContent />
-    </SideNavProvider>
   );
 }
 

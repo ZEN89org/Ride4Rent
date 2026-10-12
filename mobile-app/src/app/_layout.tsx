@@ -13,6 +13,7 @@ import { AuthProvider } from "../features/auth/context/AuthContext";
 import { FavoritesProvider } from "../context/FavoritesContext";
 import { ToastProvider } from "../context/ToastContext";
 import { NotificationProvider } from "../context/NotificationContext";
+import { SideNavProvider } from "../context/SideNavContext";
 import { Colors } from "../constants/colors";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -34,32 +35,34 @@ export default function RootLayout() {
       <NotificationProvider>
         <ToastProvider>
           <FavoritesProvider>
-            {Platform.OS === "android" && (
-              <RNStatusBar
-                translucent
-                backgroundColor="transparent"
-                barStyle="dark-content"
-              />
-            )}
-            <ExpoStatusBar style="dark" />
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                // Simple and smooth fade animation (no horizontal slide)
-                animation: "fade",
-                animationDuration: 200,
-                gestureEnabled: true,
-                contentStyle: { backgroundColor: "#FFFFFF" },
-              }}
-            >
-              <Stack.Screen name="index" />
-              <Stack.Screen name="onboarding" />
-              <Stack.Screen name="landing" />
-              <Stack.Screen name="auth" />
-              <Stack.Screen name="login" options={{ contentStyle: { backgroundColor: Colors.primary } }} />
-              <Stack.Screen name="register" />
-              <Stack.Screen name="(tabs)" />
-            </Stack>
+            <SideNavProvider>
+              {Platform.OS === "android" && (
+                <RNStatusBar
+                  translucent
+                  backgroundColor="transparent"
+                  barStyle="dark-content"
+                />
+              )}
+              <ExpoStatusBar style="dark" />
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  // Simple and smooth fade animation (no horizontal slide)
+                  animation: "fade",
+                  animationDuration: 200,
+                  gestureEnabled: true,
+                  contentStyle: { backgroundColor: "#FFFFFF" },
+                }}
+              >
+                <Stack.Screen name="index" />
+                <Stack.Screen name="onboarding" />
+                <Stack.Screen name="landing" />
+                <Stack.Screen name="auth" />
+                <Stack.Screen name="login" options={{ contentStyle: { backgroundColor: Colors.primary } }} />
+                <Stack.Screen name="register" />
+                <Stack.Screen name="(tabs)" options={{ gestureEnabled: false }} />
+              </Stack>
+            </SideNavProvider>
           </FavoritesProvider>
         </ToastProvider>
       </NotificationProvider>

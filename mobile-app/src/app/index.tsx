@@ -17,7 +17,7 @@ export default function Index() {
     SplashScreen.hideAsync().catch(() => {});
 
     const initialize = async () => {
-      const minSplashTime = new Promise((resolve) => setTimeout(resolve, 5000));
+      const minSplashTime = new Promise((resolve) => setTimeout(resolve, 600));
 
       try {
         const [firstLaunch] = await Promise.all([

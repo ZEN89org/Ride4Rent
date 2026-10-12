@@ -87,53 +87,41 @@ export function AppToast({
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      statusBarTranslucent
-      navigationBarTranslucent
-      onRequestClose={handleDismiss}
-    >
-      <View style={styles.modalOverlay} pointerEvents="box-none">
-        <Animated.View
-          style={[
-            styles.container,
-            {
-              transform: [{ translateY }],
-              opacity,
-            },
-          ]}
-        >
-          <View style={styles.iconWrap}>{getIcon()}</View>
-          <View style={styles.textWrap}>
-            <Text style={styles.title}>{title}</Text>
-            {message ? <Text style={styles.message}>{message}</Text> : null}
-          </View>
-          <TouchableOpacity onPress={handleDismiss} style={styles.closeBtn}>
-            <Ionicons name="close" size={18} color={Colors.secondary} />
-          </TouchableOpacity>
-        </Animated.View>
-      </View>
-    </Modal>
+    <View style={styles.modalOverlay} pointerEvents="box-none">
+      <Animated.View
+        pointerEvents="auto"
+        style={[
+          styles.container,
+          {
+            transform: [{ translateY }],
+            opacity,
+          },
+        ]}
+      >
+        <View style={styles.iconWrap}>{getIcon()}</View>
+        <View style={styles.textWrap}>
+          <Text style={styles.title}>{title}</Text>
+          {message ? <Text style={styles.message}>{message}</Text> : null}
+        </View>
+        <TouchableOpacity onPress={handleDismiss} style={styles.closeBtn}>
+          <Ionicons name="close" size={18} color={Colors.secondary} />
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   modalOverlay: {
     position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 999999,
-  },
-  container: {
-    position: "absolute",
     top: 50,
     left: 20,
     right: 20,
     zIndex: 999999,
+    elevation: 999999,
+  },
+  container: {
+    width: "100%",
     backgroundColor: Colors.white,
     borderRadius: 16,
     padding: Spacing.md,

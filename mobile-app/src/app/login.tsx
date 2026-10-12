@@ -131,6 +131,8 @@ export default function Login() {
 
       await signIn(loggedInUser, loggedInToken);
 
+      router.dismissAll();
+
       if (loggedInUser.role === "operator") {
         if (loggedInUser.account_status === "rejected") {
           router.replace("/operator-rejected");

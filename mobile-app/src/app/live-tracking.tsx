@@ -497,6 +497,7 @@ export default function LiveTrackingScreen() {
   return (
     <View style={styles.container}>
       {/* Top Header Bar matching Current Location screen */}
+      {/* Streamlined Compact Header (Single Row for Maximum Map Space) */}
       <View style={[styles.header, { paddingTop: Math.max(insets.top + 8, 48) }]}>
         <View style={styles.headerTopRow}>
           <TouchableOpacity
@@ -507,66 +508,52 @@ export default function LiveTrackingScreen() {
             <Ionicons name="arrow-back" size={20} color={Colors.dark} />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.recenterHeaderBtn}
-            onPress={handleRecenter}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="locate" size={19} color={Colors.dark} />
-          </TouchableOpacity>
-        </View>
+          <View style={styles.headerTitleWrap}>
+            <Text style={styles.title} numberOfLines={1}>{screenTitle}</Text>
+          </View>
 
-        <Text style={styles.title}>{screenTitle}</Text>
-
-        <Text style={styles.description}>
-          {isPickupView
-            ? vehicleName
-              ? `Official garage & meetup location for ${vehicleName}.`
-              : "Official garage & meetup location designated by the host."
-            : `Live GPS telemetry for ${vehicleName}.`}
-        </Text>
-
-        {/* Street and Satellite view toggle under title and submessage (identical to current-location) */}
-        <View style={styles.layerSelector}>
-          <TouchableOpacity
-            style={[styles.layerButton, activeLayer === "streets" && styles.layerButtonActive]}
-            onPress={() => handleLayerSwitch("streets")}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name="map"
-              size={13}
-              color={activeLayer === "streets" ? Colors.white : Colors.secondary}
-            />
-            <Text
-              style={[
-                styles.layerButtonText,
-                activeLayer === "streets" && styles.layerButtonTextActive,
-              ]}
+          {/* Streets and Satellite layer selector */}
+          <View style={styles.layerSelector}>
+            <TouchableOpacity
+              style={[styles.layerButton, activeLayer === "streets" && styles.layerButtonActive]}
+              onPress={() => handleLayerSwitch("streets")}
+              activeOpacity={0.8}
             >
-              Streets
-            </Text>
-          </TouchableOpacity>
+              <Ionicons
+                name="map"
+                size={12}
+                color={activeLayer === "streets" ? Colors.white : Colors.secondary}
+              />
+              <Text
+                style={[
+                  styles.layerButtonText,
+                  activeLayer === "streets" && styles.layerButtonTextActive,
+                ]}
+              >
+                Map
+              </Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.layerButton, activeLayer === "satellite" && styles.layerButtonActive]}
-            onPress={() => handleLayerSwitch("satellite")}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name="earth"
-              size={13}
-              color={activeLayer === "satellite" ? Colors.white : Colors.secondary}
-            />
-            <Text
-              style={[
-                styles.layerButtonText,
-                activeLayer === "satellite" && styles.layerButtonTextActive,
-              ]}
+            <TouchableOpacity
+              style={[styles.layerButton, activeLayer === "satellite" && styles.layerButtonActive]}
+              onPress={() => handleLayerSwitch("satellite")}
+              activeOpacity={0.8}
             >
-              Satellite
-            </Text>
-          </TouchableOpacity>
+              <Ionicons
+                name="earth"
+                size={12}
+                color={activeLayer === "satellite" ? Colors.white : Colors.secondary}
+              />
+              <Text
+                style={[
+                  styles.layerButtonText,
+                  activeLayer === "satellite" && styles.layerButtonTextActive,
+                ]}
+              >
+                Satellite
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -599,15 +586,6 @@ export default function LiveTrackingScreen() {
           />
         )}
 
-        {/* Floating instruction helper on map */}
-        <View pointerEvents="none" style={styles.mapInstruction}>
-          <Text style={styles.mapInstructionText}>
-            {isPickupView
-              ? "Official garage & pickup base on map"
-              : "Live vehicle location on map"}
-          </Text>
-        </View>
-
         {/* Live Telemetry Speed Badge (only for active GPS tracking) */}
         {!isPickupView && (
           <View style={styles.floatingSpeedBadge}>
@@ -624,7 +602,7 @@ export default function LiveTrackingScreen() {
           </View>
         )}
 
-        {/* Floating Recenter Button matching current-location */}
+        {/* Floating Recenter Button */}
         <TouchableOpacity
           activeOpacity={0.8}
           style={styles.myLocationButton}
@@ -636,13 +614,13 @@ export default function LiveTrackingScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Bottom Sheet matching Current Location screen */}
+      {/* Bottom Sheet without duplicate messages */}
       <View style={[styles.bottomSheet, { paddingBottom: Math.max(insets.bottom + 12, Spacing.xl) }]}>
         <View style={styles.sheetHandle} />
 
         <View style={styles.sheetTitleRow}>
           <Text style={styles.locationTitle}>
-            {isPickupView ? "Pickup & Meetup Location" : "Current Vehicle Location"}
+            {isPickupView ? "Pickup Location" : "Current Vehicle Location"}
           </Text>
 
           {!isPickupView && trackingData?.last_updated_human && (
@@ -651,14 +629,6 @@ export default function LiveTrackingScreen() {
         </View>
 
         <Text style={styles.addressText}>{getSingleParagraphAddress()}</Text>
-
-        {isPickupView ? (
-          <Text style={styles.locationText}>
-            {vehicleName
-              ? `Official garage base for ${vehicleName} • Oriental Mindoro`
-              : "Official garage and handover point"}
-          </Text>
-        ) : null}
 
         {isPickupView ? (
           <TouchableOpacity
@@ -681,30 +651,25 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
   },
   header: {
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    paddingBottom: Spacing.xs,
     backgroundColor: Colors.white,
   },
   headerTopRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: Spacing.sm,
+    gap: 8,
+    marginBottom: 4,
+  },
+  headerTitleWrap: {
+    flex: 1,
+    paddingHorizontal: 4,
   },
   backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "#F8FAFC",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  recenterHeaderBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: "#F8FAFC",
     alignItems: "center",
     justifyContent: "center",
@@ -713,31 +678,23 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: FontFamily.bold,
-    fontSize: FontSize.heading,
+    fontSize: 16,
     color: Colors.dark,
-  },
-  description: {
-    marginTop: Spacing.xs,
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.body,
-    color: Colors.secondary,
-    lineHeight: 22,
   },
   layerSelector: {
     flexDirection: "row",
     backgroundColor: "#F1F5F9",
     borderRadius: Radius.full,
-    padding: 3,
-    marginTop: Spacing.sm,
-    alignSelf: "flex-start",
-    gap: 4,
+    padding: 2.5,
+    alignSelf: "center",
+    gap: 2,
   },
   layerButton: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 4,
     paddingVertical: 5,
-    paddingHorizontal: 11,
+    paddingHorizontal: 9,
     borderRadius: Radius.full,
   },
   layerButtonActive: {
@@ -745,7 +702,7 @@ const styles = StyleSheet.create({
   },
   layerButtonText: {
     fontFamily: FontFamily.semiBold,
-    fontSize: 11.5,
+    fontSize: 11,
     color: Colors.secondary,
   },
   layerButtonTextActive: {

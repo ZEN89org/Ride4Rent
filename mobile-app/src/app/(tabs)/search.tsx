@@ -52,6 +52,10 @@ export default function Search() {
     loadVehicles();
   }, []);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedCategory, sortOption]);
+
   const loadVehicles = async () => {
     try {
       setLoading(true);
@@ -84,10 +88,6 @@ export default function Search() {
   } else if (sortOption === "Price: High to Low") {
     filteredVehicles = [...filteredVehicles].sort((a, b) => Number(b.price_per_day) - Number(a.price_per_day));
   }
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, selectedCategory, sortOption]);
 
   const totalItems = filteredVehicles.length;
   const paginatedVehicles = filteredVehicles.slice(

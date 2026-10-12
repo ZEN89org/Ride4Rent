@@ -381,6 +381,24 @@ export default function OperatorShell({
                     <Text style={styles.menuLabel}>Contact Support</Text>
                     <Ionicons name="chevron-forward" size={17} color={Colors.secondary} />
                   </Pressable>
+
+                  <Pressable
+                    style={styles.menuItem}
+                    onPress={() => {
+                      closeMenu();
+                      router.push("/about" as any);
+                    }}
+                  >
+                    <View style={styles.menuIcon}>
+                      <Image
+                        source={require("@/assets/images/applogo.png")}
+                        style={{ width: 22, height: 22, borderRadius: 5 }}
+                        contentFit="contain"
+                      />
+                    </View>
+                    <Text style={styles.menuLabel}>About Ride4Rent</Text>
+                    <Ionicons name="chevron-forward" size={17} color={Colors.secondary} />
+                  </Pressable>
                 </View>
 
                 {/* Logout Button */}

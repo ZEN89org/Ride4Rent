@@ -102,20 +102,10 @@ export default function Favorites() {
           </View>
         ) : favoriteVehicles.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconCircle}>
-              <Ionicons name="heart-dislike-outline" size={40} color={Colors.secondary} />
-            </View>
-            <Text style={styles.emptyTitle}>Your Wishlist is Empty</Text>
+            <Text style={styles.emptyTitle}>No Saved Vehicles Yet</Text>
             <Text style={styles.emptySubtitle}>
-              Tap the heart icon on any vehicle to save it for quick booking anytime.
+              Vehicles you mark as favorite while browsing will appear here for easy comparison and quick access.
             </Text>
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={() => router.push("/(tabs)/home")}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.primaryButtonText}>Explore Available Cars</Text>
-            </TouchableOpacity>
           </View>
         ) : (
           <FlatList
@@ -203,36 +193,80 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: Spacing.xl,
   },
-  emptyIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: Colors.logoBackground,
-    justifyContent: "center",
+  emptyIconOuterRing: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: "#FEF9E7",
+    borderWidth: 1.5,
+    borderColor: "#FDE68A",
     alignItems: "center",
+    justifyContent: "center",
     marginBottom: Spacing.md,
   },
+  emptyIconCircle: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 3,
+  },
   emptyTitle: {
-    fontSize: FontSize.title,
+    fontSize: 18,
     fontFamily: FontFamily.bold,
     color: Colors.dark,
     marginTop: 4,
+    textAlign: "center",
   },
   emptySubtitle: {
     marginTop: 8,
     fontFamily: FontFamily.regular,
-    fontSize: FontSize.body,
+    fontSize: 13,
     color: Colors.secondary,
     textAlign: "center",
-    lineHeight: 22,
+    lineHeight: 19,
+    paddingHorizontal: Spacing.sm,
+  },
+  emptyBenefitsRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyBenefitPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  emptyBenefitText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 11.5,
+    color: Colors.dark,
   },
   primaryButton: {
-    marginTop: Spacing.xl,
-    backgroundColor: Colors.primary,
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: Spacing.lg,
+    backgroundColor: Colors.dark,
+    paddingHorizontal: 24,
+    paddingVertical: 13,
     borderRadius: 24,
-    shadowColor: Colors.dark,
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -240,7 +274,7 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     fontFamily: FontFamily.bold,
-    fontSize: 14,
+    fontSize: 13.5,
     color: Colors.white,
   },
   list: {

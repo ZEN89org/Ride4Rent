@@ -30,6 +30,8 @@ export interface ChatThreadMessage {
   image_url?: string | null;
   time: string;
   created_at: string;
+  is_read?: boolean;
+  reply_to?: { id: string; author: string; text: string } | null;
 }
 
 export interface ConversationItem {

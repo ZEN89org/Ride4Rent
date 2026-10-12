@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useNavigation } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -14,6 +14,7 @@ import { useAuth } from "@/features/auth/hooks/useAuth";
 import { Colors } from "@/constants/colors";
 
 export default function Home() {
+  const navigation = useNavigation<any>();
   const {
     user,
     isGuest,
@@ -84,7 +85,13 @@ export default function Home() {
 
         <AvailableVehicles
           searchQuery={search}
-          onViewMore={() => router.navigate("/(tabs)/search" as any)}
+          onViewMore={() => {
+            try {
+              navigation.navigate("search");
+            } catch {
+              router.navigate("/(tabs)/search" as any);
+            }
+          }}
         />
 
         <TopRatedVehicles

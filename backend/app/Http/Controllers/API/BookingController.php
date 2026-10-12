@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
+use App\Models\Message;
 use App\Models\Notification;
 use App\Models\Vehicle;
 use Illuminate\Http\JsonResponse;
@@ -76,6 +77,32 @@ class BookingController extends Controller
 
         $vehicle = Vehicle::findOrFail($validated['vehicle_id']);
 
+        // Anti-Spam Check 1: Max 1 pending unpaid reservation per renter
+        $pendingUnpaidCount = Booking::where('renter_id', $user->id)
+            ->where('status', 'pending_payment')
+            ->where('payment_status', 'unpaid')
+            ->count();
+
+        if ($pendingUnpaidCount >= 1) {
+            return response()->json([
+                'success' => false,
+                'message' => 'You already have a pending reservation awaiting payment. Please settle or cancel your existing pending requests before booking another vehicle.',
+            ], 422);
+        }
+
+        // Anti-Spam Check 2: Maximum 3 cancellations in the last 2 hours
+        $recentCancellations = Booking::where('renter_id', $user->id)
+            ->where('status', 'cancelled')
+            ->where('updated_at', '>=', now()->subHours(2))
+            ->count();
+
+        if ($recentCancellations >= 3) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Booking temporarily restricted due to multiple recent cancellations. Please wait before booking again.',
+            ], 429);
+        }
+
         // Check Duplicate Active Booking by the same user for this vehicle
         $hasDuplicate = Booking::where('renter_id', $user->id)
             ->where('vehicle_id', $vehicle->id)
@@ -109,6 +136,8 @@ class BookingController extends Controller
 
         $hasConcurrentActiveTrip = Booking::where('renter_id', $user->id)
             ->whereIn('status', [
+                'pending_payment',
+                'pending_verification',
                 'approved',
                 'awaiting_pickup',
                 'pickup_in_progress',
@@ -117,6 +146,7 @@ class BookingController extends Controller
                 'ongoing',
                 'return_pending',
             ])
+            ->whereNotIn('status', ['cancelled', 'rejected', 'completed', 'refunded', 'no_show'])
             ->where(function ($query) use ($startDate, $endDate) {
                 $query->where('start_date', '<=', $endDate)
                       ->where('end_date', '>=', $startDate);
@@ -240,6 +270,37 @@ class BookingController extends Controller
             ], 422);
         }
 
+        // Double Booking Prevention: Check if renter already has another active/settled trip overlapping with these exact trip dates
+        $bookingStart = $booking->start_date;
+        $bookingEnd = $booking->end_date;
+
+        $hasConcurrentSettledTrip = Booking::where('renter_id', $request->user()->id)
+            ->where('id', '!=', $booking->id)
+            ->whereIn('status', [
+                'pending_verification',
+                'approved',
+                'awaiting_pickup',
+                'pickup_in_progress',
+                'ready_to_start',
+                'trip_in_progress',
+                'ongoing',
+                'return_pending',
+            ])
+            ->whereNotIn('status', ['completed', 'cancelled', 'rejected', 'refunded', 'no_show'])
+            ->where(function ($query) use ($bookingStart, $bookingEnd) {
+                $query->where('start_date', '<=', $bookingEnd)
+                      ->where('end_date', '>=', $bookingStart);
+            })
+            ->first();
+
+        if ($hasConcurrentSettledTrip && (!$booking->is_multi_vehicle_rental || empty($booking->secondary_driver_name))) {
+            $otherDates = \Carbon\Carbon::parse($hasConcurrentSettledTrip->start_date)->format('M d') . ' – ' . \Carbon\Carbon::parse($hasConcurrentSettledTrip->end_date)->format('M d');
+            return response()->json([
+                'success' => false,
+                'message' => "You currently have another active vehicle reservation during overlapping dates ({$otherDates}). Renting multiple vehicles simultaneously requires an authorized secondary driver designated during booking.",
+            ], 422);
+        }
+
         $renter = $request->user();
         $refundMethod = $validated['renter_refund_method'] ?? $validated['payment_method'];
         $refundName = $validated['renter_refund_account_name'] ?? trim(($renter->first_name ?? '') . ' ' . ($renter->last_name ?? '')) ?: ($renter->name ?? 'Renter');
@@ -283,13 +344,43 @@ class BookingController extends Controller
             }
         }
 
-        Notification::create([
-            'user_id' => $booking->operator_id,
-            'title' => 'Payment Submitted',
-            'message' => "Reservation payment of ₱" . number_format($booking->reservation_fee, 2) . " submitted for #{$booking->id}. Please verify within 24 hours.",
-            'type' => 'booking',
-            'action_url' => '/operator-bookings',
-        ]);
+        // Auto-post payment proof / receipt into the chat thread between renter and operator
+        $vehicleTitle = trim(($vehicle->brand ?? '') . ' ' . ($vehicle->name ?? 'Vehicle'));
+        $paymentRefDisplay = !empty($validated['payment_reference']) ? $validated['payment_reference'] : 'GCash Reference Provided';
+        $startDateFormatted = \Carbon\Carbon::parse($booking->start_date)->format('M d, Y');
+        $endDateFormatted = \Carbon\Carbon::parse($booking->end_date)->format('M d, Y');
+
+        $receiptMessageText = "🧾 PAYMENT RECEIPT\n"
+            . "──────────────────────────────\n"
+            . "Vehicle: {$vehicleTitle}\n"
+            . "Schedule: {$startDateFormatted} – {$endDateFormatted} ({$booking->total_days} " . ($booking->total_days == 1 ? 'day' : 'days') . ")\n"
+            . "Method: " . strtoupper($validated['payment_method']) . "\n"
+            . "Reference: {$paymentRefDisplay}\n"
+            . "──────────────────────────────\n"
+            . "Amount Paid: ₱" . number_format($booking->reservation_fee, 2) . "\n"
+            . "Status: Reservation Fee Settled\n"
+            . "──────────────────────────────\n"
+            . "Awaiting host verification";
+
+        $operatorUserId = $booking->operator_id ?: ($vehicle->operator_id ?? null) ?: ($booking->vehicle?->operator_id ?? null);
+
+        if ($operatorUserId) {
+            Message::create([
+                'sender_id' => $renter->id,
+                'receiver_id' => $operatorUserId,
+                'vehicle_id' => $booking->vehicle_id,
+                'message' => $receiptMessageText,
+                'is_read' => false,
+            ]);
+
+            Notification::create([
+                'user_id' => $operatorUserId,
+                'title' => 'Payment Submitted',
+                'message' => "Reservation payment of ₱" . number_format($booking->reservation_fee, 2) . " submitted for {$vehicleTitle}. Please verify within 24 hours.",
+                'type' => 'booking',
+                'action_url' => '/operator-bookings',
+            ]);
+        }
 
         return response()->json([
             'success' => true,
@@ -614,6 +705,25 @@ class BookingController extends Controller
         }
 
         $newStatus = $validated['status'];
+
+        if ($newStatus === 'approved') {
+            $overlappingTrip = Booking::where('renter_id', $booking->renter_id)
+                ->where('id', '!=', $booking->id)
+                ->whereIn('status', ['approved', 'awaiting_pickup', 'pickup_in_progress', 'ready_to_start', 'trip_in_progress', 'ongoing', 'return_pending'])
+                ->where(function ($q) use ($booking) {
+                    $q->where('start_date', '<=', $booking->end_date)
+                      ->where('end_date', '>=', $booking->start_date);
+                })
+                ->first();
+
+            if ($overlappingTrip && !$booking->is_multi_vehicle_rental && empty($booking->secondary_driver_name)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Renter already has an active overlapping trip. Cannot approve without a designated secondary driver.',
+                ], 422);
+            }
+        }
+
         $booking->update(['status' => $newStatus]);
 
         // Vehicle availability state sync
@@ -764,14 +874,17 @@ class BookingController extends Controller
                     'action_url' => $isRenter ? '/operator-bookings' : '/(tabs)/bookings',
                 ]);
 
-                // When an unpaid booking is cancelled, delete it from records
+                // When an unpaid booking is cancelled, retain record as cancelled so cancellation limits & anti-spam history are preserved
                 if ($newStatus === 'cancelled') {
-                    $booking->delete();
+                    $booking->update([
+                        'status' => 'cancelled',
+                        'cancelled_at' => now(),
+                    ]);
 
                     return response()->json([
                         'success' => true,
-                        'message' => 'Unpaid booking cancelled and removed from your records.',
-                        'data' => null,
+                        'message' => 'Unpaid booking cancelled.',
+                        'data' => $booking->fresh(),
                     ]);
                 }
             }
@@ -845,10 +958,18 @@ class BookingController extends Controller
         }
 
         // Active bookings cannot be deleted
-        if (in_array($booking->status, ['pending_verification', 'approved', 'ongoing'])) {
+        if (in_array($booking->status, ['pending_verification', 'approved', 'ongoing', 'awaiting_pickup', 'pickup_in_progress', 'ready_to_start', 'trip_in_progress', 'return_pending'])) {
             return response()->json([
                 'success' => false,
-                'message' => 'Active bookings cannot be deleted. Please cancel the booking first.',
+                'message' => 'Active bookings cannot be deleted.',
+            ], 422);
+        }
+
+        // Refundable bookings with pending refund cannot be deleted
+        if ($booking->refund_status === 'pending' || $booking->payment_status === 'refund_pending') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Bookings with pending refunds cannot be removed. Please settle the refund first.',
             ], 422);
         }
 
@@ -873,13 +994,19 @@ class BookingController extends Controller
         $user = $request->user();
         $bookingIds = $validated['booking_ids'];
 
-        // Only allow deleting non-active bookings owned by the user
+        // Only allow deleting non-active bookings owned by the user without pending refund
         $deletableBookings = Booking::whereIn('id', $bookingIds)
             ->where(function ($query) use ($user) {
                 $query->where('renter_id', $user->id)
                     ->orWhere('operator_id', $user->id);
             })
             ->whereIn('status', ['pending_payment', 'cancelled', 'rejected', 'completed', 'no_show'])
+            ->where(function ($q) {
+                $q->whereNull('refund_status')->orWhere('refund_status', '!=', 'pending');
+            })
+            ->where(function ($q) {
+                $q->whereNull('payment_status')->orWhere('payment_status', '!=', 'refund_pending');
+            })
             ->get();
 
         $deletedCount = 0;
@@ -1027,17 +1154,18 @@ class BookingController extends Controller
     }
 
     /**
-     * 12. Renter requests a rental extension
+     * 12. Renter requests a rental extension (Schedule request only, no payment yet)
      */
     public function requestExtension(Request $request, int $id): JsonResponse
     {
+        if (!$request->filled('extension_end_date') && $request->filled('extended_end_date')) {
+            $request->merge(['extension_end_date' => $request->input('extended_end_date')]);
+        }
+
         $validated = $request->validate([
-            'extension_end_date' => ['required', 'date', 'after:today'],
-            'extension_payment_method' => ['required', 'string', 'in:gcash,maya,bank_transfer,cash'],
-            'extension_payment_reference' => ['required', 'string', 'regex:/^[\d\s-]{10,20}$/'],
-        ], [
-            'extension_payment_reference.required' => 'Reference number is required to verify your transaction.',
-            'extension_payment_reference.regex' => 'Please enter a valid GCash reference number (typically 13 digits from your receipt).',
+            'extension_end_date' => ['required', 'date'],
+            'extension_notes' => ['nullable', 'string', 'max:500'],
+            'extension_days' => ['nullable', 'integer'],
         ]);
 
         $booking = Booking::with(['vehicle', 'operator'])->where('renter_id', $request->user()->id)->findOrFail($id);
@@ -1049,18 +1177,21 @@ class BookingController extends Controller
             ], 422);
         }
 
-        $currentEnd = \Carbon\Carbon::parse($booking->end_date);
-        $newEnd = \Carbon\Carbon::parse($validated['extension_end_date']);
+        $currentEnd = \Carbon\Carbon::parse($booking->extension_status === 'approved' ? ($booking->extension_end_date ?: $booking->end_date) : $booking->end_date)->startOfDay();
+        $newEnd = \Carbon\Carbon::parse($validated['extension_end_date'])->startOfDay();
 
         if ($newEnd->lte($currentEnd)) {
             return response()->json([
                 'success' => false,
-                'message' => 'The extension end date must be after your current return date (' . $currentEnd->format('M d, Y') . ').',
+                'message' => 'The extension return date must be after your current return date (' . $currentEnd->format('M d, Y') . ').',
             ], 422);
         }
 
-        $extraDays = max(1, $currentEnd->diffInDays($newEnd));
-        $dailyRate = (float) $booking->daily_rate;
+        $extraDays = max(1, (int) round($currentEnd->diffInDays($newEnd)));
+        $dailyRate = (float) ($booking->vehicle?->daily_rate ?: $booking->daily_rate ?: 0);
+        if ($dailyRate <= 0 && $booking->total_days > 0) {
+            $dailyRate = (float) $booking->total_price / (float) $booking->total_days;
+        }
         $extensionPrice = $extraDays * $dailyRate;
 
         $booking->update([
@@ -1068,16 +1199,20 @@ class BookingController extends Controller
             'extension_end_date' => $newEnd->toDateString(),
             'extension_price' => $extensionPrice,
             'extension_status' => 'pending',
-            'extension_payment_method' => $validated['extension_payment_method'],
-            'extension_payment_reference' => $validated['extension_payment_reference'],
+            'extension_notes' => $validated['extension_notes'] ?? null,
             'extension_requested_at' => now(),
+            'extension_payment_method' => null,
+            'extension_payment_reference' => null,
+            'extension_paid_at' => null,
         ]);
 
-        // Notify Operator
+        $vehicleTitle = trim(($booking->vehicle?->brand ?? '') . ' ' . ($booking->vehicle?->name ?? 'Vehicle'));
+
+        // Notify Operator to review the requested dates
         Notification::create([
             'user_id' => $booking->operator_id,
             'title' => 'Extension Requested',
-            'message' => "Renter requested a +{$extraDays} day extension for Booking #{$booking->id} (₱" . number_format($extensionPrice, 2) . " settled via {$validated['extension_payment_method']}).",
+            'message' => "Renter requested +{$extraDays} day(s) extension for {$vehicleTitle} until " . $newEnd->format('M d, Y') . " (₱" . number_format($extensionPrice, 2) . "). Please review.",
             'type' => 'booking',
             'action_url' => '/operator-bookings',
         ]);
@@ -1093,19 +1228,19 @@ class BookingController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => "Extension request for +{$extraDays} day(s) submitted successfully.",
+            'message' => "Extension request for +{$extraDays} day(s) submitted for host review.",
             'data' => $booking->fresh(['vehicle', 'operator']),
         ]);
     }
 
     /**
-     * 13. Operator approves rental extension
+     * 13. Operator agrees to rental extension schedule (Renter can now pay)
      */
     public function approveExtension(Request $request, int $id): JsonResponse
     {
         $booking = Booking::with(['vehicle', 'renter'])->where('operator_id', $request->user()->id)->findOrFail($id);
 
-        if ($booking->extension_status !== 'pending' || !$booking->extension_end_date) {
+        if ($booking->extension_status !== 'pending') {
             return response()->json([
                 'success' => false,
                 'message' => 'No pending extension request found for this booking.',
@@ -1113,28 +1248,47 @@ class BookingController extends Controller
         }
 
         $extraDays = (int) ($booking->extension_days ?: 1);
-        $newEnd = $booking->extension_end_date;
-        $extraPrice = (float) ($booking->extension_price ?: 0);
+        $newEnd = $booking->extension_end_date ?: $booking->extended_end_date;
+        if (!$newEnd) {
+            $newEnd = \Carbon\Carbon::parse($booking->end_date)->addDays($extraDays)->toDateString();
+        }
 
+        $extraPrice = (float) ($booking->extension_price ?: $booking->extension_fee ?: 0);
+        if ($extraPrice <= 0) {
+            $dailyRate = (float) ($booking->vehicle?->daily_rate ?: $booking->daily_rate ?: 0);
+            $extraPrice = $extraDays * $dailyRate;
+        }
+
+        // Set status to payment_required so renter can proceed with GCash payment
         $booking->update([
-            'end_date' => $newEnd,
-            'total_days' => ((int) $booking->total_days) + $extraDays,
-            'total_price' => ((float) $booking->total_price) + $extraPrice,
-            'extension_status' => 'approved',
+            'extension_status' => 'payment_required',
+            'extension_price' => $extraPrice,
+            'extension_end_date' => $newEnd,
         ]);
 
-        // Notify Renter
+        $newEndFormatted = \Carbon\Carbon::parse($newEnd)->format('M d, Y');
+
+        // Notify Renter to settle payment
         Notification::create([
             'user_id' => $booking->renter_id,
-            'title' => 'Extension Approved',
-            'message' => "Your host approved your rental extension! Your new return date is " . \Carbon\Carbon::parse($newEnd)->format('M d, Y') . ".",
+            'title' => 'Extension Agreed by Host',
+            'message' => "Your host agreed to the +{$extraDays} day extension until {$newEndFormatted}! Please settle the extension fee of ₱" . number_format($extraPrice, 2) . " to confirm your schedule.",
             'type' => 'success',
             'action_url' => '/(tabs)/bookings',
         ]);
 
+        // Notify Operator
+        Notification::create([
+            'user_id' => $booking->operator_id,
+            'title' => 'Extension Agreed',
+            'message' => "You agreed to the extension for Booking #{$booking->id}. Awaiting renter payment of ₱" . number_format($extraPrice, 2) . ".",
+            'type' => 'info',
+            'action_url' => '/operator-bookings',
+        ]);
+
         return response()->json([
             'success' => true,
-            'message' => "Rental extension approved. Booking updated until " . \Carbon\Carbon::parse($newEnd)->format('M d, Y') . ".",
+            'message' => "Extension agreed. Renter notified to settle the extension payment.",
             'data' => $booking->fresh(['vehicle', 'renter']),
         ]);
     }
@@ -1146,10 +1300,10 @@ class BookingController extends Controller
     {
         $booking = Booking::with(['vehicle', 'renter'])->where('operator_id', $request->user()->id)->findOrFail($id);
 
-        if ($booking->extension_status !== 'pending') {
+        if (!in_array($booking->extension_status, ['pending', 'payment_required'])) {
             return response()->json([
                 'success' => false,
-                'message' => 'No pending extension request found for this booking.',
+                'message' => 'No active extension request found to decline.',
             ], 422);
         }
 
@@ -1170,6 +1324,109 @@ class BookingController extends Controller
             'success' => true,
             'message' => 'Extension request declined.',
             'data' => $booking->fresh(['vehicle', 'renter']),
+        ]);
+    }
+
+    /**
+     * 15. Renter settles extension fee (Updates booking dates & dispatches receipt to chat)
+     */
+    public function settleExtensionPayment(Request $request, int $id): JsonResponse
+    {
+        $validated = $request->validate([
+            'payment_method' => ['required', 'string', 'in:gcash,maya,bank_transfer,cash'],
+            'payment_reference' => ['required', 'string', 'regex:/^[\d\s-]{10,20}$/'],
+        ], [
+            'payment_reference.required' => 'Payment reference number is required to verify your transaction.',
+            'payment_reference.regex' => 'Please enter a valid GCash reference number (typically 13 digits from your receipt).',
+        ]);
+
+        $booking = Booking::with(['vehicle', 'operator', 'renter'])->where('renter_id', $request->user()->id)->findOrFail($id);
+
+        if (!in_array($booking->extension_status, ['payment_required', 'pending'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This booking does not currently have an approved extension awaiting payment.',
+            ], 422);
+        }
+
+        $extraDays = (int) ($booking->extension_days ?: 1);
+        $newEnd = $booking->extension_end_date ?: $booking->extended_end_date;
+        if (!$newEnd) {
+            $newEnd = \Carbon\Carbon::parse($booking->end_date)->addDays($extraDays)->toDateString();
+        }
+
+        $extraPrice = (float) ($booking->extension_price ?: $booking->extension_fee ?: 0);
+        if ($extraPrice <= 0) {
+            $dailyRate = (float) ($booking->vehicle?->daily_rate ?: $booking->daily_rate ?: 0);
+            $extraPrice = $extraDays * $dailyRate;
+        }
+
+        $start = new \DateTime($booking->start_date);
+        $end = new \DateTime($newEnd);
+        $calcTotalDays = max(1, $start->diff($end)->days);
+
+        $booking->update([
+            'end_date' => $newEnd,
+            'total_days' => $calcTotalDays,
+            'total_price' => ((float) $booking->total_price) + $extraPrice,
+            'extension_status' => 'approved',
+            'extension_end_date' => $newEnd,
+            'extension_price' => $extraPrice,
+            'extension_payment_method' => $validated['payment_method'],
+            'extension_payment_reference' => $validated['payment_reference'],
+            'extension_paid_at' => now(),
+        ]);
+
+        $vehicle = $booking->vehicle;
+        $vehicleTitle = trim(($vehicle->brand ?? '') . ' ' . ($vehicle->name ?? 'Vehicle'));
+        $paymentRefDisplay = trim($validated['payment_reference']);
+        $newEndDateFormatted = \Carbon\Carbon::parse($newEnd)->format('M d, Y');
+
+        // Auto-post official extension payment receipt into operator chat thread
+        $receiptMessageText = "🧾 EXTENSION PAYMENT RECEIPT\n"
+            . "──────────────────────────────\n"
+            . "Vehicle: {$vehicleTitle}\n"
+            . "Schedule: Extended by +{$extraDays} " . ($extraDays == 1 ? 'day' : 'days') . " (until {$newEndDateFormatted})\n"
+            . "Method: " . strtoupper($validated['payment_method']) . "\n"
+            . "Reference: {$paymentRefDisplay}\n"
+            . "──────────────────────────────\n"
+            . "Amount Paid: ₱" . number_format($extraPrice, 2) . "\n"
+            . "Status: Extension Fee Settled\n"
+            . "──────────────────────────────\n"
+            . "Rental Extended Successfully";
+
+        $operatorUserId = $booking->operator_id ?: ($vehicle->operator_id ?? null) ?: ($booking->vehicle?->operator_id ?? null);
+
+        if ($operatorUserId) {
+            Message::create([
+                'sender_id' => $request->user()->id,
+                'receiver_id' => $operatorUserId,
+                'vehicle_id' => $booking->vehicle_id,
+                'message' => $receiptMessageText,
+                'is_read' => false,
+            ]);
+
+            Notification::create([
+                'user_id' => $operatorUserId,
+                'title' => 'Extension Payment Settled',
+                'message' => "Extension fee of ₱" . number_format($extraPrice, 2) . " (Ref: {$paymentRefDisplay}) paid for {$vehicleTitle}. New return date is {$newEndDateFormatted}.",
+                'type' => 'booking',
+                'action_url' => '/operator-bookings',
+            ]);
+        }
+
+        Notification::create([
+            'user_id' => $booking->renter_id,
+            'title' => 'Rental Extension Confirmed',
+            'message' => "Your rental extension of +{$extraDays} day(s) until {$newEndDateFormatted} has been confirmed. Official receipt shared in your host chat.",
+            'type' => 'success',
+            'action_url' => '/(tabs)/bookings',
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Rental extension fee settled successfully! Booking extended until {$newEndDateFormatted}.",
+            'data' => $booking->fresh(['vehicle', 'operator', 'renter']),
         ]);
     }
 }

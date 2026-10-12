@@ -244,12 +244,21 @@ export default function OperatorProfileScreen() {
                 </TouchableOpacity>
 
                 {operator?.business_contact_number || operator?.mobile_number ? (
-                  <View style={styles.contactBadge}>
-                    <Ionicons name="call-outline" size={15} color={Colors.dark} />
+                  <TouchableOpacity
+                    style={styles.contactBadge}
+                    onPress={() => {
+                      const phone = operator.business_contact_number || operator.mobile_number;
+                      if (phone) {
+                        Linking.openURL(`tel:${phone}`);
+                      }
+                    }}
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons name="call" size={15} color={Colors.dark} />
                     <Text style={styles.contactText}>
                       {operator.business_contact_number || operator.mobile_number}
                     </Text>
-                  </View>
+                  </TouchableOpacity>
                 ) : null}
               </View>
 

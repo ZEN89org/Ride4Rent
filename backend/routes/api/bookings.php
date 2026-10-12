@@ -19,5 +19,6 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::post('/bookings/{id}/request-extension', [BookingController::class, 'requestExtension']);
     Route::post('/bookings/{id}/approve-extension', [BookingController::class, 'approveExtension']);
     Route::post('/bookings/{id}/reject-extension', [BookingController::class, 'rejectExtension']);
+    Route::post('/bookings/{id}/settle-extension-payment', [BookingController::class, 'settleExtensionPayment']);
     Route::delete('/bookings/{id}', [BookingController::class, 'destroy']);
 });

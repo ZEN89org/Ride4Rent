@@ -70,6 +70,13 @@ class Booking extends Model
         'refund_reference',
         'refund_notes',
         'refunded_at',
+        'extension_days',
+        'extension_end_date',
+        'extension_price',
+        'extension_status',
+        'extension_payment_method',
+        'extension_payment_reference',
+        'extension_requested_at',
     ];
 
     protected function casts(): array
@@ -77,6 +84,8 @@ class Booking extends Model
         return [
             'start_date' => 'date:Y-m-d',
             'end_date' => 'date:Y-m-d',
+            'extension_end_date' => 'date:Y-m-d',
+            'extension_requested_at' => 'datetime',
             'expires_at' => 'datetime',
             'paid_at' => 'datetime',
             'refunded_at' => 'datetime',
