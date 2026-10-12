@@ -1,9 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Animated,
   FlatList,
   Image,
+  PanResponder,
   RefreshControl,
   StyleSheet,
   Text,
@@ -15,10 +17,14 @@ import {
 import ScreenContainer from "@/components/common/ScreenContainer";
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";
+import { useAppToast } from "@/context/ToastContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import {
+  archiveConversation,
   ConversationItem,
+  deleteConversation,
   getConversations,
+  restoreConversation,
 } from "@/services/messageService";
 
 const cleanMessagePreview = (msg?: string | null): string => {
@@ -33,9 +39,135 @@ const cleanMessagePreview = (msg?: string | null): string => {
   return cleaned || "Replied to a message";
 };
 
+interface SwipeableConversationRowProps {
+  item: ConversationItem;
+  isArchived: boolean;
+  onPress: () => void;
+  onArchive: () => void;
+  onRestore: () => void;
+  onDelete: () => void;
+}
+
+function SwipeableConversationRow({
+  item,
+  isArchived,
+  onPress,
+  onArchive,
+  onRestore,
+  onDelete,
+}: SwipeableConversationRowProps) {
+  const [translateX] = useState(() => new Animated.Value(0));
+  const [isOpen, setIsOpen] = useState(false);
+  const actionWidth = 148;
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          Math.abs(gesture.dx) > 10 && Math.abs(gesture.dy) < 10,
+        onPanResponderMove: (_, gesture) => {
+          if (gesture.dx < 0) {
+            const nextX = isOpen
+              ? Math.max(-actionWidth - 20, -actionWidth + gesture.dx)
+              : Math.max(-actionWidth - 20, gesture.dx);
+            translateX.setValue(nextX);
+          } else if (isOpen && gesture.dx > 0) {
+            translateX.setValue(Math.min(0, -actionWidth + gesture.dx));
+          }
+        },
+        onPanResponderRelease: (_, gesture) => {
+          const shouldOpen = gesture.dx < -45 || (isOpen && gesture.dx < 35);
+          Animated.spring(translateX, {
+            toValue: shouldOpen ? -actionWidth : 0,
+            useNativeDriver: true,
+            bounciness: 4,
+          }).start();
+          setIsOpen(shouldOpen);
+        },
+      }),
+    [actionWidth, isOpen, translateX],
+  );
+
+  const closeSwipe = () => {
+    Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+    setIsOpen(false);
+  };
+
+  return (
+    <View style={styles.swipeContainer}>
+      <View style={styles.swipeActions}>
+        <TouchableOpacity
+          style={[styles.swipeAction, styles.archiveAction]}
+          onPress={() => {
+            closeSwipe();
+            (isArchived ? onRestore : onArchive)();
+          }}
+          activeOpacity={0.85}
+        >
+          <Ionicons
+            name={isArchived ? "arrow-undo-outline" : "archive-outline"}
+            size={18}
+            color={Colors.white}
+          />
+          <Text style={styles.swipeActionText}>{isArchived ? "Restore" : "Archive"}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.swipeAction, styles.deleteAction]}
+          onPress={() => {
+            closeSwipe();
+            onDelete();
+          }}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="trash-outline" size={18} color={Colors.white} />
+          <Text style={styles.swipeActionText}>Delete</Text>
+        </TouchableOpacity>
+      </View>
+
+      <Animated.View
+        style={[styles.chatRowForeground, { transform: [{ translateX }] }]}
+        {...panResponder.panHandlers}
+      >
+        <TouchableOpacity style={styles.chatCard} activeOpacity={0.7} onPress={onPress}>
+          <View style={styles.avatarWrapper}>
+            {item.profile_photo ? (
+              <Image source={{ uri: item.profile_photo }} style={styles.avatarCircle} />
+            ) : (
+              <View style={styles.avatarCircle}>
+                <Ionicons name="business" size={22} color={Colors.dark} />
+              </View>
+            )}
+            {item.unread_count > 0 && <View style={styles.unreadBadge} />}
+          </View>
+
+          <View style={styles.chatInfo}>
+            <View style={styles.chatHeaderRow}>
+              <Text style={styles.businessName} numberOfLines={1}>
+                {item.business_name || item.name}
+              </Text>
+              <Text style={styles.chatTime}>{item.last_time}</Text>
+            </View>
+            <Text
+              style={[
+                styles.lastMessage,
+                item.unread_count > 0 && { color: Colors.dark, fontFamily: FontFamily.semiBold },
+              ]}
+              numberOfLines={1}
+            >
+              {cleanMessagePreview(item.last_message)}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
+  );
+}
+
 export default function Chats() {
   const { isGuest } = useAuth();
+  const { showSuccess, showError, showModal } = useAppToast();
   const [search, setSearch] = useState("");
+  const [activeFolder, setActiveFolder] = useState<"inbox" | "archived">("inbox");
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -67,11 +199,17 @@ export default function Chats() {
     }, [isGuest, loadConversations])
   );
 
-  const filteredChats = conversations.filter(
+  const allOperatorConversations = conversations.filter(
+    (conversation) => conversation.role === "operator",
+  );
+  const operatorConversations = allOperatorConversations.filter(
+    (conversation) => Boolean(conversation.archived) === (activeFolder === "archived"),
+  );
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredChats = operatorConversations.filter(
     (c) =>
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      (c.business_name && c.business_name.toLowerCase().includes(search.toLowerCase())) ||
-      c.last_message.toLowerCase().includes(search.toLowerCase())
+      c.name.toLowerCase().includes(normalizedSearch) ||
+      (c.business_name && c.business_name.toLowerCase().includes(normalizedSearch))
   );
 
   const handleOpenChat = (item: ConversationItem) => {
@@ -84,6 +222,65 @@ export default function Chats() {
         name: item.business_name || item.name,
       },
     } as any);
+  };
+
+  const handleArchiveConversation = async (item: ConversationItem) => {
+    try {
+      await archiveConversation(item.user_id);
+      setConversations((current) =>
+        current.map((conversation) =>
+          conversation.user_id === item.user_id
+            ? { ...conversation, archived: true }
+            : conversation,
+        ),
+      );
+      showSuccess("Conversation Archived", "You can find it in Archived.");
+    } catch (error: any) {
+      showError("Archive Failed", error.response?.data?.message || "Could not archive this conversation.");
+    }
+  };
+
+  const handleRestoreConversation = async (item: ConversationItem) => {
+    try {
+      await restoreConversation(item.user_id);
+      setConversations((current) =>
+        current.map((conversation) =>
+          conversation.user_id === item.user_id
+            ? { ...conversation, archived: false }
+            : conversation,
+        ),
+      );
+      showSuccess("Conversation Restored", "It is back in your inbox.");
+    } catch (error: any) {
+      showError("Restore Failed", error.response?.data?.message || "Could not restore this conversation.");
+    }
+  };
+
+  const handleDeleteConversation = (item: ConversationItem) => {
+    const name = item.business_name || item.name;
+    showModal(
+      "Remove Conversation",
+      `Remove your conversation with ${name} from your messages? Its history is kept and may return if you message each other again.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteConversation(item.user_id);
+              setConversations((current) =>
+                current.filter((conversation) => conversation.user_id !== item.user_id),
+              );
+              showSuccess("Conversation Removed", "The message history was kept.");
+            } catch (error: any) {
+              showError("Delete Failed", error.response?.data?.message || "Could not remove this conversation.");
+            }
+          },
+        },
+      ],
+      "confirm",
+    );
   };
 
   if (isGuest) {
@@ -115,12 +312,11 @@ export default function Chats() {
           <Text style={styles.subtitle}>Direct host & operator communications</Text>
         </View>
 
-        {/* Search Bar if has chats */}
-        {conversations.length > 0 && (
+        {allOperatorConversations.length > 0 && (
           <View style={styles.searchBar}>
             <Ionicons name="search" size={18} color={Colors.secondary} />
             <TextInput
-              placeholder="Search conversations..."
+              placeholder="Search operators..."
               placeholderTextColor={Colors.secondary}
               value={search}
               onChangeText={setSearch}
@@ -129,15 +325,34 @@ export default function Chats() {
           </View>
         )}
 
-        {/* Empty state for new users */}
-        {conversations.length === 0 && !loading ? (
+        {allOperatorConversations.length > 0 && (
+          <View style={styles.folderTabs}>
+            {([
+              ["inbox", "Inbox"],
+              ["archived", "Archived"],
+            ] as const).map(([folder, label]) => (
+              <TouchableOpacity
+                key={folder}
+                style={[styles.folderTab, activeFolder === folder && styles.folderTabActive]}
+                onPress={() => setActiveFolder(folder)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.folderTabText, activeFolder === folder && styles.folderTabTextActive]}>
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {allOperatorConversations.length === 0 && !loading ? (
           <View style={styles.emptyContainer}>
             <View style={styles.iconCircle}>
               <Ionicons name="chatbubble-ellipses-outline" size={38} color={Colors.secondary} />
             </View>
-            <Text style={styles.emptyTitle}>No Messages Yet</Text>
+            <Text style={styles.emptyTitle}>No Operator Conversations Yet</Text>
             <Text style={styles.emptySubtitle}>
-              When you contact a vehicle operator or send an inquiry, your conversations will appear right here.
+              When you contact a vehicle operator or send an inquiry, your conversations will appear here.
             </Text>
             <TouchableOpacity
               style={styles.exploreButton}
@@ -161,45 +376,52 @@ export default function Chats() {
                   loadConversations();
                 }}
                 colors={[Colors.primary]}
-              />
+                />
             }
             renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.chatCard}
-                activeOpacity={0.7}
-                onPress={() => handleOpenChat(item)}
-              >
-                <View style={styles.avatarWrapper}>
-                  {item.profile_photo ? (
-                    <Image source={{ uri: item.profile_photo }} style={styles.avatarCircle} />
-                  ) : (
-                    <View style={styles.avatarCircle}>
-                      <Ionicons name="business" size={22} color={Colors.dark} />
-                    </View>
-                  )}
-                  {item.unread_count > 0 && <View style={styles.unreadBadge} />}
-                </View>
-
-                <View style={styles.chatInfo}>
-                  <View style={styles.chatHeaderRow}>
-                    <Text style={styles.businessName} numberOfLines={1}>
-                      {item.business_name || item.name}
-                    </Text>
-                    <Text style={styles.chatTime}>{item.last_time}</Text>
-                  </View>
-
-                  <Text
-                    style={[
-                      styles.lastMessage,
-                      item.unread_count > 0 && { color: Colors.dark, fontFamily: FontFamily.semiBold },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {cleanMessagePreview(item.last_message)}
-                  </Text>
-                </View>
-              </TouchableOpacity>
+                <SwipeableConversationRow
+                  item={item}
+                  isArchived={activeFolder === "archived"}
+                  onPress={() => handleOpenChat(item)}
+                  onArchive={() => handleArchiveConversation(item)}
+                  onRestore={() => handleRestoreConversation(item)}
+                  onDelete={() => handleDeleteConversation(item)}
+                />
             )}
+            ListEmptyComponent={
+                <View style={styles.searchEmptyContainer}>
+                  <View style={styles.iconCircle}>
+                    <Ionicons
+                      name={normalizedSearch ? "search-outline" : "archive-outline"}
+                      size={30}
+                      color={Colors.secondary}
+                    />
+                  </View>
+                  <Text style={styles.emptyTitle}>
+                    {normalizedSearch
+                      ? "No Operators Found"
+                      : activeFolder === "archived"
+                        ? "No Archived Conversations"
+                        : "No Conversations in Inbox"}
+                  </Text>
+                  <Text style={styles.emptySubtitle}>
+                    {normalizedSearch
+                      ? `No operator conversations match “${search.trim()}”.`
+                      : activeFolder === "archived"
+                        ? "Conversations you archive will appear here."
+                        : "Your archived conversations are still available in Archived."}
+                  </Text>
+                  {normalizedSearch ? (
+                    <TouchableOpacity
+                      style={styles.exploreButton}
+                      onPress={() => setSearch("")}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.exploreButtonText}>Clear Search</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+            }
           />
         )}
       </View>
@@ -215,18 +437,19 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.md,
   },
   header: {
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   title: {
-    fontSize: FontSize.heading,
     fontFamily: FontFamily.bold,
+    fontSize: FontSize.heading,
     color: Colors.dark,
+    letterSpacing: -0.5,
   },
   subtitle: {
-    marginTop: 4,
     fontFamily: FontFamily.regular,
-    fontSize: FontSize.body,
+    fontSize: FontSize.small,
     color: Colors.secondary,
+    marginTop: 2,
   },
   searchBar: {
     flexDirection: "row",
@@ -238,6 +461,29 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     marginBottom: Spacing.md,
   },
+  folderTabs: {
+    flexDirection: "row",
+    gap: Spacing.xs,
+    marginBottom: Spacing.sm,
+  },
+  folderTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 18,
+    backgroundColor: Colors.inputBackground,
+  },
+  folderTabActive: {
+    backgroundColor: Colors.dark,
+  },
+  folderTabText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+    color: Colors.dark,
+  },
+  folderTabTextActive: {
+    fontFamily: FontFamily.bold,
+    color: Colors.white,
+  },
   searchInput: {
     flex: 1,
     fontFamily: FontFamily.regular,
@@ -246,6 +492,38 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 20,
+  },
+  swipeContainer: {
+    overflow: "hidden",
+    backgroundColor: Colors.white,
+  },
+  swipeActions: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    width: 148,
+    flexDirection: "row",
+  },
+  swipeAction: {
+    width: 74,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+  },
+  archiveAction: {
+    backgroundColor: Colors.dark,
+  },
+  deleteAction: {
+    backgroundColor: "#C62828",
+  },
+  swipeActionText: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 10,
+    color: Colors.white,
+  },
+  chatRowForeground: {
+    backgroundColor: Colors.white,
   },
   chatCard: {
     flexDirection: "row",
@@ -308,6 +586,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: Spacing.xl,
+  },
+  searchEmptyContainer: {
+    alignItems: "center",
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.xl,
+    paddingBottom: Spacing.xl,
   },
   iconCircle: {
     width: 76,

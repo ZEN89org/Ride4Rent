@@ -43,11 +43,24 @@ export interface ConversationItem {
   last_message: string;
   last_time: string;
   unread_count: number;
+  archived?: boolean;
 }
 
 export const getConversations = async (): Promise<ConversationItem[]> => {
   const response = await api.get("/messages/conversations");
   return response.data.data;
+};
+
+export const archiveConversation = async (otherUserId: number): Promise<void> => {
+  await api.post(`/messages/conversations/${otherUserId}/archive`);
+};
+
+export const restoreConversation = async (otherUserId: number): Promise<void> => {
+  await api.delete(`/messages/conversations/${otherUserId}/archive`);
+};
+
+export const deleteConversation = async (otherUserId: number): Promise<void> => {
+  await api.delete(`/messages/conversations/${otherUserId}`);
 };
 
 export const getChatThread = async (
