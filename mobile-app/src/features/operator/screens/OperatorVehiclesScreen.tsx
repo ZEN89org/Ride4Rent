@@ -7,6 +7,7 @@ import { useAuth } from "@/features/auth/hooks/useAuth";
 import OperatorShell from "@/features/operator/components/navigation/OperatorShell";
 import { getMyVehicles } from "@/features/operator/services/vehicleService";
 import { Vehicle } from "@/features/operator/types/vehicle";
+import { resolveImageUrl } from "@/services/api";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
@@ -98,7 +99,7 @@ export default function OperatorVehiclesScreen() {
             onPress={handleAddCar}
             activeOpacity={0.85}
           >
-            <Ionicons name="add" size={18} color={Colors.white} />
+            <Ionicons name="add" size={18} color={Colors.dark} />
             <Text style={styles.addBtnText}>Add Car</Text>
           </TouchableOpacity>
         </View>
@@ -138,20 +139,10 @@ export default function OperatorVehiclesScreen() {
           </View>
         ) : vehicles.length === 0 ? (
           <View style={styles.empty}>
-            <View style={styles.emptyIconCircle}>
-              <MaterialCommunityIcons name="car-off" size={38} color={Colors.secondary} />
-            </View>
             <Text style={styles.emptyTitle}>Your Fleet is Empty</Text>
             <Text style={styles.emptySubtitle}>
               Publish your first vehicle to start receiving rental requests and bookings from renters.
             </Text>
-            <TouchableOpacity
-              style={styles.addFirstBtn}
-              onPress={handleAddCar}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.addFirstBtnText}>List Your First Car</Text>
-            </TouchableOpacity>
           </View>
         ) : (
           <FlatList
@@ -193,7 +184,7 @@ export default function OperatorVehiclesScreen() {
                 <Image
                   source={{
                     uri:
-                      item.image_url ||
+                      resolveImageUrl(item.image_url) ||
                       "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=60",
                   }}
                   style={styles.image}
@@ -266,7 +257,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   addBtnText: {
-    color: Colors.white,
+    color: Colors.dark,
     fontFamily: FontFamily.bold,
     fontSize: 13,
   },
@@ -359,36 +350,25 @@ const styles = StyleSheet.create({
   },
   empty: {
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.white,
-    borderColor: Colors.border,
-    borderRadius: 20,
-    borderWidth: 1,
-    padding: Spacing.xl,
-    marginTop: Spacing.xl,
-  },
-  emptyIconCircle: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: Colors.inputBackground,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: Spacing.sm,
+    justifyContent: "flex-start",
+    paddingTop: 32,
+    paddingBottom: Spacing.xl,
+    paddingHorizontal: Spacing.xl,
   },
   emptyTitle: {
     color: Colors.dark,
     fontFamily: FontFamily.bold,
-    fontSize: FontSize.title,
-    marginTop: Spacing.xs,
+    fontSize: 18,
+    textAlign: "center",
   },
   emptySubtitle: {
     color: Colors.secondary,
     fontFamily: FontFamily.regular,
-    fontSize: FontSize.body,
-    lineHeight: 20,
-    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 8,
     textAlign: "center",
+    paddingHorizontal: Spacing.sm,
   },
   addFirstBtn: {
     marginTop: Spacing.lg,
@@ -400,7 +380,7 @@ const styles = StyleSheet.create({
   addFirstBtnText: {
     fontFamily: FontFamily.bold,
     fontSize: 14,
-    color: Colors.white,
+    color: Colors.dark,
   },
   pendingNotice: {
     flexDirection: "row",

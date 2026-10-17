@@ -26,21 +26,15 @@ export default function Pagination({
             (index + 1) * SCREEN_WIDTH,
           ];
 
-          const dotWidth = scrollX.interpolate({
-            inputRange,
-            outputRange: [10, 28, 10],
-            extrapolate: "clamp",
-          });
-
           const opacity = scrollX.interpolate({
             inputRange,
             outputRange: [0.4, 1, 0.4],
             extrapolate: "clamp",
           });
 
-          const backgroundColor = scrollX.interpolate({
+          const scaleX = scrollX.interpolate({
             inputRange,
-            outputRange: ["#D0D0D0", Colors.primary, "#D0D0D0"],
+            outputRange: [10 / 28, 1, 10 / 28],
             extrapolate: "clamp",
           });
 
@@ -50,9 +44,10 @@ export default function Pagination({
               style={[
                 styles.dot,
                 {
-                  width: dotWidth,
+                  backgroundColor:
+                    currentIndex === index ? Colors.primary : "#D0D0D0",
                   opacity,
-                  backgroundColor,
+                  transform: [{ scaleX }],
                 },
               ]}
             />
@@ -81,6 +76,7 @@ const styles = StyleSheet.create({
   },
 
   dot: {
+    width: 28,
     height: 10,
     borderRadius: 5,
     marginHorizontal: 4,

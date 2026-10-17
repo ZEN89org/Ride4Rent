@@ -14,6 +14,7 @@ import { FavoritesProvider } from "../context/FavoritesContext";
 import { ToastProvider } from "../context/ToastContext";
 import { NotificationProvider } from "../context/NotificationContext";
 import { SideNavProvider } from "../context/SideNavContext";
+import { CallProvider } from "../context/CallContext";
 import { Colors } from "../constants/colors";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -32,40 +33,50 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <NotificationProvider>
-        <ToastProvider>
-          <FavoritesProvider>
-            <SideNavProvider>
-              {Platform.OS === "android" && (
-                <RNStatusBar
-                  translucent
-                  backgroundColor="transparent"
-                  barStyle="dark-content"
-                />
-              )}
-              <ExpoStatusBar style="dark" />
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  // Simple and smooth fade animation (no horizontal slide)
-                  animation: "fade",
-                  animationDuration: 200,
-                  gestureEnabled: true,
-                  contentStyle: { backgroundColor: "#FFFFFF" },
-                }}
-              >
-                <Stack.Screen name="index" />
-                <Stack.Screen name="onboarding" />
-                <Stack.Screen name="landing" />
-                <Stack.Screen name="auth" />
-                <Stack.Screen name="login" options={{ contentStyle: { backgroundColor: Colors.primary } }} />
-                <Stack.Screen name="register" />
-                <Stack.Screen name="(tabs)" options={{ gestureEnabled: false }} />
-              </Stack>
-            </SideNavProvider>
-          </FavoritesProvider>
-        </ToastProvider>
-      </NotificationProvider>
+      <CallProvider>
+        <NotificationProvider>
+          <ToastProvider>
+            <FavoritesProvider>
+              <SideNavProvider>
+                {Platform.OS === "android" && (
+                  <RNStatusBar
+                    translucent
+                    backgroundColor="transparent"
+                    barStyle="dark-content"
+                  />
+                )}
+                <ExpoStatusBar style="dark" />
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    animation: "fade",
+                    animationDuration: 120,
+                    gestureEnabled: true,
+                    contentStyle: { backgroundColor: "#FFFFFF" },
+                  }}
+                >
+                  <Stack.Screen name="index" />
+                  <Stack.Screen name="onboarding" />
+                  <Stack.Screen name="landing" />
+                  <Stack.Screen name="auth" />
+                  <Stack.Screen name="login" options={{ contentStyle: { backgroundColor: Colors.primary } }} />
+                  <Stack.Screen name="register" />
+                  <Stack.Screen name="(tabs)" options={{ gestureEnabled: false }} />
+                  <Stack.Screen name="profile" />
+                  <Stack.Screen name="driver-license" />
+                  <Stack.Screen name="settings" />
+                  <Stack.Screen name="faq" />
+                  <Stack.Screen name="terms" />
+                  <Stack.Screen name="support" />
+                  <Stack.Screen name="about" />
+                  <Stack.Screen name="notifications" />
+                  <Stack.Screen name="current-location" />
+                </Stack>
+              </SideNavProvider>
+            </FavoritesProvider>
+          </ToastProvider>
+        </NotificationProvider>
+      </CallProvider>
     </AuthProvider>
   );
 }

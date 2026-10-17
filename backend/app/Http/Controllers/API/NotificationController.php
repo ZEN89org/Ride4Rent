@@ -26,6 +26,12 @@ class NotificationController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        try {
+            app(BookingController::class)->checkAndProcessExpirations($request->user()?->id);
+        } catch (\Throwable $e) {
+            // Do not block notification feed if reminder check fails
+        }
+
         $notifications = Notification::where('user_id', $request->user()->id)
             ->whereNotIn('title', $this->excludedTitles)
             ->latest()
@@ -120,6 +126,12 @@ class NotificationController extends Controller
 
     public function unreadCount(Request $request): JsonResponse
     {
+        try {
+            app(BookingController::class)->checkAndProcessExpirations($request->user()?->id);
+        } catch (\Throwable $e) {
+            // silent catch
+        }
+
         $count = Notification::where('user_id', $request->user()->id)
             ->whereNotIn('title', $this->excludedTitles)
             ->where('is_read', false)

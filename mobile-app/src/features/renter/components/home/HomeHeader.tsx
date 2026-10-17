@@ -19,6 +19,7 @@ import {
   Spacing,
 } from "@/constants/theme";
 import { useNotificationCount } from "@/context/NotificationContext";
+import { resolveImageUrl } from "@/services/api";
 
 const { height } = Dimensions.get("window");
 
@@ -46,7 +47,7 @@ export default function HomeHeader({
   onProfilePress,
 }: Props) {
   const { unreadCount } = useNotificationCount();
-  const profilePhoto = customPhoto || user?.profile_photo;
+  const profilePhoto = resolveImageUrl(customPhoto || user?.profile_photo);
 
   return (
     <View style={styles.container}>
@@ -82,11 +83,11 @@ export default function HomeHeader({
             style={styles.username}
             numberOfLines={1}
           >
-            {isGuest ? "Guest" : user?.first_name || user?.name || "User"}
+            Hey, {isGuest ? "Guest" : user?.first_name || user?.name || "User"}!
           </Text>
 
           <Text style={styles.subtitle}>
-            Discover vehicles and stores.
+            Ride more, worry less.
           </Text>
         </TouchableOpacity>
 
@@ -137,7 +138,7 @@ export default function HomeHeader({
           value={search}
           onChangeText={onSearchChange}
           onSubmitEditing={onSearchSubmit}
-          placeholder="Search vehicle, brand, or type..."
+          placeholder="Vehicle, brand, or type"
           placeholderTextColor={Colors.secondary}
           style={styles.searchInput}
           autoCapitalize="none"
@@ -204,14 +205,14 @@ const styles = StyleSheet.create({
   username: {
     fontFamily: FontFamily.bold,
     fontSize: FontSize.title,
-    color: Colors.white,
+    color: Colors.dark,
   },
 
   subtitle: {
     marginTop: -8,
     fontFamily: FontFamily.regular,
-    fontSize: 10,
-    color: Colors.white,
+    fontSize: 12,
+    color: Colors.dark,
   },
 
   actions: {
@@ -245,7 +246,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.white,
   },
   badgeText: {
-    color: Colors.white,
+    color: Colors.dark,
     fontFamily: FontFamily.bold,
     fontSize: 9,
     lineHeight: 11,

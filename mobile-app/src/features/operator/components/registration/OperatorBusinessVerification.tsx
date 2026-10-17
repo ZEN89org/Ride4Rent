@@ -265,7 +265,7 @@ export default function OperatorBusinessVerification({
               <Ionicons
                 name="checkmark"
                 size={15}
-                color={Colors.white}
+                color={Colors.dark}
               />
             )}
           </View>

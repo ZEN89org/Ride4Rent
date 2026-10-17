@@ -111,33 +111,56 @@ class MessageController extends Controller
             ->where('is_read', false)
             ->update(['is_read' => true]);
 
-        $messages = Message::where(function ($q) use ($userId, $otherUserId) {
+        $limit = min(max((int) $request->input('limit', 40), 1), 100);
+        $beforeId = $request->input('before_id');
+
+        $query = Message::where(function ($q) use ($userId, $otherUserId) {
                 $q->where('sender_id', $userId)->where('receiver_id', $otherUserId);
             })
             ->orWhere(function ($q) use ($userId, $otherUserId) {
                 $q->where('sender_id', $otherUserId)->where('receiver_id', $userId);
-            })
-            ->orderBy('created_at', 'asc')
-            ->get()
-            ->map(function ($msg) use ($userId, $host) {
-                $imageUrl = null;
-                if ($msg->image_url) {
-                    $imageUrl = str_starts_with($msg->image_url, 'http')
-                        ? $msg->image_url
-                        : $host . '/storage/' . $msg->image_url;
-                }
-
-                return [
-                    'id' => (string) $msg->id,
-                    'sender' => $msg->sender_id === $userId ? 'user' : 'other',
-                    'sender_id' => $msg->sender_id,
-                    'text' => $msg->message ?? '',
-                    'image_url' => $imageUrl,
-                    'is_read' => (bool) $msg->is_read,
-                    'time' => $msg->created_at->format('h:i A'),
-                    'created_at' => $msg->created_at->toIso8601String(),
-                ];
             });
+
+        if (!empty($beforeId) && is_numeric($beforeId)) {
+            $query->where('id', '<', (int) $beforeId);
+        }
+
+        $rawMessages = $query->orderBy('id', 'desc')
+            ->limit($limit)
+            ->get();
+
+        $earliestId = $rawMessages->last()?->id;
+        $hasMore = false;
+        if ($earliestId) {
+            $hasMore = Message::where(function ($q) use ($userId, $otherUserId) {
+                    $q->where('sender_id', $userId)->where('receiver_id', $otherUserId);
+                })
+                ->orWhere(function ($q) use ($userId, $otherUserId) {
+                    $q->where('sender_id', $otherUserId)->where('receiver_id', $userId);
+                })
+                ->where('id', '<', $earliestId)
+                ->exists();
+        }
+
+        $messages = $rawMessages->reverse()->values()->map(function ($msg) use ($userId, $host) {
+            $imageUrl = null;
+            if ($msg->image_url) {
+                $imageUrl = str_starts_with($msg->image_url, 'http')
+                    ? $msg->image_url
+                    : $host . '/storage/' . $msg->image_url;
+            }
+
+            return [
+                'id' => (string) $msg->id,
+                'sender' => $msg->sender_id === $userId ? 'user' : 'other',
+                'sender_id' => $msg->sender_id,
+                'text' => $msg->message ?? '',
+                'image_url' => $imageUrl,
+                'is_read' => (bool) $msg->is_read,
+                'time' => $msg->created_at->format('h:i A'),
+                'created_at' => $msg->created_at->toIso8601String(),
+            ];
+        });
 
         $otherUser = User::with('operatorProfile')->find($otherUserId);
 
@@ -179,6 +202,8 @@ class MessageController extends Controller
             'other_user' => $otherUser ? [
                 'id' => $otherUser->id,
                 'name' => trim(($otherUser->first_name ?? '') . ' ' . ($otherUser->last_name ?? '')) ?: ($otherUser->name ?? 'User'),
+                'first_name' => $otherUser->first_name,
+                'last_name' => $otherUser->last_name,
                 'business_name' => $otherUser->operatorProfile?->business_name,
                 'role' => $otherUser->role,
                 'profile_photo' => $otherUser->profile_photo
@@ -189,6 +214,7 @@ class MessageController extends Controller
             ] : null,
             'booking_context' => $bookingContext,
             'data' => $messages,
+            'has_more' => $hasMore,
         ]);
     }
 

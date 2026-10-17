@@ -1,8 +1,7 @@
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Image,
   ScrollView,
   StyleSheet,
@@ -19,49 +18,110 @@ import { FontFamily, FontSize, Spacing } from "@/constants/theme";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { useAppToast } from "@/context/ToastContext";
 import { useNotificationCount } from "@/context/NotificationContext";
+import { resolveImageUrl } from "@/services/api";
 import { uploadDriversLicense } from "@/services/profileService";
 
 export default function DriverLicenseScreen() {
   const { user, isGuest, updateUser, refreshUser } = useAuth();
   const { showSuccess, showError } = useAppToast();
+  const { refreshUnreadCount } = useNotificationCount();
 
   const [frontImage, setFrontImage] = useState<string | null>(
-    user?.drivers_license_front || null
+    resolveImageUrl(user?.drivers_license_front) || null
   );
   const [backImage, setBackImage] = useState<string | null>(
-    user?.drivers_license_back || null
+    resolveImageUrl(user?.drivers_license_back) || null
   );
   const [uploading, setUploading] = useState(false);
 
-  // Sync state whenever user updates
   useEffect(() => {
-    if (user?.drivers_license_front) setFrontImage(user.drivers_license_front);
-    if (user?.drivers_license_back) setBackImage(user.drivers_license_back);
+    if (user?.drivers_license_front) {
+      setFrontImage(resolveImageUrl(user.drivers_license_front));
+    }
+    if (user?.drivers_license_back) {
+      setBackImage(resolveImageUrl(user.drivers_license_back));
+    }
   }, [user?.drivers_license_front, user?.drivers_license_back]);
 
-  // Automatically fetch latest status from backend when screen is focused
   useFocusEffect(
     useCallback(() => {
-      refreshUser?.().then((latestUser) => {
-        if (latestUser?.drivers_license_front) {
-          setFrontImage(latestUser.drivers_license_front);
+      let active = true;
+      const runSync = () => {
+        if (!active) return;
+        refreshUser?.().then((latestUser) => {
+          if (!active) return;
+          if (latestUser?.drivers_license_front) {
+            setFrontImage(resolveImageUrl(latestUser.drivers_license_front));
+          }
+          if (latestUser?.drivers_license_back) {
+            setBackImage(resolveImageUrl(latestUser.drivers_license_back));
+          }
+        });
+      };
+
+      const idleId =
+        typeof requestIdleCallback === "function"
+          ? requestIdleCallback(runSync)
+          : setTimeout(runSync, 150);
+
+      return () => {
+        active = false;
+        if (typeof cancelIdleCallback === "function" && typeof idleId === "number") {
+          cancelIdleCallback(idleId);
+        } else {
+          clearTimeout(idleId as any);
         }
-        if (latestUser?.drivers_license_back) {
-          setBackImage(latestUser.drivers_license_back);
-        }
-      });
+      };
     }, [])
   );
 
   const isVerified =
-    Boolean(user?.is_drivers_license_verified && user?.license_verification_status === "approved") ||
-    user?.license_verification_status === "approved";
+    Boolean(
+      user?.is_drivers_license_verified &&
+        user?.license_verification_status === "approved"
+    ) || user?.license_verification_status === "approved";
+
   const verificationStatus =
     user?.license_verification_status ||
-    (isVerified ? "approved" : user?.drivers_license_front ? "pending" : "unverified");
+    (isVerified
+      ? "approved"
+      : user?.drivers_license_front
+      ? "pending"
+      : "unverified");
+
   const isPending = verificationStatus === "pending";
   const isRejected = verificationStatus === "rejected";
   const canEdit = !isVerified;
+
+  const statusInfo = isVerified
+    ? {
+        label: "Verified",
+        color: "#047857",
+        bg: "#ECFDF5",
+        subtext: "Your driver's license is verified and ready for booking.",
+      }
+    : isPending
+    ? {
+        label: "Pending Review",
+        color: "#92400E",
+        bg: "#FEF3C7",
+        subtext: "Saved and ready for host verification upon booking.",
+      }
+    : isRejected
+    ? {
+        label: "Rejected",
+        color: "#B91C1C",
+        bg: "#FEE2E2",
+        subtext:
+          user?.license_rejection_reason ||
+          "Please upload clear, glare-free photos of both sides.",
+      }
+    : {
+        label: "Unverified",
+        color: "#92400E",
+        bg: Colors.logoBackground,
+        subtext: "Upload clear photos of the front and back of your license.",
+      };
 
   const handlePickImage = async (side: "front" | "back") => {
     if (isVerified) {
@@ -73,9 +133,13 @@ export default function DriverLicenseScreen() {
     }
 
     try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permission =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        showError("Permission Required", "Camera roll permission is required to upload your license.");
+        showError(
+          "Permission Required",
+          "Camera roll permission is required to upload your license."
+        );
         return;
       }
 
@@ -96,8 +160,6 @@ export default function DriverLicenseScreen() {
     }
   };
 
-  const { refreshUnreadCount } = useNotificationCount();
-
   const handleSubmit = async () => {
     if (isVerified) {
       showSuccess("Verified", "Your driver's license is already verified.");
@@ -105,7 +167,10 @@ export default function DriverLicenseScreen() {
     }
 
     if (!frontImage || !backImage) {
-      showError("Missing License Photo", "Please upload both the Front and Back sides of your driver's license.");
+      showError(
+        "Missing License Photo",
+        "Please upload both the Front and Back sides of your driver's license."
+      );
       return;
     }
 
@@ -115,10 +180,16 @@ export default function DriverLicenseScreen() {
       await updateUser(updatedUser);
       await refreshUser?.();
       await refreshUnreadCount().catch(() => {});
-      showSuccess("License Saved", "Driver's license saved! Your vehicle host will inspect and verify your license upon booking.");
+      showSuccess(
+        "License Saved",
+        "Driver's license saved! Your vehicle host will verify it upon booking."
+      );
       router.back();
     } catch (e: any) {
-      showError("Upload Failed", e.response?.data?.message || "Could not save driver's license.");
+      showError(
+        "Upload Failed",
+        e.response?.data?.message || "Could not save driver's license."
+      );
     } finally {
       setUploading(false);
     }
@@ -128,22 +199,29 @@ export default function DriverLicenseScreen() {
     return (
       <SafeAreaView edges={["top", "bottom"]} style={styles.container}>
         <View style={styles.headerBar}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={22} color={Colors.dark} />
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="chevron-back" size={22} color={Colors.dark} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Driver's License</Text>
-          <View style={{ width: 40 }} />
+          <View style={{ width: 38 }} />
         </View>
 
         <View style={styles.guestContainer}>
-          <Ionicons name="card-outline" size={72} color={Colors.secondary} />
+          <View style={styles.guestIconCircle}>
+            <Ionicons name="card-outline" size={36} color={Colors.dark} />
+          </View>
           <Text style={styles.guestTitle}>Sign In Required</Text>
           <Text style={styles.guestSubtitle}>
-            Please sign in to upload and manage your verified driver's license.
+            Sign in to upload and manage your driver's license.
           </Text>
           <TouchableOpacity
             style={styles.signInButton}
             onPress={() => router.push("/auth")}
+            activeOpacity={0.85}
           >
             <Text style={styles.signInText}>Sign In</Text>
           </TouchableOpacity>
@@ -154,220 +232,159 @@ export default function DriverLicenseScreen() {
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.container}>
+      {/* Clean Minimal Header */}
       <View style={styles.headerBar}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={20} color={Colors.dark} />
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="chevron-back" size={22} color={Colors.dark} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Driver's License</Text>
         <View style={{ width: 38 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Minimal Status Card */}
-        <View
-          style={[
-            styles.minimalStatusCard,
-            isRejected && { borderColor: "#FCA5A5", backgroundColor: "#FEF2F2" },
-            isPending && { borderColor: "#FDE68A", backgroundColor: "#FFFBEB" },
-            isVerified && { borderColor: "#A7F3D0", backgroundColor: "#ECFDF5" },
-          ]}
-        >
-          <View
-            style={[
-              styles.statusIconCircle,
-              isRejected && { backgroundColor: "#FEE2E2" },
-              isPending && { backgroundColor: "#FEF3C7" },
-              isVerified && { backgroundColor: "#D1FAE5" },
-            ]}
-          >
-            <Ionicons
-              name={
-                isVerified
-                  ? "shield-checkmark"
-                  : isPending
-                  ? "time"
-                  : isRejected
-                  ? "alert-circle"
-                  : "card-outline"
-              }
-              size={22}
-              color={
-                isVerified
-                  ? "#059669"
-                  : isPending
-                  ? "#D97706"
-                  : isRejected
-                  ? "#DC2626"
-                  : Colors.dark
-              }
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <View style={styles.statusTitleRow}>
-              <Text style={styles.minimalStatusTitle}>Identity Verification</Text>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Simple Top Status Intro */}
+        <View style={styles.topIntro}>
+          <View style={styles.topRow}>
+            <Text style={styles.pageHeading}>License Photos</Text>
+            <View
+              style={[styles.statusPill, { backgroundColor: statusInfo.bg }]}
+            >
               <View
                 style={[
-                  styles.statusBadge,
-                  isVerified
-                    ? styles.statusBadgeVerified
-                    : isPending
-                    ? styles.statusBadgePending
-                    : isRejected
-                    ? styles.statusBadgeRejected
-                    : styles.statusBadgeUnverified,
+                  styles.statusDot,
+                  { backgroundColor: statusInfo.color },
                 ]}
+              />
+              <Text
+                style={[styles.statusPillText, { color: statusInfo.color }]}
               >
-                <Text
-                  style={[
-                    styles.statusBadgeText,
-                    isVerified
-                      ? styles.statusTextVerified
-                      : (frontImage && backImage)
-                      ? styles.statusTextPending
-                      : isRejected
-                      ? styles.statusTextRejected
-                      : styles.statusTextUnverified,
-                  ]}
-                >
-                  {isVerified ? "Verified" : (frontImage && backImage) ? "Ready for Host Verification" : isRejected ? "Rejected" : "Not Submitted"}
-                </Text>
-              </View>
+                {statusInfo.label}
+              </Text>
             </View>
-
-            <Text
-              style={[
-                styles.minimalStatusSub,
-                isRejected && { color: "#991B1B", fontFamily: FontFamily.medium },
-              ]}
-            >
-              {isVerified
-                ? "Your driver's license is confirmed by your host. You have full booking access."
-                : (frontImage && backImage)
-                ? "Photos saved! Your vehicle host will inspect and verify your driver's license when reviewing your booking."
-                : isRejected
-                ? user?.license_rejection_reason
-                  ? `Note: ${user.license_rejection_reason}`
-                  : "Photos were rejected. Please re-upload clear photos."
-                : "Upload front and back photos to enable booking."}
-            </Text>
           </View>
+          <Text
+            style={[
+              styles.pageSubtext,
+              isRejected && { color: "#B91C1C", fontFamily: FontFamily.medium },
+            ]}
+          >
+            {statusInfo.subtext}
+          </Text>
         </View>
 
-        {/* Upload Slots Grid - Clean 2-Card Layout */}
-        <View style={styles.cardsGrid}>
+        {/* Centerpiece: Front & Back License Cards */}
+        <View style={styles.licenseSection}>
           {/* Front Side */}
-          <View style={styles.cardContainer}>
-            <View style={styles.cardLabelRow}>
-              <Text style={styles.cardLabel}>1. Front Side</Text>
-              {frontImage && <Ionicons name="checkmark-circle" size={16} color="#059669" />}
+          <View style={styles.cardBlock}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={styles.cardLabel}>Front Side</Text>
+              {frontImage && (
+                <Text style={styles.readyTag}>Uploaded</Text>
+              )}
             </View>
 
             <TouchableOpacity
               style={[
-                styles.minimalSlot,
-                frontImage && styles.minimalSlotFilled,
-                !canEdit && { opacity: 0.95 },
+                styles.licenseCard,
+                frontImage && styles.licenseCardFilled,
               ]}
               onPress={() => handlePickImage("front")}
               disabled={!canEdit}
               activeOpacity={canEdit ? 0.85 : 1}
             >
               {frontImage ? (
-                <View style={styles.imagePreviewWrap}>
-                  <Image source={{ uri: frontImage }} style={styles.previewImg} resizeMode="cover" />
-                  {canEdit ? (
-                    <View style={styles.changeOverlay}>
-                      <Ionicons name="camera-reverse" size={13} color={Colors.white} />
-                      <Text style={styles.changeText}>Change</Text>
-                    </View>
-                  ) : isPending ? (
-                    <View style={[styles.changeOverlay, { backgroundColor: "rgba(0, 0, 0, 0.65)" }]}>
-                      <Ionicons name="lock-closed" size={12} color={Colors.white} />
-                      <Text style={styles.changeText}>Locked</Text>
-                    </View>
-                  ) : (
-                    <View style={[styles.changeOverlay, { backgroundColor: "rgba(5, 150, 105, 0.85)" }]}>
-                      <Ionicons name="checkmark-done" size={12} color={Colors.white} />
-                      <Text style={styles.changeText}>Verified</Text>
+                <View style={styles.imageWrapper}>
+                  <Image
+                    source={{ uri: frontImage }}
+                    style={styles.licenseImage}
+                    resizeMode="cover"
+                  />
+                  {canEdit && (
+                    <View style={styles.changePill}>
+                      <Ionicons name="camera" size={13} color={Colors.dark} />
+                      <Text style={styles.changePillText}>Change</Text>
                     </View>
                   )}
                 </View>
               ) : (
-                <View style={styles.emptySlotContent}>
-                  <MaterialCommunityIcons name="card-account-details-outline" size={30} color="#9CA3AF" />
-                  <Text style={styles.slotUploadText}>Tap to add photo</Text>
-                  <Text style={styles.slotHintText}>Photo & Full Name</Text>
+                <View style={styles.emptyContent}>
+                  <View style={styles.emptyIconBox}>
+                    <Ionicons
+                      name="card-outline"
+                      size={24}
+                      color={Colors.dark}
+                    />
+                  </View>
+                  <Text style={styles.emptyTitle}>Upload Front of License</Text>
+                  <Text style={styles.emptySub}>
+                    Photo, full name, and license number
+                  </Text>
                 </View>
               )}
             </TouchableOpacity>
           </View>
 
           {/* Back Side */}
-          <View style={styles.cardContainer}>
-            <View style={styles.cardLabelRow}>
-              <Text style={styles.cardLabel}>2. Back Side</Text>
-              {backImage && <Ionicons name="checkmark-circle" size={16} color="#059669" />}
+          <View style={styles.cardBlock}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={styles.cardLabel}>Back Side</Text>
+              {backImage && (
+                <Text style={styles.readyTag}>Uploaded</Text>
+              )}
             </View>
 
             <TouchableOpacity
               style={[
-                styles.minimalSlot,
-                backImage && styles.minimalSlotFilled,
-                !canEdit && { opacity: 0.95 },
+                styles.licenseCard,
+                backImage && styles.licenseCardFilled,
               ]}
               onPress={() => handlePickImage("back")}
               disabled={!canEdit}
               activeOpacity={canEdit ? 0.85 : 1}
             >
               {backImage ? (
-                <View style={styles.imagePreviewWrap}>
-                  <Image source={{ uri: backImage }} style={styles.previewImg} resizeMode="cover" />
-                  {canEdit ? (
-                    <View style={styles.changeOverlay}>
-                      <Ionicons name="camera-reverse" size={13} color={Colors.white} />
-                      <Text style={styles.changeText}>Change</Text>
-                    </View>
-                  ) : isPending ? (
-                    <View style={[styles.changeOverlay, { backgroundColor: "rgba(0, 0, 0, 0.65)" }]}>
-                      <Ionicons name="lock-closed" size={12} color={Colors.white} />
-                      <Text style={styles.changeText}>Locked</Text>
-                    </View>
-                  ) : (
-                    <View style={[styles.changeOverlay, { backgroundColor: "rgba(5, 150, 105, 0.85)" }]}>
-                      <Ionicons name="checkmark-done" size={12} color={Colors.white} />
-                      <Text style={styles.changeText}>Verified</Text>
+                <View style={styles.imageWrapper}>
+                  <Image
+                    source={{ uri: backImage }}
+                    style={styles.licenseImage}
+                    resizeMode="cover"
+                  />
+                  {canEdit && (
+                    <View style={styles.changePill}>
+                      <Ionicons name="camera" size={13} color={Colors.dark} />
+                      <Text style={styles.changePillText}>Change</Text>
                     </View>
                   )}
                 </View>
               ) : (
-                <View style={styles.emptySlotContent}>
-                  <MaterialCommunityIcons name="card-bulleted-outline" size={30} color="#9CA3AF" />
-                  <Text style={styles.slotUploadText}>Tap to add photo</Text>
-                  <Text style={styles.slotHintText}>Restrictions & Barcode</Text>
+                <View style={styles.emptyContent}>
+                  <View style={styles.emptyIconBox}>
+                    <Ionicons
+                      name="barcode-outline"
+                      size={24}
+                      color={Colors.dark}
+                    />
+                  </View>
+                  <Text style={styles.emptyTitle}>Upload Back of License</Text>
+                  <Text style={styles.emptySub}>
+                    Restrictions and back details
+                  </Text>
                 </View>
               )}
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Requirements Hint */}
-        <View style={styles.requirementsHintCard}>
-          <Ionicons name="information-circle-outline" size={16} color="#6B7280" />
-          <Text style={styles.requirementsHintText}>
-            Ensure all details (Name, Birthdate, Gender) match your registered profile and the card is glare-free.
-          </Text>
-        </View>
-
-        {/* Submit / Status Action Area */}
-        <View style={styles.buttonWrapper}>
-          {isVerified ? (
-            <View style={styles.verifiedNoticeBox}>
-              <Ionicons name="checkmark-circle" size={18} color="#059669" />
-              <Text style={styles.verifiedNoticeText}>
-                Your identity is fully verified. You can book any vehicle.
-              </Text>
-            </View>
-          ) : (
+        {/* Action Button */}
+        {!isVerified && (
+          <View style={styles.buttonContainer}>
             <PrimaryButton
               title={
                 uploading
@@ -375,14 +392,14 @@ export default function DriverLicenseScreen() {
                   : isRejected
                   ? "Re-upload License"
                   : user?.drivers_license_front
-                  ? "Update License Photos"
-                  : "Save License Photos"
+                  ? "Update License"
+                  : "Save License"
               }
               onPress={handleSubmit}
               loading={uploading}
             />
-          )}
-        </View>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -397,266 +414,196 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
     backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
   },
   backButton: {
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: "#F3F4F6",
     justifyContent: "center",
     alignItems: "center",
   },
   headerTitle: {
     fontFamily: FontFamily.bold,
-    fontSize: 17,
+    fontSize: 16,
     color: Colors.dark,
   },
   scrollContent: {
     paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.lg,
+    paddingTop: Spacing.sm,
     paddingBottom: 40,
   },
-  minimalStatusCard: {
-    flexDirection: "row",
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: Spacing.md,
-    gap: 12,
-    alignItems: "flex-start",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    marginBottom: Spacing.lg,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
+
+  /* Top Intro */
+  topIntro: {
+    marginBottom: 22,
   },
-  statusIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#F3F4F6",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  statusTitleRow: {
+  topRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 6,
   },
-  minimalStatusTitle: {
+  pageHeading: {
     fontFamily: FontFamily.bold,
-    fontSize: 15,
+    fontSize: 20,
     color: Colors.dark,
   },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  statusBadgeVerified: {
-    backgroundColor: "#ECFDF5",
-  },
-  statusBadgePending: {
-    backgroundColor: "#FEF3C7",
-  },
-  statusBadgeRejected: {
-    backgroundColor: "#FEE2E2",
-  },
-  statusBadgeUnverified: {
-    backgroundColor: "#F3F4F6",
-  },
-  statusBadgeText: {
-    fontFamily: FontFamily.bold,
-    fontSize: 11,
-  },
-  statusTextVerified: {
-    color: "#059669",
-  },
-  statusTextPending: {
-    color: "#B45309",
-  },
-  statusTextRejected: {
-    color: "#DC2626",
-  },
-  statusTextUnverified: {
-    color: "#6B7280",
-  },
-  minimalStatusSub: {
-    fontFamily: FontFamily.regular,
-    fontSize: 12,
-    color: "#6B7280",
-    lineHeight: 17,
-    marginTop: 4,
-  },
-  cardsGrid: {
-    gap: 16,
-    marginBottom: Spacing.md,
-  },
-  cardContainer: {
+  statusPill: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
-  cardLabelRow: {
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusPillText: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 11.5,
+  },
+  pageSubtext: {
+    fontFamily: FontFamily.regular,
+    fontSize: 13,
+    color: Colors.secondary,
+    marginTop: 4,
+    lineHeight: 19,
+  },
+
+  /* License Cards */
+  licenseSection: {
+    gap: 20,
+  },
+  cardBlock: {
+    gap: 8,
+  },
+  cardHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 2,
   },
   cardLabel: {
     fontFamily: FontFamily.semiBold,
-    fontSize: 13,
+    fontSize: 13.5,
     color: Colors.dark,
   },
-  minimalSlot: {
-    height: 150,
-    backgroundColor: Colors.white,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: "#D1D5DB",
-    borderStyle: "dashed",
+  readyTag: {
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+    color: "#047857",
+  },
+  licenseCard: {
+    width: "100%",
+    aspectRatio: 16 / 10,
+    borderRadius: 18,
+    backgroundColor: "#F8F8F8",
     overflow: "hidden",
     justifyContent: "center",
     alignItems: "center",
   },
-  minimalSlotFilled: {
-    borderStyle: "solid",
-    borderColor: "#E5E7EB",
+  licenseCardFilled: {
+    backgroundColor: "#F0F0F0",
   },
-  imagePreviewWrap: {
+  imageWrapper: {
     width: "100%",
     height: "100%",
     position: "relative",
   },
-  previewImg: {
+  licenseImage: {
     width: "100%",
     height: "100%",
   },
-  changeOverlay: {
+  changePill: {
     position: "absolute",
-    bottom: 8,
-    right: 8,
+    bottom: 12,
+    right: 12,
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(0, 0, 0, 0.65)",
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+    gap: 5,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 12,
   },
-  changeText: {
+  changePillText: {
     fontFamily: FontFamily.bold,
-    fontSize: 11,
-    color: Colors.white,
-  },
-  emptySlotContent: {
-    alignItems: "center",
-    gap: 3,
-  },
-  slotUploadText: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: 13,
+    fontSize: 12,
     color: Colors.dark,
+  },
+  emptyContent: {
+    alignItems: "center",
+    paddingHorizontal: Spacing.lg,
+  },
+  emptyIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: Colors.logoBackground,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  emptyTitle: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 14,
+    color: Colors.dark,
+  },
+  emptySub: {
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    color: Colors.secondary,
     marginTop: 2,
+    textAlign: "center",
   },
-  slotHintText: {
-    fontFamily: FontFamily.regular,
-    fontSize: 11,
-    color: "#9CA3AF",
+
+  /* Submit Button */
+  buttonContainer: {
+    marginTop: 28,
   },
-  requirementsHintCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "#F3F4F6",
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 10,
-    borderRadius: 12,
-    marginBottom: Spacing.lg,
-  },
-  requirementsHintText: {
-    flex: 1,
-    fontFamily: FontFamily.regular,
-    fontSize: 11.5,
-    color: "#4B5563",
-    lineHeight: 16,
-  },
-  buttonWrapper: {
-    marginTop: 4,
-    marginBottom: 20,
-  },
-  pendingNoticeBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: "#FEF3C7",
-    borderWidth: 1,
-    borderColor: "#FCD34D",
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  pendingNoticeText: {
-    flex: 1,
-    fontFamily: FontFamily.medium,
-    fontSize: 12,
-    color: "#92400E",
-    lineHeight: 17,
-  },
-  verifiedNoticeBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    backgroundColor: "#D1FAE5",
-    borderWidth: 1,
-    borderColor: "#6EE7B7",
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  verifiedNoticeText: {
-    flex: 1,
-    fontFamily: FontFamily.medium,
-    fontSize: 12,
-    color: "#065F46",
-    lineHeight: 17,
-  },
+
+  /* Guest Mode */
   guestContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: Spacing.xl,
   },
+  guestIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: Colors.logoBackground,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: Spacing.md,
+  },
   guestTitle: {
     fontFamily: FontFamily.bold,
-    fontSize: FontSize.title,
+    fontSize: FontSize.heading,
     color: Colors.dark,
-    marginTop: Spacing.md,
   },
   guestSubtitle: {
     fontFamily: FontFamily.regular,
-    fontSize: 13,
+    fontSize: FontSize.body,
     color: Colors.secondary,
     textAlign: "center",
     marginTop: 6,
-    lineHeight: 20,
   },
   signInButton: {
-    marginTop: Spacing.xl,
+    marginTop: Spacing.lg,
     backgroundColor: Colors.primary,
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: 28,
     paddingVertical: 12,
-    borderRadius: 24,
+    borderRadius: 14,
   },
   signInText: {
     fontFamily: FontFamily.bold,
     fontSize: 14,
-    color: Colors.white,
+    color: Colors.dark,
   },
 });

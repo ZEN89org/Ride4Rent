@@ -14,17 +14,16 @@ class BookingController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $this->checkAndProcessExpirations();
-
         $user = $request->user();
+        $this->checkAndProcessExpirations($user?->id);
 
         if ($user->role === 'operator') {
-            $bookings = Booking::with(['renter', 'vehicle'])
+            $bookings = Booking::with(['renter', 'vehicle.images'])
                 ->where('operator_id', $user->id)
                 ->latest()
                 ->get();
         } else {
-            $bookings = Booking::with(['vehicle.operator.operatorProfile', 'operator.operatorProfile'])
+            $bookings = Booking::with(['vehicle.images', 'vehicle.operator.operatorProfile', 'operator.operatorProfile'])
                 ->where('renter_id', $user->id)
                 ->latest()
                 ->get();
@@ -350,9 +349,16 @@ class BookingController extends Controller
         $startDateFormatted = \Carbon\Carbon::parse($booking->start_date)->format('M d, Y');
         $endDateFormatted = \Carbon\Carbon::parse($booking->end_date)->format('M d, Y');
 
+        $operatorUserId = $booking->operator_id ?: ($vehicle->operator_id ?? null) ?: ($booking->vehicle?->operator_id ?? null);
+        $operator = $operatorUserId ? \App\Models\User::with('operatorProfile')->find($operatorUserId) : null;
+        $operatorProfile = $operator?->operatorProfile;
+        $operatorRealName = trim(($operator?->first_name ?? '') . ' ' . ($operator?->last_name ?? ''));
+        $operatorName = $operatorRealName ?: ($operator?->name ?: ($operatorProfile?->account_name ?: 'Vehicle Host'));
+
         $receiptMessageText = "🧾 PAYMENT RECEIPT\n"
             . "──────────────────────────────\n"
             . "Vehicle: {$vehicleTitle}\n"
+            . "Recipient: {$operatorName}\n"
             . "Schedule: {$startDateFormatted} – {$endDateFormatted} ({$booking->total_days} " . ($booking->total_days == 1 ? 'day' : 'days') . ")\n"
             . "Method: " . strtoupper($validated['payment_method']) . "\n"
             . "Reference: {$paymentRefDisplay}\n"
@@ -362,21 +368,26 @@ class BookingController extends Controller
             . "──────────────────────────────\n"
             . "Awaiting host verification";
 
-        $operatorUserId = $booking->operator_id ?: ($vehicle->operator_id ?? null) ?: ($booking->vehicle?->operator_id ?? null);
-
         if ($operatorUserId) {
-            Message::create([
-                'sender_id' => $renter->id,
-                'receiver_id' => $operatorUserId,
-                'vehicle_id' => $booking->vehicle_id,
-                'message' => $receiptMessageText,
-                'is_read' => false,
-            ]);
+            $alreadySent = Message::where('sender_id', $renter->id)
+                ->where('receiver_id', $operatorUserId)
+                ->where('message', 'like', "%{$paymentRefDisplay}%")
+                ->exists();
+
+            if (!$alreadySent) {
+                Message::create([
+                    'sender_id' => $renter->id,
+                    'receiver_id' => $operatorUserId,
+                    'vehicle_id' => $booking->vehicle_id,
+                    'message' => $receiptMessageText,
+                    'is_read' => false,
+                ]);
+            }
 
             Notification::create([
                 'user_id' => $operatorUserId,
                 'title' => 'Payment Submitted',
-                'message' => "Reservation payment of ₱" . number_format($booking->reservation_fee, 2) . " submitted for {$vehicleTitle}. Please verify within 24 hours.",
+                'message' => 'Renter submitted reservation payment for verification.',
                 'type' => 'booking',
                 'action_url' => '/operator-bookings',
             ]);
@@ -442,8 +453,8 @@ class BookingController extends Controller
         // Notify Renter
         Notification::create([
             'user_id' => $booking->renter_id,
-            'title' => 'Payment Confirmed & Booking Approved',
-            'message' => "The operator has confirmed your payment of ₱" . number_format($booking->reservation_fee ?? 500, 2) . " for booking #{$booking->id}. Your reservation is ready for handover.",
+            'title' => 'Booking Approved',
+            'message' => 'Your booking has been approved by the host.',
             'type' => 'booking',
             'action_url' => '/(tabs)/bookings',
         ]);
@@ -555,8 +566,12 @@ class BookingController extends Controller
         $otherCharges = (float) ($validated['other_charges'] ?? 0);
         $additionalTotal = $fuelCharge + $damageCharge + $lateFee + $otherCharges;
 
-        // Final amount calculation
-        $finalAmountDue = max(0, (float) $booking->total_price - (float) $booking->reservation_fee + $additionalTotal);
+        // Final amount calculation (subtract both initial reservation fee and settled extension payment)
+        $totalPaidSoFar = (float) $booking->reservation_fee;
+        if ($booking->extension_status === 'approved' && (float) $booking->extension_price > 0) {
+            $totalPaidSoFar += (float) $booking->extension_price;
+        }
+        $finalAmountDue = max(0, (float) $booking->total_price - $totalPaidSoFar + $additionalTotal);
 
         $booking->update([
             'status' => 'completed',
@@ -755,7 +770,7 @@ class BookingController extends Controller
             Notification::create([
                 'user_id' => $booking->renter_id,
                 'title' => 'Booking Approved',
-                'message' => 'Your reservation and driver\'s license have been approved by the host.',
+                'message' => 'Your booking has been approved by the host.',
                 'type' => 'success',
                 'action_url' => '/(tabs)/bookings',
             ]);
@@ -798,8 +813,8 @@ class BookingController extends Controller
             // Notify Renter
             Notification::create([
                 'user_id' => $booking->renter_id,
-                'title' => 'Reservation Marked as No-Show',
-                'message' => "Your booking #{$booking->id} for {$booking->vehicle?->name} was marked as No-Show. The ₱" . number_format($booking->reservation_fee, 2) . " reservation fee has been forfeited.",
+                'title' => 'Marked as No-Show',
+                'message' => 'Your booking was marked as no-show.',
                 'type' => 'warning',
                 'action_url' => '/(tabs)/bookings',
             ]);
@@ -807,8 +822,8 @@ class BookingController extends Controller
             // Notify Host
             Notification::create([
                 'user_id' => $booking->operator_id,
-                'title' => 'Booking Closed (No-Show)',
-                'message' => "Booking #{$booking->id} was closed as No-Show. The unit has been restored to your fleet.",
+                'title' => 'Booking Closed',
+                'message' => 'Booking closed as no-show.',
                 'type' => 'info',
                 'action_url' => '/operator-bookings',
             ]);
@@ -834,8 +849,10 @@ class BookingController extends Controller
                 // Context notification to renter
                 Notification::create([
                     'user_id' => $booking->renter_id,
-                    'title' => $newStatus === 'cancelled' ? 'Booking Cancelled (Refund Pending)' : 'Booking Declined (Refund Pending)',
-                    'message' => "Your booking #{$booking->id} was {$newStatus}. A refund of ₱" . number_format($booking->reservation_fee, 2) . " has been requested from the host.",
+                    'title' => $newStatus === 'cancelled' ? 'Booking Cancelled' : 'Booking Declined',
+                    'message' => $newStatus === 'cancelled'
+                        ? 'Your booking was cancelled. Refund is pending.'
+                        : 'Your booking was declined. Refund is pending.',
                     'type' => 'warning',
                     'action_url' => '/(tabs)/bookings',
                 ]);
@@ -844,7 +861,7 @@ class BookingController extends Controller
                 Notification::create([
                     'user_id' => $booking->operator_id,
                     'title' => 'Refund Required',
-                    'message' => "Booking #{$booking->id} was {$newStatus}. Please refund ₱" . number_format($booking->reservation_fee, 2) . " to {$booking->renter_refund_account_name} ({$booking->renter_refund_method}: {$booking->renter_refund_account_number}).",
+                    'message' => 'Please process the reservation refund for the cancelled booking.',
                     'type' => 'warning',
                     'action_url' => '/operator-bookings',
                 ]);
@@ -1061,7 +1078,7 @@ class BookingController extends Controller
         Notification::create([
             'user_id' => $booking->renter_id,
             'title' => 'Refund Completed',
-            'message' => "The host has processed your ₱" . number_format($booking->refund_amount ?: $booking->reservation_fee, 2) . " reservation refund. Reference ID: {$validated['refund_reference']}.",
+            'message' => 'Your reservation refund has been processed.',
             'type' => 'success',
             'action_url' => '/(tabs)/bookings',
         ]);
@@ -1074,9 +1091,10 @@ class BookingController extends Controller
     }
 
     /**
-     * Internal: Check and auto-expire pending reservations past their deadline
+     * Internal: Check and auto-expire pending reservations past their deadline,
+     * and dispatch progressive "Don't Miss Your Ride" reminders for unpaid & upcoming bookings.
      */
-    public function checkAndProcessExpirations(): void
+    public function checkAndProcessExpirations(?int $userId = null): void
     {
         $now = now();
 
@@ -1109,14 +1127,10 @@ class BookingController extends Controller
                 ]);
             }
 
-            // Contextual notification to Renter
-            $renterName = $booking->renter_refund_account_name ?: ($booking->renter ? $booking->renter->name : 'Renter');
-            $refundDest = "{$booking->renter_refund_method} ({$booking->renter_refund_account_number})";
-
             Notification::create([
                 'user_id' => $booking->renter_id,
-                'title' => 'Booking Auto-Cancelled (Refund Pending)',
-                'message' => "The host did not confirm booking #{$booking->id} in time. Your ₱" . number_format($booking->reservation_fee, 2) . " reservation fee is marked for refund to your {$refundDest}.",
+                'title' => 'Booking Expired',
+                'message' => 'Host did not confirm in time. Your refund is pending.',
                 'type' => 'warning',
                 'action_url' => '/(tabs)/bookings',
             ]);
@@ -1124,8 +1138,8 @@ class BookingController extends Controller
             // Urgent task notification to Operator
             Notification::create([
                 'user_id' => $booking->operator_id,
-                'title' => 'Refund Required (Auto-Expired)',
-                'message' => "Booking #{$booking->id} expired without verification. Please refund ₱" . number_format($booking->reservation_fee, 2) . " to {$renterName} via {$refundDest}.",
+                'title' => 'Refund Required',
+                'message' => 'An expired booking requires a reservation refund.',
                 'type' => 'warning',
                 'action_url' => '/operator-bookings',
             ]);
@@ -1146,10 +1160,133 @@ class BookingController extends Controller
             Notification::create([
                 'user_id' => $booking->renter_id,
                 'title' => 'Booking Expired',
-                'message' => "Booking #{$booking->id} was cancelled due to unpaid reservation fee in time.",
+                'message' => 'Your booking expired due to unpaid reservation fee.',
                 'type' => 'info',
                 'action_url' => '/(tabs)/bookings',
             ]);
+        }
+
+        // 3. Progressive "Don't Miss Your Ride" Reminders for Unpaid Pending Bookings
+        $activePendingQuery = Booking::with('vehicle')
+            ->where('status', 'pending_payment')
+            ->where('payment_status', 'unpaid')
+            ->where(function ($q) use ($now) {
+                $q->whereNull('expires_at')->orWhere('expires_at', '>', $now);
+            });
+
+        if ($userId) {
+            $activePendingQuery->where('renter_id', $userId);
+        }
+
+        $activePendingBookings = $activePendingQuery->get();
+
+        foreach ($activePendingBookings as $booking) {
+            if (!$booking->created_at) {
+                continue;
+            }
+
+            $elapsedSeconds = max(0, $now->timestamp - $booking->created_at->timestamp);
+            $vehicleName = trim(($booking->vehicle?->brand ?? '') . ' ' . ($booking->vehicle?->name ?? 'Vehicle')) ?: 'your selected vehicle';
+            $resFee = number_format((float) ($booking->reservation_fee ?: 500), 0);
+            $tripDates = \Carbon\Carbon::parse($booking->start_date)->format('M d')
+                . ' – '
+                . \Carbon\Carbon::parse($booking->end_date)->format('M d');
+
+            // Ordered from latest milestone to earliest so we only trigger the highest reached milestone
+            // without flooding multiple past milestones simultaneously if the user was offline.
+            $stages = [
+                [
+                    'seconds' => 18 * 3600, // 18 hours (6 hours before 24h expiry)
+                    'title' => 'Reservation Expiring Soon',
+                    'message' => "Don't miss your reservation! Your pending booking for {$vehicleName} expires in 6 hours. Settle the ₱{$resFee} fee now to keep your slot.",
+                    'type' => 'warning',
+                ],
+                [
+                    'seconds' => 2 * 3600, // 2 hours
+                    'title' => "Still Interested in {$vehicleName}?",
+                    'message' => "Don't miss out on {$vehicleName} ({$tripDates}). Complete your ₱{$resFee} reservation before another renter books it!",
+                    'type' => 'booking',
+                ],
+                [
+                    'seconds' => 15 * 60, // 15 minutes
+                    'title' => 'Complete Your Reservation',
+                    'message' => "Your {$vehicleName} ({$tripDates}) is still waiting in your bookings. Settle the ₱{$resFee} reservation fee to lock in your trip.",
+                    'type' => 'booking',
+                ],
+                [
+                    'seconds' => 60, // 1 minute (first nudge & live demo friendly)
+                    'title' => "Don't Miss Your Ride!",
+                    'message' => "Your {$vehicleName} is waiting in your bookings! Settle the ₱{$resFee} reservation fee to lock in your trip dates.",
+                    'type' => 'booking',
+                ],
+            ];
+
+            foreach ($stages as $stage) {
+                if ($elapsedSeconds >= $stage['seconds']) {
+                    $alreadySent = Notification::where('user_id', $booking->renter_id)
+                        ->where('title', $stage['title'])
+                        ->where('created_at', '>=', $booking->created_at)
+                        ->exists();
+
+                    if (!$alreadySent) {
+                        Notification::create([
+                            'user_id' => $booking->renter_id,
+                            'title' => $stage['title'],
+                            'message' => $stage['message'],
+                            'type' => $stage['type'],
+                            'action_url' => '/(tabs)/bookings',
+                            'is_read' => false,
+                        ]);
+                    }
+                    // Break so only the current active milestone is evaluated per cycle
+                    break;
+                }
+            }
+        }
+
+        // 4. Upcoming Trip Reminder (1 Day Before or Day of Pickup for Approved Bookings)
+        $approvedQuery = Booking::with('vehicle')
+            ->whereIn('status', ['approved', 'awaiting_pickup']);
+
+        if ($userId) {
+            $approvedQuery->where('renter_id', $userId);
+        }
+
+        $approvedBookings = $approvedQuery->get();
+        $today = $now->copy()->startOfDay();
+
+        foreach ($approvedBookings as $booking) {
+            if (!$booking->start_date) {
+                continue;
+            }
+
+            $startDay = \Carbon\Carbon::parse($booking->start_date)->startOfDay();
+            $daysUntilPickup = (int) $today->diffInDays($startDay, false);
+
+            if ($daysUntilPickup >= 0 && $daysUntilPickup <= 1) {
+                $vehicleName = trim(($booking->vehicle?->brand ?? '') . ' ' . ($booking->vehicle?->name ?? 'Vehicle')) ?: 'your vehicle';
+                $startFormatted = $startDay->format('M d, Y');
+                $whenLabel = $daysUntilPickup === 0 ? 'today' : 'tomorrow';
+                $reminderTitle = 'Upcoming Trip Reminder';
+                $reminderMessage = "Don't miss your trip {$whenLabel} with {$vehicleName} ({$startFormatted})! Check your pickup details and bring your driver's license.";
+
+                $alreadyReminded = Notification::where('user_id', $booking->renter_id)
+                    ->where('title', $reminderTitle)
+                    ->where('message', 'like', "%{$vehicleName}%")
+                    ->where('created_at', '>=', $booking->created_at ?? $now->copy()->subDays(30))
+                    ->exists();
+
+                if (!$alreadyReminded) {
+                    Notification::create([
+                        'user_id' => $booking->renter_id,
+                        'title' => $reminderTitle,
+                        'message' => $reminderMessage,
+                        'type' => 'booking',
+                        'action_url' => '/(tabs)/bookings',
+                        'is_read' => false,
+                    ]);
+                }
+            }
         }
     }
 
@@ -1187,10 +1324,13 @@ class BookingController extends Controller
             ], 422);
         }
 
-        $extraDays = max(1, (int) round($currentEnd->diffInDays($newEnd)));
-        $dailyRate = (float) ($booking->vehicle?->daily_rate ?: $booking->daily_rate ?: 0);
+        $extraDays = max(1, (int) ($request->input('extension_days') ?: round($currentEnd->diffInDays($newEnd))));
+        $dailyRate = (float) ($booking->daily_rate ?: $booking->vehicle?->daily_rate ?: 0);
         if ($dailyRate <= 0 && $booking->total_days > 0) {
             $dailyRate = (float) $booking->total_price / (float) $booking->total_days;
+        }
+        if ($dailyRate <= 0) {
+            $dailyRate = 2000;
         }
         $extensionPrice = $extraDays * $dailyRate;
 
@@ -1206,13 +1346,11 @@ class BookingController extends Controller
             'extension_paid_at' => null,
         ]);
 
-        $vehicleTitle = trim(($booking->vehicle?->brand ?? '') . ' ' . ($booking->vehicle?->name ?? 'Vehicle'));
-
         // Notify Operator to review the requested dates
         Notification::create([
             'user_id' => $booking->operator_id,
             'title' => 'Extension Requested',
-            'message' => "Renter requested +{$extraDays} day(s) extension for {$vehicleTitle} until " . $newEnd->format('M d, Y') . " (₱" . number_format($extensionPrice, 2) . "). Please review.",
+            'message' => 'A renter requested a trip extension. Please review.',
             'type' => 'booking',
             'action_url' => '/operator-bookings',
         ]);
@@ -1221,7 +1359,7 @@ class BookingController extends Controller
         Notification::create([
             'user_id' => $booking->renter_id,
             'title' => 'Extension Submitted',
-            'message' => "Extension request (+{$extraDays} days until " . $newEnd->format('M d, Y') . ") submitted to host for review.",
+            'message' => 'Your trip extension request was sent to the host.',
             'type' => 'info',
             'action_url' => '/(tabs)/bookings',
         ]);
@@ -1256,23 +1394,28 @@ class BookingController extends Controller
         $extraPrice = (float) ($booking->extension_price ?: $booking->extension_fee ?: 0);
         if ($extraPrice <= 0) {
             $dailyRate = (float) ($booking->vehicle?->daily_rate ?: $booking->daily_rate ?: 0);
+            if ($dailyRate <= 0 && (int)$booking->total_days > 0) {
+                $dailyRate = (float) $booking->total_price / (float) $booking->total_days;
+            }
+            if ($dailyRate <= 0) {
+                $dailyRate = 2000;
+            }
             $extraPrice = $extraDays * $dailyRate;
         }
 
         // Set status to payment_required so renter can proceed with GCash payment
         $booking->update([
             'extension_status' => 'payment_required',
+            'extension_days' => $extraDays,
             'extension_price' => $extraPrice,
             'extension_end_date' => $newEnd,
         ]);
 
-        $newEndFormatted = \Carbon\Carbon::parse($newEnd)->format('M d, Y');
-
         // Notify Renter to settle payment
         Notification::create([
             'user_id' => $booking->renter_id,
-            'title' => 'Extension Agreed by Host',
-            'message' => "Your host agreed to the +{$extraDays} day extension until {$newEndFormatted}! Please settle the extension fee of ₱" . number_format($extraPrice, 2) . " to confirm your schedule.",
+            'title' => 'Extension Approved',
+            'message' => 'Your extension request was approved. Please settle the payment.',
             'type' => 'success',
             'action_url' => '/(tabs)/bookings',
         ]);
@@ -1280,8 +1423,8 @@ class BookingController extends Controller
         // Notify Operator
         Notification::create([
             'user_id' => $booking->operator_id,
-            'title' => 'Extension Agreed',
-            'message' => "You agreed to the extension for Booking #{$booking->id}. Awaiting renter payment of ₱" . number_format($extraPrice, 2) . ".",
+            'title' => 'Extension Approved',
+            'message' => 'Extension approved. Awaiting renter payment.',
             'type' => 'info',
             'action_url' => '/operator-bookings',
         ]);
@@ -1315,7 +1458,7 @@ class BookingController extends Controller
         Notification::create([
             'user_id' => $booking->renter_id,
             'title' => 'Extension Declined',
-            'message' => "Your host was unable to approve the extension for Booking #{$booking->id}. Please return the vehicle on the original schedule.",
+            'message' => 'Your trip extension request was declined by the host.',
             'type' => 'warning',
             'action_url' => '/(tabs)/bookings',
         ]);
@@ -1355,20 +1498,25 @@ class BookingController extends Controller
             $newEnd = \Carbon\Carbon::parse($booking->end_date)->addDays($extraDays)->toDateString();
         }
 
-        $extraPrice = (float) ($booking->extension_price ?: $booking->extension_fee ?: 0);
-        if ($extraPrice <= 0) {
-            $dailyRate = (float) ($booking->vehicle?->daily_rate ?: $booking->daily_rate ?: 0);
-            $extraPrice = $extraDays * $dailyRate;
+        $dailyRate = (float) ($booking->daily_rate ?: $booking->vehicle?->daily_rate ?: 0);
+        if ($dailyRate <= 0 && (int)$booking->total_days > 0) {
+            $dailyRate = (float) $booking->total_price / (float) $booking->total_days;
         }
 
-        $start = new \DateTime($booking->start_date);
-        $end = new \DateTime($newEnd);
-        $calcTotalDays = max(1, $start->diff($end)->days);
+        $extraPrice = (float) ($booking->extension_price > 0 ? $booking->extension_price : ($extraDays * $dailyRate));
+        if ($extraPrice <= 0) {
+            $extraPrice = $extraDays * 2000;
+        }
+
+        // Exact math: Directly increment the total days and total rental price
+        $currentTotalDays = (int) ($booking->total_days ?: 1);
+        $calcTotalDays = $currentTotalDays + $extraDays;
+        $newTotalPrice = ((float) $booking->total_price) + $extraPrice;
 
         $booking->update([
             'end_date' => $newEnd,
             'total_days' => $calcTotalDays,
-            'total_price' => ((float) $booking->total_price) + $extraPrice,
+            'total_price' => $newTotalPrice,
             'extension_status' => 'approved',
             'extension_end_date' => $newEnd,
             'extension_price' => $extraPrice,
@@ -1382,10 +1530,17 @@ class BookingController extends Controller
         $paymentRefDisplay = trim($validated['payment_reference']);
         $newEndDateFormatted = \Carbon\Carbon::parse($newEnd)->format('M d, Y');
 
+        $operatorUserId = $booking->operator_id ?: ($vehicle->operator_id ?? null) ?: ($booking->vehicle?->operator_id ?? null);
+        $operator = $operatorUserId ? \App\Models\User::with('operatorProfile')->find($operatorUserId) : null;
+        $operatorProfile = $operator?->operatorProfile;
+        $operatorRealName = trim(($operator?->first_name ?? '') . ' ' . ($operator?->last_name ?? ''));
+        $operatorName = $operatorRealName ?: ($operator?->name ?: ($operatorProfile?->account_name ?: 'Vehicle Host'));
+
         // Auto-post official extension payment receipt into operator chat thread
         $receiptMessageText = "🧾 EXTENSION PAYMENT RECEIPT\n"
             . "──────────────────────────────\n"
             . "Vehicle: {$vehicleTitle}\n"
+            . "Recipient: {$operatorName}\n"
             . "Schedule: Extended by +{$extraDays} " . ($extraDays == 1 ? 'day' : 'days') . " (until {$newEndDateFormatted})\n"
             . "Method: " . strtoupper($validated['payment_method']) . "\n"
             . "Reference: {$paymentRefDisplay}\n"
@@ -1395,21 +1550,26 @@ class BookingController extends Controller
             . "──────────────────────────────\n"
             . "Rental Extended Successfully";
 
-        $operatorUserId = $booking->operator_id ?: ($vehicle->operator_id ?? null) ?: ($booking->vehicle?->operator_id ?? null);
-
         if ($operatorUserId) {
-            Message::create([
-                'sender_id' => $request->user()->id,
-                'receiver_id' => $operatorUserId,
-                'vehicle_id' => $booking->vehicle_id,
-                'message' => $receiptMessageText,
-                'is_read' => false,
-            ]);
+            $alreadySent = Message::where('sender_id', $request->user()->id)
+                ->where('receiver_id', $operatorUserId)
+                ->where('message', 'like', "%{$paymentRefDisplay}%")
+                ->exists();
+
+            if (!$alreadySent) {
+                Message::create([
+                    'sender_id' => $request->user()->id,
+                    'receiver_id' => $operatorUserId,
+                    'vehicle_id' => $booking->vehicle_id,
+                    'message' => $receiptMessageText,
+                    'is_read' => false,
+                ]);
+            }
 
             Notification::create([
                 'user_id' => $operatorUserId,
-                'title' => 'Extension Payment Settled',
-                'message' => "Extension fee of ₱" . number_format($extraPrice, 2) . " (Ref: {$paymentRefDisplay}) paid for {$vehicleTitle}. New return date is {$newEndDateFormatted}.",
+                'title' => 'Extension Paid',
+                'message' => 'Renter paid the trip extension fee.',
                 'type' => 'booking',
                 'action_url' => '/operator-bookings',
             ]);
@@ -1417,8 +1577,8 @@ class BookingController extends Controller
 
         Notification::create([
             'user_id' => $booking->renter_id,
-            'title' => 'Rental Extension Confirmed',
-            'message' => "Your rental extension of +{$extraDays} day(s) until {$newEndDateFormatted} has been confirmed. Official receipt shared in your host chat.",
+            'title' => 'Extension Confirmed',
+            'message' => 'Your trip extension is confirmed.',
             'type' => 'success',
             'action_url' => '/(tabs)/bookings',
         ]);

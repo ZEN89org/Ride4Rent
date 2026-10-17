@@ -1,5 +1,6 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import React, { useEffect, useRef, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
@@ -49,25 +50,30 @@ export default function FloatingAssistantFab({ onPress }: Props) {
     };
   }, []);
 
-  useEffect(() => {
-    const pulseLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.08,
-          duration: 1200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1200,
-          useNativeDriver: true,
-        }),
-      ])
-    );
+  useFocusEffect(
+    useCallback(() => {
+      const pulseLoop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.08,
+            duration: 1200,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1200,
+            useNativeDriver: true,
+          }),
+        ])
+      );
 
-    pulseLoop.start();
-    return () => pulseLoop.stop();
-  }, [pulseAnim]);
+      pulseLoop.start();
+      return () => {
+        pulseLoop.stop();
+        pulseAnim.setValue(1);
+      };
+    }, [pulseAnim])
+  );
 
   const panResponder = useRef(
     PanResponder.create({

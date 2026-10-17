@@ -3,8 +3,10 @@ import {
   ReactNode,
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react";
+import { router } from "expo-router";
 import { AppState } from "react-native";
 
 import {
@@ -15,6 +17,8 @@ import {
 } from "@/features/auth/storage/authStorage";
 
 import * as authService from "@/features/auth/services/authService";
+import { normalizeApiImages, registerSessionExpiredHandler } from "@/services/api";
+import { useAppToast } from "@/context/ToastContext";
 
 interface AuthContextType {
   user: any;
@@ -50,6 +54,44 @@ export function AuthProvider({ children }: Props) {
 
   const [loading, setLoading] =
     useState(true);
+  const tokenRef = useRef<string | null>(null);
+  const handlingExpiredSession = useRef(false);
+  const { showModal } = useAppToast();
+
+  useEffect(() => {
+    return registerSessionExpiredHandler(async (requestToken) => {
+      if (handlingExpiredSession.current) {
+        return;
+      }
+
+      handlingExpiredSession.current = true;
+      try {
+        const storedToken = await getToken();
+        if (
+          storedToken !== requestToken ||
+          tokenRef.current !== requestToken
+        ) {
+          handlingExpiredSession.current = false;
+          return;
+        }
+
+        await clearAuth();
+        tokenRef.current = null;
+        setToken(null);
+        setUser(null);
+        router.replace("/login");
+        showModal(
+          "Signed out",
+          "Your account was signed in on another device, so you have been logged out here.",
+          [{ text: "OK" }],
+          "warning"
+        );
+      } catch (error) {
+        handlingExpiredSession.current = false;
+        throw error;
+      }
+    });
+  }, [showModal]);
 
   useEffect(() => {
     let mounted = true;
@@ -68,13 +110,15 @@ const initializeAuth = async () => {
     }
 
     setToken(storedToken);
+    tokenRef.current = storedToken;
 
     try {
       const response =
         await authService.getCurrentUser();
 
-      const currentUser =
-        response?.data ?? response?.user;
+      const currentUser = normalizeApiImages(
+        response?.data ?? response?.user
+      );
 
       if (!currentUser) {
         throw new Error(
@@ -127,11 +171,14 @@ const initializeAuth = async () => {
     userData: any,
     tokenData: string
   ) => {
+    handlingExpiredSession.current = false;
+    const normalizedUser = normalizeApiImages(userData);
     await saveToken(tokenData);
-    await saveUser(userData);
+    await saveUser(normalizedUser);
 
+    tokenRef.current = tokenData;
     setToken(tokenData);
-    setUser(userData);
+    setUser(normalizedUser);
   };
 
   const logout = async () => {
@@ -143,12 +190,13 @@ const initializeAuth = async () => {
 
     await clearAuth();
 
+    tokenRef.current = null;
     setUser(null);
     setToken(null);
   };
 
   const updateUser = async (updatedUserData: any) => {
-    const mergedUser = { ...user, ...updatedUserData };
+    const mergedUser = normalizeApiImages({ ...user, ...updatedUserData });
     await saveUser(mergedUser);
     setUser(mergedUser);
   };
@@ -156,7 +204,7 @@ const initializeAuth = async () => {
   const refreshUser = useCallback(async () => {
     try {
       const response = await authService.getCurrentUser();
-      const currentUser = response?.data ?? response?.user;
+      const currentUser = normalizeApiImages(response?.data ?? response?.user);
       if (currentUser) {
         setUser((prevUser: any) => {
           if (
@@ -168,6 +216,8 @@ const initializeAuth = async () => {
             prevUser.first_name === currentUser.first_name &&
             prevUser.last_name === currentUser.last_name &&
             prevUser.profile_photo === currentUser.profile_photo &&
+            prevUser.drivers_license_front === currentUser.drivers_license_front &&
+            prevUser.drivers_license_back === currentUser.drivers_license_back &&
             JSON.stringify(prevUser.operatorProfile || prevUser.operator_profile || {}) ===
               JSON.stringify(currentUser.operatorProfile || currentUser.operator_profile || {})
           ) {

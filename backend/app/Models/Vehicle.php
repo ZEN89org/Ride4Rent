@@ -84,15 +84,62 @@ class Vehicle extends Model
 
     protected $appends = ['image_url'];
 
+    public static function resolveStorageUrl(?string $path, ?string $hostOverride = null): ?string
+    {
+        if (empty($path) || !is_string($path)) {
+            return null;
+        }
+
+        $trimmed = trim($path);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        if (str_starts_with($trimmed, 'data:')) {
+            return $trimmed;
+        }
+
+        $host = $hostOverride ?: (request()?->getSchemeAndHttpHost() ?: rtrim((string) config('app.url'), '/'));
+        if (
+            str_starts_with($host, 'http://') &&
+            (str_contains($host, '.railway.app') || str_contains($host, '.ngrok'))
+        ) {
+            $host = 'https://' . substr($host, 7);
+        }
+
+        // Fix accidental double-prefixed URLs like https://host/storage/https://...
+        if (preg_match('#/storage/(https?://.+)$#i', $trimmed, $m)) {
+            $trimmed = $m[1];
+        }
+
+        if (str_starts_with($trimmed, 'http://') || str_starts_with($trimmed, 'https://')) {
+            // If URL points to a /storage/ path on localhost or a private LAN IP, rewrite to current host
+            if ($host && preg_match('#^https?://(?:localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[0-1])\.\d+\.\d+)(?::\d+)?/storage/(.+)$#i', $trimmed, $matches)) {
+                return rtrim($host, '/') . '/storage/' . ltrim($matches[1], '/');
+            }
+            if (
+                str_starts_with($trimmed, 'http://') &&
+                (str_contains($trimmed, '.railway.app') || str_contains($trimmed, '.ngrok'))
+            ) {
+                return 'https://' . substr($trimmed, 7);
+            }
+            return $trimmed;
+        }
+
+        $cleanRelative = ltrim(preg_replace('#^/?storage/#', '', $trimmed), '/');
+        return rtrim($host, '/') . '/storage/' . $cleanRelative;
+    }
+
     public function getImageUrlAttribute(): ?string
     {
-        if ($this->cover_photo) {
-            if (str_starts_with($this->cover_photo, 'http://') || str_starts_with($this->cover_photo, 'https://')) {
-                return $this->cover_photo;
-            }
-            return url('/storage/' . ltrim($this->cover_photo, '/'));
+        $rawPath = $this->cover_photo;
+        if (empty($rawPath)) {
+            $rawPath = $this->relationLoaded('images')
+                ? $this->images->first()?->image_path
+                : $this->images()->orderBy('sort_order')->value('image_path');
         }
-        return null;
+
+        return self::resolveStorageUrl($rawPath);
     }
 
     public function operator(): BelongsTo

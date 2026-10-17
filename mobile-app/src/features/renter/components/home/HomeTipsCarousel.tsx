@@ -1,45 +1,46 @@
 import { Image } from "expo-image";
-import { useEffect, useRef, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useRef, useState } from "react";
 import {
-  Dimensions,
   FlatList,
   StyleSheet,
   View,
+  useWindowDimensions,
 } from "react-native";
-
-const { width } = Dimensions.get("window");
 
 const tips = [
   {
     image: require("../../../../../assets/img/tip1.1.png"),
-    width: width * 0.9,
   },
   {
     image: require("../../../../../assets/img/tip1.png"),
-    width: width * 0.9,
+  },
+  {
+    image: require("../../../../../assets/img/tip3.png"),
   },
 ];
 
 export default function HomeTipsCarousel() {
+  const { width } = useWindowDimensions();
   const [currentIndex, setCurrentIndex] = useState(0);
-
   const flatListRef = useRef<FlatList>(null);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const nextIndex =
-        (currentIndex + 1) % tips.length;
+  useFocusEffect(
+    useCallback(() => {
+      const interval = setInterval(() => {
+        setCurrentIndex((prev) => {
+          const nextIndex = (prev + 1) % tips.length;
+          flatListRef.current?.scrollToOffset({
+            offset: nextIndex * width,
+            animated: true,
+          });
+          return nextIndex;
+        });
+      }, 9000);
 
-      flatListRef.current?.scrollToIndex({
-        index: nextIndex,
-        animated: true,
-      });
-
-      setCurrentIndex(nextIndex);
-    }, 9000);
-
-    return () => clearInterval(interval);
-  }, [currentIndex]);
+      return () => clearInterval(interval);
+    }, [width])
+  );
 
   return (
     <View style={styles.container}>
@@ -51,6 +52,17 @@ export default function HomeTipsCarousel() {
         scrollEnabled={false}
         showsHorizontalScrollIndicator={false}
         keyExtractor={(_, index) => index.toString()}
+        getItemLayout={(_, index) => ({
+          length: width,
+          offset: width * index,
+          index,
+        })}
+        onMomentumScrollEnd={(event) => {
+          const index = Math.round(
+            event.nativeEvent.contentOffset.x / width
+          );
+          setCurrentIndex(Math.min(index, tips.length - 1));
+        }}
         renderItem={({ item }) => (
           <View
             style={[
@@ -64,7 +76,7 @@ export default function HomeTipsCarousel() {
               source={item.image}
               contentFit="contain"
               style={{
-                width: item.width,
+                width: width * 0.9,
                 aspectRatio: 16 / 9,
               }}
             />

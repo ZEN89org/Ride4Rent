@@ -573,7 +573,7 @@ export default function RenterRegistrationForm({
                   <Ionicons
                     name="checkmark"
                     size={15}
-                    color={Colors.white}
+                    color={Colors.dark}
                   />
                 )}
               </View>

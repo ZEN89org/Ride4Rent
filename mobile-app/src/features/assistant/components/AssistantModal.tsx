@@ -320,7 +320,7 @@ export default function AssistantModal({ visible, onClose, initialPrompt }: Prop
               <Ionicons
                 name="send"
                 size={18}
-                color={input.trim() ? Colors.white : Colors.secondary}
+                color={input.trim() ? Colors.dark : Colors.secondary}
               />
             </TouchableOpacity>
           </View>

@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
   },
   pagePillTextActive: {
     fontFamily: FontFamily.bold,
-    color: Colors.white,
+    color: Colors.dark,
   },
   ellipsisWrap: {
     width: 20,

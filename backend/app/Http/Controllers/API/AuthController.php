@@ -36,7 +36,7 @@ class AuthController extends Controller
         if (User::where('email', $email)->exists()) {
             return response()->json([
                 'success' => false,
-                'message' => 'This email is already registered. Please sign in instead.',
+                'message' => 'This email is already registered.',
             ], 422);
         }
 

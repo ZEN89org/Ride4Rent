@@ -3,11 +3,13 @@ import {
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { router } from "expo-router";
-import { ReactNode, useEffect, useState } from "react";
+import { router, usePathname } from "expo-router";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import {
   Animated,
+  BackHandler,
   Dimensions,
+  Easing,
   Pressable,
   StyleSheet,
   Text,
@@ -24,6 +26,7 @@ import {
 } from "@/constants/theme";
 import { useNotificationCount } from "@/context/NotificationContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
+import { resolveImageUrl } from "@/services/api";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const DRAWER_WIDTH = SCREEN_WIDTH * 0.78;
@@ -38,13 +41,103 @@ export default function OperatorShell({
   activeRoute: ActiveRoute;
 }) {
   const [menuVisible, setMenuVisible] = useState(false);
+  const [menuSettled, setMenuSettled] = useState(false);
   const [drawerAnimation] = useState(() => new Animated.Value(0));
+  const pathname = usePathname();
+  const openedPathnameRef = useRef<string | null>(null);
+  const navigatingRef = useRef(false);
   const { user, logout, loading, isOperatorActive, isOperatorPending } = useAuth();
   const { unreadCount } = useNotificationCount();
   const profile = user?.operatorProfile ?? user?.operator_profile;
-  const profilePhoto = user?.profile_photo;
+  const profilePhoto = resolveImageUrl(user?.profile_photo);
 
   const isOperatorAllowed = isOperatorActive || isOperatorPending;
+
+  const signOut = async () => {
+    closeMenu(true);
+    await logout();
+    router.replace("/auth");
+  };
+
+  const openMenu = () => {
+    drawerAnimation.stopAnimation();
+    drawerAnimation.setValue(0);
+    setMenuSettled(false);
+    openedPathnameRef.current = pathname;
+    navigatingRef.current = false;
+    setMenuVisible(true);
+    requestAnimationFrame(() => {
+      Animated.timing(drawerAnimation, {
+        toValue: 1,
+        duration: 140,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }).start(({ finished }) => {
+        if (finished) {
+          drawerAnimation.setValue(1);
+          setMenuSettled(true);
+        }
+      });
+    });
+  };
+
+  const closeMenu = (immediate = false) => {
+    drawerAnimation.stopAnimation();
+    setMenuSettled(false);
+    if (immediate) {
+      drawerAnimation.setValue(0);
+      setMenuVisible(false);
+      openedPathnameRef.current = null;
+      navigatingRef.current = false;
+      return;
+    }
+    Animated.timing(drawerAnimation, {
+      toValue: 0,
+      duration: 130,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: false,
+    }).start(() => {
+      drawerAnimation.setValue(0);
+      setMenuVisible(false);
+      openedPathnameRef.current = null;
+      navigatingRef.current = false;
+    });
+  };
+
+  const navigateFromMenu = (path: string) => {
+    if (navigatingRef.current) return;
+    navigatingRef.current = true;
+    router.push(path as any);
+    setTimeout(() => {
+      navigatingRef.current = false;
+    }, 500);
+  };
+
+  useEffect(() => {
+    if (
+      menuVisible &&
+      openedPathnameRef.current !== null &&
+      pathname !== openedPathnameRef.current
+    ) {
+      const timer = setTimeout(() => {
+        closeMenu(true);
+      }, 180);
+      return () => clearTimeout(timer);
+    }
+  }, [pathname, menuVisible]);
+
+  useEffect(() => {
+    if (!menuVisible) return;
+    const backAction = () => {
+      closeMenu();
+      return true;
+    };
+    const backSubscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      backAction
+    );
+    return () => backSubscription.remove();
+  }, [menuVisible]);
 
   useEffect(() => {
     if (!loading && !isOperatorAllowed) {
@@ -56,34 +149,6 @@ export default function OperatorShell({
     }
   }, [loading, isOperatorAllowed]);
 
-  if (loading || !isOperatorAllowed) {
-    return null;
-  }
-
-  const signOut = async () => {
-    await logout();
-    router.replace("/auth");
-  };
-
-  const openMenu = () => {
-    setMenuVisible(true);
-    Animated.timing(drawerAnimation, {
-      toValue: 1,
-      duration: 250,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const closeMenu = () => {
-    Animated.timing(drawerAnimation, {
-      toValue: 0,
-      duration: 250,
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) setMenuVisible(false);
-    });
-  };
-
   const appTranslateX = drawerAnimation.interpolate({
     inputRange: [0, 1],
     outputRange: [0, -DRAWER_WIDTH],
@@ -93,6 +158,15 @@ export default function OperatorShell({
     inputRange: [0, 1],
     outputRange: [DRAWER_WIDTH, 0],
   });
+
+  const overlayOpacity = drawerAnimation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+
+  if (loading || !isOperatorAllowed) {
+    return null;
+  }
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
@@ -270,12 +344,19 @@ export default function OperatorShell({
         {/* SideNav matching renter design */}
         {menuVisible && (
           <View style={styles.sideNavContainer} pointerEvents="box-none">
-            <Pressable style={styles.backdrop} onPress={closeMenu} />
+            <Animated.View
+              pointerEvents="box-none"
+              style={[styles.backdrop, { opacity: overlayOpacity }]}
+            >
+              <Pressable style={styles.backdropTouchArea} onPress={() => closeMenu()} />
+            </Animated.View>
             <Animated.View
               style={[
                 styles.drawer,
                 {
                   width: DRAWER_WIDTH,
+                },
+                !menuSettled && {
                   transform: [{ translateX: drawerTranslateX }],
                 },
               ]}
@@ -296,9 +377,15 @@ export default function OperatorShell({
                     )}
                   </View>
 
-                  <Pressable onPress={closeMenu} style={styles.closeButton} hitSlop={10}>
+                  <TouchableOpacity
+                    onPress={() => closeMenu()}
+                    style={styles.closeButton}
+                    activeOpacity={0.6}
+                    delayPressIn={0}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
                     <Ionicons name="close" size={24} color={Colors.dark} />
-                  </Pressable>
+                  </TouchableOpacity>
                 </View>
 
                 <View style={styles.divider} />
@@ -307,87 +394,81 @@ export default function OperatorShell({
                 <View style={styles.menuSection}>
                   <Text style={styles.sectionTitle}>Account</Text>
 
-                  <Pressable
+                  <TouchableOpacity
                     style={styles.menuItem}
-                    onPress={() => {
-                      closeMenu();
-                      router.push("/operator-profile" as any);
-                    }}
+                    activeOpacity={0.55}
+                    delayPressIn={0}
+                    onPress={() => navigateFromMenu("/operator-profile")}
                   >
                     <View style={styles.menuIcon}>
                       <Ionicons name="business-outline" size={21} color={Colors.dark} />
                     </View>
                     <Text style={styles.menuLabel}>Business Profile</Text>
                     <Ionicons name="chevron-forward" size={17} color={Colors.secondary} />
-                  </Pressable>
+                  </TouchableOpacity>
 
-                  <Pressable
+                  <TouchableOpacity
                     style={styles.menuItem}
-                    onPress={() => {
-                      closeMenu();
-                      router.push("/settings" as any);
-                    }}
+                    activeOpacity={0.55}
+                    delayPressIn={0}
+                    onPress={() => navigateFromMenu("/settings")}
                   >
                     <View style={styles.menuIcon}>
                       <Ionicons name="settings-outline" size={21} color={Colors.dark} />
                     </View>
                     <Text style={styles.menuLabel}>Settings</Text>
                     <Ionicons name="chevron-forward" size={17} color={Colors.secondary} />
-                  </Pressable>
+                  </TouchableOpacity>
                 </View>
 
                 {/* Section: Support */}
                 <View style={styles.menuSection}>
                   <Text style={styles.sectionTitle}>Support</Text>
 
-                  <Pressable
+                  <TouchableOpacity
                     style={styles.menuItem}
-                    onPress={() => {
-                      closeMenu();
-                      router.push("/faq" as any);
-                    }}
+                    activeOpacity={0.55}
+                    delayPressIn={0}
+                    onPress={() => navigateFromMenu("/faq")}
                   >
                     <View style={styles.menuIcon}>
                       <Ionicons name="help-circle-outline" size={21} color={Colors.dark} />
                     </View>
                     <Text style={styles.menuLabel}>FAQ</Text>
                     <Ionicons name="chevron-forward" size={17} color={Colors.secondary} />
-                  </Pressable>
+                  </TouchableOpacity>
 
-                  <Pressable
+                  <TouchableOpacity
                     style={styles.menuItem}
-                    onPress={() => {
-                      closeMenu();
-                      router.push("/terms" as any);
-                    }}
+                    activeOpacity={0.55}
+                    delayPressIn={0}
+                    onPress={() => navigateFromMenu("/terms")}
                   >
                     <View style={styles.menuIcon}>
                       <Ionicons name="document-text-outline" size={21} color={Colors.dark} />
                     </View>
                     <Text style={styles.menuLabel}>Terms & Conditions</Text>
                     <Ionicons name="chevron-forward" size={17} color={Colors.secondary} />
-                  </Pressable>
+                  </TouchableOpacity>
 
-                  <Pressable
+                  <TouchableOpacity
                     style={styles.menuItem}
-                    onPress={() => {
-                      closeMenu();
-                      router.push("/support" as any);
-                    }}
+                    activeOpacity={0.55}
+                    delayPressIn={0}
+                    onPress={() => navigateFromMenu("/support")}
                   >
                     <View style={styles.menuIcon}>
                       <Ionicons name="headset-outline" size={21} color={Colors.dark} />
                     </View>
                     <Text style={styles.menuLabel}>Contact Support</Text>
                     <Ionicons name="chevron-forward" size={17} color={Colors.secondary} />
-                  </Pressable>
+                  </TouchableOpacity>
 
-                  <Pressable
+                  <TouchableOpacity
                     style={styles.menuItem}
-                    onPress={() => {
-                      closeMenu();
-                      router.push("/about" as any);
-                    }}
+                    activeOpacity={0.55}
+                    delayPressIn={0}
+                    onPress={() => navigateFromMenu("/about")}
                   >
                     <View style={styles.menuIcon}>
                       <Image
@@ -398,41 +479,49 @@ export default function OperatorShell({
                     </View>
                     <Text style={styles.menuLabel}>About Ride4Rent</Text>
                     <Ionicons name="chevron-forward" size={17} color={Colors.secondary} />
-                  </Pressable>
+                  </TouchableOpacity>
                 </View>
 
                 {/* Logout Button */}
-                <Pressable
+                <TouchableOpacity
                   style={styles.logoutButton}
+                  activeOpacity={0.75}
+                  delayPressIn={0}
                   onPress={signOut}
                 >
-                  <Ionicons name="log-out-outline" size={21} color={Colors.white} />
+                  <Ionicons name="log-out-outline" size={21} color={Colors.dark} />
                   <Text style={styles.logoutText}>Logout</Text>
-                </Pressable>
+                </TouchableOpacity>
 
                 {/* Footer with social icons & copyright */}
                 <View style={styles.footer}>
                   <View style={styles.socialContainer}>
-                    <Pressable
+                    <TouchableOpacity
                       style={styles.socialButton}
+                      activeOpacity={0.7}
+                      delayPressIn={0}
                       onPress={() => console.log("Facebook pressed")}
                     >
                       <Ionicons name="logo-facebook" size={19} color={Colors.dark} />
-                    </Pressable>
+                    </TouchableOpacity>
 
-                    <Pressable
+                    <TouchableOpacity
                       style={styles.socialButton}
+                      activeOpacity={0.7}
+                      delayPressIn={0}
                       onPress={() => console.log("Instagram pressed")}
                     >
                       <Ionicons name="logo-instagram" size={19} color={Colors.dark} />
-                    </Pressable>
+                    </TouchableOpacity>
 
-                    <Pressable
+                    <TouchableOpacity
                       style={styles.socialButton}
+                      activeOpacity={0.7}
+                      delayPressIn={0}
                       onPress={() => console.log("Gmail pressed")}
                     >
                       <Ionicons name="mail-outline" size={19} color={Colors.dark} />
-                    </Pressable>
+                    </TouchableOpacity>
                   </View>
 
                   <Text style={styles.footerText}>@2026 Ride4Rent</Text>
@@ -605,8 +694,9 @@ const styles = StyleSheet.create({
     transform: [{ scale: 1.05 }],
   },
   sideNavContainer: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
     zIndex: 1000,
+    elevation: 20,
   },
   backdrop: {
     position: "absolute",
@@ -614,16 +704,24 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
+    zIndex: 1,
     backgroundColor: "rgba(0,0,0,0.3)",
+  },
+  backdropTouchArea: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: DRAWER_WIDTH,
   },
   drawer: {
     position: "absolute",
     top: 0,
     right: 0,
     bottom: 0,
+    zIndex: 2,
     backgroundColor: Colors.white,
-    elevation: 20,
-    overflow: "visible",
+    elevation: 24,
     shadowColor: "#000",
     shadowOffset: { width: -3, height: 0 },
     shadowOpacity: 0.15,
@@ -709,7 +807,7 @@ const styles = StyleSheet.create({
     marginLeft: Spacing.sm,
     fontFamily: FontFamily.bold,
     fontSize: FontSize.body,
-    color: Colors.white,
+    color: Colors.dark,
   },
   footer: {
     marginTop: "auto",

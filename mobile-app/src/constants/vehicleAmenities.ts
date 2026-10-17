@@ -14,7 +14,7 @@ export const ALL_AMENITIES: AmenityOption[] = [
     label: "LTO Registered & Verified",
     icon: "shield-checkmark",
     iconType: "ion",
-    color: "#10B981",
+    color: "#478c75",
     category: "all",
   },
   {
@@ -22,7 +22,7 @@ export const ALL_AMENITIES: AmenityOption[] = [
     label: "Clean & Sanitized Unit",
     icon: "sparkles",
     iconType: "ion",
-    color: "#1E293B",
+    color: "#485f83",
     category: "all",
   },
   {
@@ -30,7 +30,7 @@ export const ALL_AMENITIES: AmenityOption[] = [
     label: "Recently Serviced & Maintained",
     icon: "tools",
     iconType: "mci",
-    color: "#6366F1",
+    color: "#474884",
     category: "all",
   },
   {
@@ -38,7 +38,7 @@ export const ALL_AMENITIES: AmenityOption[] = [
     label: "Full Tank on Handover",
     icon: "gas-station",
     iconType: "mci",
-    color: "#059669",
+    color: "#42856f",
     category: "all",
   },
 
@@ -48,7 +48,7 @@ export const ALL_AMENITIES: AmenityOption[] = [
     label: "Air Conditioning",
     icon: "snow",
     iconType: "ion",
-    color: "#2563EB",
+    color: "#455882",
     category: "car",
   },
   {
@@ -56,7 +56,7 @@ export const ALL_AMENITIES: AmenityOption[] = [
     label: "Audio & Bluetooth Stereo",
     icon: "bluetooth",
     iconType: "ion",
-    color: "#6366F1",
+    color: "#464781",
     category: "car",
   },
   {
@@ -64,7 +64,7 @@ export const ALL_AMENITIES: AmenityOption[] = [
     label: "USB Charging Port",
     icon: "flash",
     iconType: "ion",
-    color: "#F59E0B",
+    color: "#846c42",
     category: "car",
   },
   {
@@ -72,7 +72,7 @@ export const ALL_AMENITIES: AmenityOption[] = [
     label: "GPS Navigation Ready",
     icon: "navigate-circle",
     iconType: "ion",
-    color: "#D97706",
+    color: "#846542",
     category: "car",
   },
   {
@@ -80,7 +80,7 @@ export const ALL_AMENITIES: AmenityOption[] = [
     label: "Backup Camera / Sensors",
     icon: "camera-reverse",
     iconType: "ion",
-    color: "#0284C7",
+    color: "#477287",
     category: "car",
   },
   {
@@ -88,7 +88,7 @@ export const ALL_AMENITIES: AmenityOption[] = [
     label: "Dual / Rear AC System",
     icon: "fan",
     iconType: "mci",
-    color: "#0284C7",
+    color: "#477287",
     category: "van",
   },
   {
@@ -96,7 +96,7 @@ export const ALL_AMENITIES: AmenityOption[] = [
     label: "Spacious Trunk / Luggage Cargo",
     icon: "bag-personal",
     iconType: "mci",
-    color: "#EA580C",
+    color: "#875d47",
     category: "car",
   },
   {
@@ -104,7 +104,7 @@ export const ALL_AMENITIES: AmenityOption[] = [
     label: "High Ground Clearance",
     icon: "car-estate",
     iconType: "mci",
-    color: "#B45309",
+    color: "#856147",
     category: "car",
   },
   {
@@ -112,7 +112,7 @@ export const ALL_AMENITIES: AmenityOption[] = [
     label: "Child Safety Seat Available",
     icon: "car-child-seat",
     iconType: "mci",
-    color: "#EC4899",
+    color: "#834564",
     category: "car",
   },
   {
@@ -120,7 +120,7 @@ export const ALL_AMENITIES: AmenityOption[] = [
     label: "Equipped with Dashcam",
     icon: "video-vintage",
     iconType: "mci",
-    color: "#475569",
+    color: "#456187",
     category: "car",
   },
 
@@ -130,7 +130,7 @@ export const ALL_AMENITIES: AmenityOption[] = [
     label: "Helmet Included",
     icon: "motorbike",
     iconType: "mci",
-    color: "#F59E0B",
+    color: "#836c45",
     category: "motorcycle",
   },
   {
@@ -138,7 +138,7 @@ export const ALL_AMENITIES: AmenityOption[] = [
     label: "Extra Passenger Helmet",
     icon: "hard-hat",
     iconType: "mci",
-    color: "#D97706",
+    color: "#826545",
     category: "motorcycle",
   },
   {
@@ -146,7 +146,7 @@ export const ALL_AMENITIES: AmenityOption[] = [
     label: "Handlebar Phone Mount",
     icon: "cellphone-dock",
     iconType: "mci",
-    color: "#2563EB",
+    color: "#485d8b",
     category: "motorcycle",
   },
   {
@@ -154,7 +154,7 @@ export const ALL_AMENITIES: AmenityOption[] = [
     label: "Emergency Raincoat / Poncho",
     icon: "weather-pouring",
     iconType: "mci",
-    color: "#0891B2",
+    color: "#487a87",
     category: "motorcycle",
   },
   {
@@ -162,7 +162,7 @@ export const ALL_AMENITIES: AmenityOption[] = [
     label: "Rear Top Box / Storage Box",
     icon: "package-variant-closed",
     iconType: "mci",
-    color: "#4B5563",
+    color: "#45638f",
     category: "motorcycle",
   },
   {
@@ -170,7 +170,7 @@ export const ALL_AMENITIES: AmenityOption[] = [
     label: "High Fuel Efficiency (45+ km/L)",
     icon: "gas-station-outline",
     iconType: "mci",
-    color: "#16A34A",
+    color: "#408158",
     category: "motorcycle",
   },
 ];

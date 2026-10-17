@@ -20,6 +20,7 @@ import { useAppToast } from "@/context/ToastContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import OperatorShell from "@/features/operator/components/navigation/OperatorShell";
 import { getMyVehicles } from "@/features/operator/services/vehicleService";
+import { resolveImageUrl } from "@/services/api";
 import { getMyBookings } from "@/services/bookingService";
 
 const cleanDate = (d: string | null | undefined): string => {
@@ -32,10 +33,11 @@ const DEFAULT_CAR_FALLBACK =
 
 const resolveVehicleImage = (vehicle: any): string => {
   if (!vehicle) return DEFAULT_CAR_FALLBACK;
-  if (vehicle.image_url) return vehicle.image_url;
-  if (vehicle.cover_photo) return vehicle.cover_photo;
+  if (vehicle.image_url) return resolveImageUrl(vehicle.image_url, DEFAULT_CAR_FALLBACK) || DEFAULT_CAR_FALLBACK;
+  if (vehicle.cover_photo) return resolveImageUrl(vehicle.cover_photo, DEFAULT_CAR_FALLBACK) || DEFAULT_CAR_FALLBACK;
   if (Array.isArray(vehicle.images) && vehicle.images.length > 0) {
-    return vehicle.images[0].image_url || DEFAULT_CAR_FALLBACK;
+    const first = vehicle.images[0].image_url || vehicle.images[0].image_path;
+    return resolveImageUrl(first, DEFAULT_CAR_FALLBACK) || DEFAULT_CAR_FALLBACK;
   }
   return DEFAULT_CAR_FALLBACK;
 };
@@ -143,7 +145,7 @@ export default function OperatorDashboardScreen() {
               <Text style={styles.topFinancialAmount}>₱{totalEarnings.toLocaleString()}</Text>
             </View>
             <View style={styles.payoutBadge}>
-              <Ionicons name="wallet" size={13} color={Colors.white} />
+              <Ionicons name="wallet" size={13} color={Colors.dark} />
               <Text style={styles.payoutBadgeText}>Active Wallet</Text>
             </View>
           </View>
@@ -285,7 +287,7 @@ export default function OperatorDashboardScreen() {
               >
                 <Text style={[styles.heroPillBtnText, { color: Colors.white }]}>Fleet Health</Text>
                 <View style={[styles.heroPillIcon, { backgroundColor: Colors.primary }]}>
-                  <Ionicons name="build" size={12} color={Colors.white} />
+                  <Ionicons name="build" size={12} color={Colors.dark} />
                 </View>
               </TouchableOpacity>
             </View>
@@ -322,8 +324,7 @@ export default function OperatorDashboardScreen() {
 
         {pendingVerification.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Ionicons name="checkmark-done-circle" size={36} color="#10B981" />
-            <Text style={styles.emptyTitle}>All caught up!</Text>
+            <Text style={styles.emptyTitle}>All Caught Up!</Text>
             <Text style={styles.emptySub}>No customer payments pending your verification right now.</Text>
           </View>
         ) : (
@@ -382,7 +383,6 @@ export default function OperatorDashboardScreen() {
 
         {fleet.length === 0 ? (
           <View style={styles.emptyCard}>
-            <MaterialCommunityIcons name="car-outline" size={36} color={Colors.secondary} />
             <Text style={styles.emptyTitle}>No Listed Vehicles</Text>
             <Text style={styles.emptySub}>List your vehicles to start receiving rental requests.</Text>
           </View>
@@ -473,7 +473,7 @@ const styles = StyleSheet.create({
   payoutBadgeText: {
     fontFamily: FontFamily.bold,
     fontSize: 11.5,
-    color: Colors.white,
+    color: Colors.dark,
   },
   cardDivider: {
     height: 1,
@@ -590,7 +590,7 @@ const styles = StyleSheet.create({
   heroPillBtnText: {
     fontFamily: FontFamily.bold,
     fontSize: 12,
-    color: Colors.white,
+    color: Colors.dark,
   },
   heroPillIcon: {
     width: 22,
@@ -687,26 +687,26 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
   emptyCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: Spacing.lg,
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: Spacing.sm,
+    justifyContent: "flex-start",
+    paddingTop: 24,
+    paddingBottom: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
   },
   emptyTitle: {
     fontFamily: FontFamily.bold,
-    fontSize: 14,
+    fontSize: 18,
     color: Colors.dark,
-    marginTop: 6,
+    textAlign: "center",
   },
   emptySub: {
     fontFamily: FontFamily.regular,
-    fontSize: 12,
+    fontSize: 13,
     color: Colors.secondary,
     textAlign: "center",
-    marginTop: 2,
+    lineHeight: 19,
+    marginTop: 8,
+    paddingHorizontal: Spacing.sm,
   },
   // Booking Card
   bookingItemCard: {

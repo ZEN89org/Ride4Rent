@@ -50,11 +50,12 @@ export default function OnboardingSlide({
   index = 0,
   scrollX,
 }: Props) {
-  // Smooth animated interpolations when transitioning between slides
-  let textOpacity: any = 1;
-  let textTranslateY: any = 0;
-  let imageScale: any = 1;
-  let imageOpacity: any = 1;
+  let textOpacity: number | Animated.AnimatedInterpolation<number> = 1;
+  let textTranslateX: number | Animated.AnimatedInterpolation<number> = 0;
+  let textTranslateY: number | Animated.AnimatedInterpolation<number> = 0;
+  let imageTranslateX: number | Animated.AnimatedInterpolation<number> = 0;
+  let imageScale: number | Animated.AnimatedInterpolation<number> = 1;
+  let imageOpacity: number | Animated.AnimatedInterpolation<number> = 1;
 
   if (scrollX) {
     const inputRange = [
@@ -69,21 +70,33 @@ export default function OnboardingSlide({
       extrapolate: "clamp",
     });
 
+    textTranslateX = scrollX.interpolate({
+      inputRange,
+      outputRange: [width * 0.18, 0, -width * 0.18],
+      extrapolate: "clamp",
+    });
+
     textTranslateY = scrollX.interpolate({
       inputRange,
-      outputRange: [18, 0, 18],
+      outputRange: [18, 0, -10],
+      extrapolate: "clamp",
+    });
+
+    imageTranslateX = scrollX.interpolate({
+      inputRange,
+      outputRange: [width * 0.12, 0, -width * 0.12],
       extrapolate: "clamp",
     });
 
     imageScale = scrollX.interpolate({
       inputRange,
-      outputRange: [0.94, 1, 0.94],
+      outputRange: [0.92, 1, 0.96],
       extrapolate: "clamp",
     });
 
     imageOpacity = scrollX.interpolate({
       inputRange,
-      outputRange: [0.5, 1, 0.5],
+      outputRange: [0.35, 1, 0.35],
       extrapolate: "clamp",
     });
   }
@@ -97,7 +110,10 @@ export default function OnboardingSlide({
             {
               height: imageHeight,
               opacity: imageOpacity,
-              transform: [{ scale: imageScale }],
+              transform: [
+                { translateX: imageTranslateX },
+                { scale: imageScale },
+              ],
             },
           ]}
         >
@@ -121,7 +137,10 @@ export default function OnboardingSlide({
             textPaddingBottom !== undefined && { paddingBottom: textPaddingBottom },
             {
               opacity: textOpacity,
-              transform: [{ translateY: textTranslateY }],
+              transform: [
+                { translateX: textTranslateX },
+                { translateY: textTranslateY },
+              ],
             },
           ]}
         >
@@ -139,7 +158,10 @@ export default function OnboardingSlide({
           styles.imageWrapper,
           {
             opacity: imageOpacity,
-            transform: [{ scale: imageScale }],
+            transform: [
+              { translateX: imageTranslateX },
+              { scale: imageScale },
+            ],
           },
         ]}
       >
@@ -167,7 +189,10 @@ export default function OnboardingSlide({
           textPaddingBottom !== undefined && { paddingBottom: textPaddingBottom },
           {
             opacity: textOpacity,
-            transform: [{ translateY: textTranslateY }],
+            transform: [
+              { translateX: textTranslateX },
+              { translateY: textTranslateY },
+            ],
           },
         ]}
       >

@@ -1,4 +1,4 @@
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
@@ -12,31 +12,98 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
+import * as Location from "expo-location";
 
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";
 import { useAppToast } from "@/context/ToastContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 
+import { resolveImageUrl } from "@/services/api";
 import { uploadProfilePhoto } from "@/services/profileService";
+import { getSavedLocation, saveLocation } from "@/storage/locationStorage";
 
 export default function ProfileScreen() {
   const { user, isGuest, updateUser, refreshUser } = useAuth();
   const { showSuccess, showError, showModal } = useAppToast();
   const [profileImage, setProfileImage] = useState<string | null>(
-    user?.profile_photo || null
+    resolveImageUrl(user?.profile_photo) || null
   );
   const [uploading, setUploading] = useState(false);
+  const [savedAddress, setSavedAddress] = useState<string>("Not set");
 
   useEffect(() => {
     if (user?.profile_photo) {
-      setProfileImage(user.profile_photo);
+      setProfileImage(resolveImageUrl(user.profile_photo));
     }
   }, [user?.profile_photo]);
 
   useFocusEffect(
     useCallback(() => {
-      refreshUser?.();
+      let active = true;
+
+      getSavedLocation()
+        .then((saved) => {
+          if (active && saved?.address) {
+            setSavedAddress(saved.address);
+          }
+        })
+        .catch(() => {});
+
+      const runBackgroundSync = () => {
+        if (!active) return;
+        refreshUser?.();
+
+        const loadLocation = async () => {
+          try {
+            const saved = await getSavedLocation();
+            if (saved?.address) {
+              if (active) setSavedAddress(saved.address);
+              return;
+            }
+
+            const perm = await Location.getForegroundPermissionsAsync();
+            if (perm.granted && active) {
+              const loc = await Location.getCurrentPositionAsync({});
+              const geo = await Location.reverseGeocodeAsync({
+                latitude: loc.coords.latitude,
+                longitude: loc.coords.longitude,
+              });
+              const g = geo?.[0];
+              const addr = g
+                ? [g.street, g.district, g.city, g.region].filter(Boolean).join(", ")
+                : "";
+              if (addr && active) {
+                setSavedAddress(addr);
+                await saveLocation({
+                  latitude: loc.coords.latitude,
+                  longitude: loc.coords.longitude,
+                  address: addr,
+                  confirmed: true,
+                });
+              }
+            }
+          } catch {
+            // ignore
+          }
+        };
+
+        loadLocation();
+      };
+
+      const idleId =
+        typeof requestIdleCallback === "function"
+          ? requestIdleCallback(runBackgroundSync)
+          : setTimeout(runBackgroundSync, 150);
+
+      return () => {
+        active = false;
+        if (typeof cancelIdleCallback === "function" && typeof idleId === "number") {
+          cancelIdleCallback(idleId);
+        } else {
+          clearTimeout(idleId as any);
+        }
+      };
     }, [])
   );
 
@@ -54,7 +121,7 @@ export default function ProfileScreen() {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
+        mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
@@ -69,12 +136,11 @@ export default function ProfileScreen() {
           const updatedUser = await uploadProfilePhoto(selectedUri);
           await updateUser(updatedUser);
           setProfileImage(updatedUser.profile_photo || selectedUri);
-          showSuccess("Success", "Profile photo uploaded and saved successfully!");
+          showSuccess("Success", "Profile photo updated.");
         } catch (apiErr) {
           console.error("Backend photo upload failed:", apiErr);
-          // Still save local uri in user object so UI stays updated
           await updateUser({ profile_photo: selectedUri });
-          showSuccess("Success", "Profile photo updated successfully!");
+          showSuccess("Success", "Profile photo updated.");
         } finally {
           setUploading(false);
         }
@@ -92,22 +158,26 @@ export default function ProfileScreen() {
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}
+            activeOpacity={0.7}
           >
-            <Ionicons name="arrow-back" size={22} color={Colors.dark} />
+            <Ionicons name="chevron-back" size={22} color={Colors.dark} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Profile</Text>
-          <View style={{ width: 40 }} />
+          <View style={{ width: 38 }} />
         </View>
 
         <View style={styles.guestContainer}>
-          <Ionicons name="person-circle-outline" size={80} color={Colors.secondary} />
+          <View style={styles.guestIconCircle}>
+            <Ionicons name="person-outline" size={36} color={Colors.dark} />
+          </View>
           <Text style={styles.guestTitle}>Guest Mode</Text>
           <Text style={styles.guestSubtitle}>
-            Sign in to view and edit your profile, driver's license, and rental records.
+            Sign in to view your profile and driver's license.
           </Text>
           <TouchableOpacity
             style={styles.signInButton}
             onPress={() => router.push("/auth")}
+            activeOpacity={0.85}
           >
             <Text style={styles.signInText}>Sign In</Text>
           </TouchableOpacity>
@@ -120,48 +190,129 @@ export default function ProfileScreen() {
     .filter(Boolean)
     .join(" ");
 
-  // Format date of birth to YYYY-MM-DD
   const formatDOB = (dobString: string | null | undefined) => {
     if (!dobString) return "Not provided";
     try {
       const d = new Date(dobString);
       if (isNaN(d.getTime())) return dobString.split("T")[0];
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
-      return `${year}-${month}-${day}`;
+      const months = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+      ];
+      return `${months[d.getMonth()]} ${String(d.getDate()).padStart(2, "0")}, ${d.getFullYear()}`;
     } catch {
       return dobString;
     }
   };
 
+  const isLicenseVerified = Boolean(user.is_drivers_license_verified);
+  const isLicensePending =
+    !isLicenseVerified &&
+    (user.license_verification_status === "pending" ||
+      (!user.license_verification_status && Boolean(user.drivers_license_front)));
+  const isLicenseRejected =
+    !isLicenseVerified && user.license_verification_status === "rejected";
+
+  const licenseInfo = isLicenseVerified
+    ? {
+        badgeText: "Verified Renter",
+        badgeColor: "#047857",
+        badgeBg: "#ECFDF5",
+        subtext: "Verified and ready for booking",
+        actionText: "View",
+      }
+    : isLicensePending
+    ? {
+        badgeText: "Pending Review",
+        badgeColor: "#92400E",
+        badgeBg: "#FEF3C7",
+        subtext: "Under review by host/admin",
+        actionText: "Check",
+      }
+    : isLicenseRejected
+    ? {
+        badgeText: "Rejected",
+        badgeColor: "#B91C1C",
+        badgeBg: "#FEE2E2",
+        subtext: "Please upload a clear photo",
+        actionText: "Update",
+      }
+    : {
+        badgeText: "Unverified",
+        badgeColor: "#92400E",
+        badgeBg: Colors.logoBackground,
+        subtext: "Required before booking a vehicle",
+        actionText: "Upload",
+      };
+
+  const formattedSex = user.sex
+    ? user.sex.charAt(0).toUpperCase() + user.sex.slice(1)
+    : "Not provided";
+
+  const personalDetails = [
+    {
+      icon: "person-outline" as const,
+      label: "Full Name",
+      value: fullName || "Not provided",
+    },
+    {
+      icon: "mail-outline" as const,
+      label: "Email Address",
+      value: user.email || "Not provided",
+    },
+    {
+      icon: "call-outline" as const,
+      label: "Mobile Number",
+      value: user.mobile_number || "Not provided",
+    },
+    {
+      icon: "calendar-outline" as const,
+      label: "Date of Birth",
+      value: formatDOB(user.date_of_birth),
+    },
+    {
+      icon: "male-female-outline" as const,
+      label: "Gender",
+      value: formattedSex,
+    },
+  ];
+
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.container}>
+      {/* Clean Minimal Header */}
       <View style={styles.headerBar}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
+          activeOpacity={0.7}
         >
-          <Ionicons name="arrow-back" size={22} color={Colors.dark} />
+          <Ionicons name="chevron-back" size={22} color={Colors.dark} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Profile</Text>
-        <View style={{ width: 40 }} />
+        <Text style={styles.headerTitle}>Profile</Text>
+        <View style={{ width: 38 }} />
       </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        nestedScrollEnabled={true}
       >
-        {/* User Card & Photo Upload */}
-        <View style={styles.avatarSection}>
+        {/* Clean Horizontal Profile Summary */}
+        <View style={styles.profileHeader}>
           <View style={styles.avatarWrapper}>
             {profileImage ? (
               <Image source={{ uri: profileImage }} style={styles.avatarImage} />
             ) : (
-              <View style={styles.avatarCircle}>
+              <View style={styles.avatarPlaceholder}>
                 <Text style={styles.avatarLetter}>
                   {user.first_name ? user.first_name.charAt(0).toUpperCase() : "U"}
                 </Text>
@@ -169,237 +320,111 @@ export default function ProfileScreen() {
             )}
 
             <TouchableOpacity
-              style={styles.cameraBadge}
+              style={styles.cameraButton}
               onPress={handlePickImage}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
               disabled={uploading}
             >
               {uploading ? (
                 <ActivityIndicator size="small" color={Colors.dark} />
               ) : (
-                <Ionicons name="camera" size={16} color={Colors.dark} />
+                <Ionicons name="camera" size={13} color={Colors.dark} />
               )}
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.userName}>{fullName || "Ride4Rent User"}</Text>
-          <Text style={styles.userEmail}>{user.email}</Text>
-
-          <View
-            style={[
-              styles.roleBadge,
-              user.role === "operator"
-                ? null
-                : user.is_drivers_license_verified
-                ? styles.roleBadgeVerified
-                : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
-                ? styles.roleBadgePending
-                : styles.roleBadgeUnverified,
-            ]}
-          >
-            <Ionicons
-              name={
-                user.role === "operator"
-                  ? "business"
-                  : user.is_drivers_license_verified
-                  ? "shield-checkmark"
-                  : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
-                  ? "time"
-                  : "alert-circle"
-              }
-              size={14}
-              color={
-                user.role === "operator"
-                  ? Colors.dark
-                  : user.is_drivers_license_verified
-                  ? "#047857"
-                  : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
-                  ? "#92400E"
-                  : "#B45309"
-              }
-            />
-            <Text
+          <View style={styles.profileTextCol}>
+            <Text style={styles.userName} numberOfLines={1}>
+              {fullName || "Ride4Rent User"}
+            </Text>
+            <Text style={styles.userEmail} numberOfLines={1}>
+              {user.email}
+            </Text>
+            <View
               style={[
-                styles.roleBadgeText,
-                user.role === "operator"
-                  ? null
-                  : user.is_drivers_license_verified
-                  ? styles.roleBadgeTextVerified
-                  : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
-                  ? styles.roleBadgeTextPending
-                  : styles.roleBadgeTextUnverified,
+                styles.statusPill,
+                { backgroundColor: licenseInfo.badgeBg },
               ]}
             >
-              {user.role === "operator"
-                ? "Verified Operator"
-                : user.is_drivers_license_verified
-                ? "Verified Renter"
-                : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
-                ? "Pending Verification"
-                : user.license_verification_status === "rejected"
-                ? "Verification Rejected"
-                : "Unverified Renter"}
-            </Text>
+              <View
+                style={[
+                  styles.statusDot,
+                  { backgroundColor: licenseInfo.badgeColor },
+                ]}
+              />
+              <Text
+                style={[
+                  styles.statusPillText,
+                  { color: licenseInfo.badgeColor },
+                ]}
+              >
+                {licenseInfo.badgeText}
+              </Text>
+            </View>
           </View>
         </View>
 
-        {/* Account & Driver License Status Card */}
+        {/* Simple Driver's License Row Card */}
         {user.role !== "operator" && (
           <TouchableOpacity
-            style={[
-              styles.licenseStatusCard,
-              user.is_drivers_license_verified
-                ? styles.licenseCardVerified
-                : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
-                ? styles.licenseCardPending
-                : user.license_verification_status === "rejected"
-                ? styles.licenseCardRejected
-                : styles.licenseCardUnverified,
-            ]}
+            style={styles.licenseRowCard}
             onPress={() => router.push("/driver-license" as any)}
             activeOpacity={0.8}
           >
-            <View
-              style={[
-                styles.licenseIconWrap,
-                {
-                  backgroundColor: user.is_drivers_license_verified
-                    ? "#ECFDF5"
-                    : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
-                    ? "#FEF3C7"
-                    : user.license_verification_status === "rejected"
-                    ? "#FEE2E2"
-                    : "#FEF3C7",
-                },
-              ]}
-            >
-              <Ionicons
-                name={
-                  user.is_drivers_license_verified
-                    ? "shield-checkmark"
-                    : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
-                    ? "time"
-                    : user.license_verification_status === "rejected"
-                    ? "close-circle"
-                    : "alert-circle"
-                }
-                size={24}
-                color={
-                  user.is_drivers_license_verified
-                    ? "#10B981"
-                    : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
-                    ? "#D97706"
-                    : user.license_verification_status === "rejected"
-                    ? "#EF4444"
-                    : "#D97706"
-                }
-              />
+            <View style={styles.licenseIconBox}>
+              <Ionicons name="card-outline" size={20} color={Colors.dark} />
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.licenseTitle}>
-                {user.is_drivers_license_verified
-                  ? "Driver's License Verified"
-                  : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
-                  ? "Driver's License Under Review"
-                  : user.license_verification_status === "rejected"
-                  ? "Driver's License Rejected"
-                  : "Driver's License Required"}
-              </Text>
-              <Text style={styles.licenseSubtitle}>
-                {user.is_drivers_license_verified
-                  ? "Your credentials are verified. You can freely book vehicles."
-                  : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
-                  ? "Admin is checking that your details match your card."
-                  : user.license_verification_status === "rejected"
-                  ? user.license_rejection_reason || "Verification failed. Tap to re-upload clear photos."
-                  : "Upload your driver's license (Front & Back) to get verified for booking."}
+
+            <View style={styles.licenseTextCol}>
+              <Text style={styles.licenseTitle}>Driver's License</Text>
+              <Text style={styles.licenseSubtext}>{licenseInfo.subtext}</Text>
+            </View>
+
+            <View style={styles.licenseActionBtn}>
+              <Text style={styles.licenseActionBtnText}>
+                {licenseInfo.actionText}
               </Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={Colors.secondary} />
           </TouchableOpacity>
         )}
 
-        {/* Account Status Card - Premium Presentable UI */}
-        <View style={styles.statusCard}>
-          <View style={styles.statusIconWrap}>
-            <Ionicons
-              name={
-                user.is_drivers_license_verified
-                  ? "checkmark-circle"
-                  : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
-                  ? "time"
-                  : "alert-circle"
-              }
-              size={24}
-              color={
-                user.is_drivers_license_verified
-                  ? "#10B981"
-                  : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
-                  ? "#D97706"
-                  : Colors.primary
-              }
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.statusTitle}>
-              {user.is_drivers_license_verified
-                ? "Renter Status: Fully Verified"
-                : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
-                ? "Renter Status: Verification In Progress"
-                : user.license_verification_status === "rejected"
-                ? "Renter Status: Action Required (Rejected)"
-                : "Renter Status: Action Needed"}
-            </Text>
-            <Text style={styles.statusSubtitle}>
-              {user.is_drivers_license_verified
-                ? "You have full booking privileges across all vehicle listings."
-                : user.license_verification_status === "pending" || (!user.license_verification_status && user.drivers_license_front)
-                ? "Your submitted driver's license is being analyzed by the Admin."
-                : user.license_verification_status === "rejected"
-                ? "Your license was rejected. Please re-upload matching photos."
-                : "Driver's license verification is required before making reservations."}
-            </Text>
-          </View>
-        </View>
+        {/* Clean Borderless Personal Information List */}
+        <Text style={styles.sectionLabel}>Personal Information</Text>
 
-        {/* Profile Info Details */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionHeader}>Personal Information</Text>
+        <View style={styles.personalList}>
+          {personalDetails.map((item) => (
+            <View key={item.label} style={styles.personalRow}>
+              <View style={styles.personalIconBox}>
+                <Ionicons name={item.icon} size={18} color={Colors.dark} />
+              </View>
+              <View style={styles.personalTextCol}>
+                <Text style={styles.personalLabel}>{item.label}</Text>
+                <Text style={styles.personalValue}>{item.value}</Text>
+              </View>
+            </View>
+          ))}
 
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>First Name</Text>
-            <Text style={styles.infoValue}>{user.first_name || "N/A"}</Text>
-          </View>
-          <View style={styles.infoDivider} />
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Last Name</Text>
-            <Text style={styles.infoValue}>{user.last_name || "N/A"}</Text>
-          </View>
-          <View style={styles.infoDivider} />
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Email Address</Text>
-            <Text style={styles.infoValue}>{user.email || "N/A"}</Text>
-          </View>
-          <View style={styles.infoDivider} />
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Mobile Number</Text>
-            <Text style={styles.infoValue}>{user.mobile_number || "N/A"}</Text>
-          </View>
-          <View style={styles.infoDivider} />
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Date of Birth</Text>
-            <Text style={styles.infoValue}>{formatDOB(user.date_of_birth)}</Text>
-          </View>
-          <View style={styles.infoDivider} />
-
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Sex / Gender</Text>
-            <Text style={styles.infoValue}>{user.sex || "N/A"}</Text>
-          </View>
+          {/* Current Location Row (Connected to Available Vehicles Near You) */}
+          {user.role !== "operator" && (
+            <TouchableOpacity
+              style={styles.personalRow}
+              onPress={() => router.push("/current-location?from=profile" as any)}
+              activeOpacity={0.8}
+            >
+              <View style={styles.personalIconBox}>
+                <Ionicons name="location-outline" size={18} color={Colors.dark} />
+              </View>
+              <View style={styles.personalTextCol}>
+                <Text style={styles.personalLabel}>Current Location</Text>
+                <Text style={styles.personalValue} numberOfLines={1}>
+                  {savedAddress}
+                </Text>
+              </View>
+              <View style={styles.locationChangeBtn}>
+                <Text style={styles.locationChangeBtnText}>Change</Text>
+              </View>
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -415,266 +440,235 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
     backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.divider,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.inputBackground,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: "center",
     alignItems: "center",
   },
   headerTitle: {
     fontFamily: FontFamily.bold,
-    fontSize: FontSize.title,
+    fontSize: 16,
     color: Colors.dark,
   },
   scrollContent: {
-    padding: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.sm,
     paddingBottom: 40,
   },
-  avatarSection: {
+
+  /* Horizontal Profile Header */
+  profileHeader: {
+    flexDirection: "row",
     alignItems: "center",
-    marginBottom: Spacing.xl,
+    gap: 16,
+    paddingVertical: Spacing.md,
+    marginBottom: Spacing.md,
   },
   avatarWrapper: {
     position: "relative",
-    marginBottom: Spacing.sm,
   },
-  avatarCircle: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+  avatarImage: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+  },
+  avatarPlaceholder: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: Colors.primary,
     justifyContent: "center",
     alignItems: "center",
   },
-  avatarImage: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-  },
   avatarLetter: {
     fontFamily: FontFamily.bold,
-    fontSize: 36,
-    color: Colors.white,
+    fontSize: 28,
+    color: Colors.dark,
   },
-  cameraBadge: {
+  cameraButton: {
     position: "absolute",
     bottom: 0,
     right: 0,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: Colors.white,
-    justifyContent: "center",
-    alignItems: "center",
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: Colors.primary,
     borderWidth: 2,
     borderColor: Colors.white,
-    shadowColor: Colors.dark,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 3,
-    elevation: 3,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  profileTextCol: {
+    flex: 1,
+    alignItems: "flex-start",
   },
   userName: {
     fontFamily: FontFamily.bold,
-    fontSize: 20,
+    fontSize: 18,
     color: Colors.dark,
-    marginTop: 4,
   },
   userEmail: {
     fontFamily: FontFamily.regular,
     fontSize: 13,
     color: Colors.secondary,
-    marginTop: 2,
+    marginTop: 1,
   },
-  roleBadge: {
+  statusPill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginTop: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 5,
-    borderRadius: 14,
-    backgroundColor: Colors.logoBackground,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 12,
+    marginTop: 7,
   },
-  roleBadgeVerified: {
-    backgroundColor: "#ECFDF5",
-    borderWidth: 1,
-    borderColor: "#A7F3D0",
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
-  roleBadgePending: {
-    backgroundColor: "#FEF3C7",
-    borderWidth: 1,
-    borderColor: "#FDE68A",
-  },
-  roleBadgeUnverified: {
-    backgroundColor: "#FEE2E2",
-    borderWidth: 1,
-    borderColor: "#FECACA",
-  },
-  roleBadgeText: {
+  statusPillText: {
     fontFamily: FontFamily.semiBold,
-    fontSize: 12,
-    color: Colors.dark,
+    fontSize: 11,
   },
-  roleBadgeTextVerified: {
-    color: "#047857",
-  },
-  roleBadgeTextPending: {
-    color: "#92400E",
-  },
-  roleBadgeTextUnverified: {
-    color: "#B45309",
-  },
-  licenseStatusCard: {
+
+  /* Simple Driver's License Card */
+  licenseRowCard: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: Colors.logoBackground,
     borderRadius: 16,
-    padding: Spacing.md,
-    gap: Spacing.md,
-    marginBottom: Spacing.md,
-    borderWidth: 1.5,
+    padding: 14,
+    gap: 12,
+    marginBottom: 24,
   },
-  licenseCardVerified: {
-    backgroundColor: "#F0FDF4",
-    borderColor: "#86EFAC",
-  },
-  licenseCardPending: {
-    backgroundColor: "#FFFBEB",
-    borderColor: "#FCD34D",
-  },
-  licenseCardRejected: {
-    backgroundColor: "#FEF2F2",
-    borderColor: "#FCA5A5",
-  },
-  licenseCardUnverified: {
-    backgroundColor: "#FFFBEB",
-    borderColor: "#FCD34D",
-  },
-  licenseIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  licenseIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: Colors.white,
     justifyContent: "center",
     alignItems: "center",
+  },
+  licenseTextCol: {
+    flex: 1,
   },
   licenseTitle: {
     fontFamily: FontFamily.bold,
-    fontSize: 14,
+    fontSize: 13.5,
     color: Colors.dark,
   },
-  licenseSubtitle: {
+  licenseSubtext: {
     fontFamily: FontFamily.regular,
     fontSize: 12,
     color: Colors.secondary,
-    marginTop: 2,
-    lineHeight: 16,
+    marginTop: 1,
   },
-  statusCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: Spacing.lg,
-    gap: Spacing.md,
-    marginBottom: Spacing.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
+  licenseActionBtn: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 10,
   },
-  statusIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#ECFDF5",
-    justifyContent: "center",
-    alignItems: "center",
+  licenseActionBtnText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 12,
+    color: Colors.dark,
   },
-  statusTitle: {
+
+  /* Personal Information — Clean Borderless List */
+  sectionLabel: {
     fontFamily: FontFamily.bold,
     fontSize: 15,
     color: Colors.dark,
+    marginBottom: 14,
   },
-  statusSubtitle: {
+  personalList: {
+    gap: 16,
+  },
+  personalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  personalIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: "#F6F6F6",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  personalTextCol: {
+    flex: 1,
+  },
+  personalLabel: {
     fontFamily: FontFamily.regular,
     fontSize: 12,
     color: Colors.secondary,
-    marginTop: 2,
-    lineHeight: 16,
   },
-  sectionCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: Spacing.lg,
-    marginBottom: Spacing.lg,
-    shadowColor: Colors.dark,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  sectionHeader: {
-    fontFamily: FontFamily.bold,
-    fontSize: 16,
-    color: Colors.dark,
-    marginBottom: Spacing.md,
-  },
-  infoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  infoLabel: {
-    fontFamily: FontFamily.regular,
-    fontSize: 14,
-    color: Colors.secondary,
-  },
-  infoValue: {
+  personalValue: {
     fontFamily: FontFamily.semiBold,
     fontSize: 14,
     color: Colors.dark,
+    marginTop: 2,
   },
-  infoDivider: {
-    height: 1,
-    backgroundColor: Colors.divider,
-    marginVertical: 4,
+  locationChangeBtn: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 10,
   },
+  locationChangeBtnText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 12,
+    color: Colors.dark,
+  },
+
+  /* Guest Mode */
   guestContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: Spacing.xl,
   },
+  guestIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: Colors.logoBackground,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: Spacing.md,
+  },
   guestTitle: {
     fontFamily: FontFamily.bold,
     fontSize: FontSize.heading,
     color: Colors.dark,
-    marginTop: Spacing.md,
   },
   guestSubtitle: {
-    marginTop: 8,
+    marginTop: 6,
     fontFamily: FontFamily.regular,
     fontSize: FontSize.body,
     color: Colors.secondary,
     textAlign: "center",
   },
   signInButton: {
-    marginTop: Spacing.xl,
+    marginTop: Spacing.lg,
     backgroundColor: Colors.primary,
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: 28,
     paddingVertical: 12,
-    borderRadius: 24,
+    borderRadius: 14,
   },
   signInText: {
     fontFamily: FontFamily.bold,
     fontSize: 14,
-    color: Colors.white,
+    color: Colors.dark,
   },
 });

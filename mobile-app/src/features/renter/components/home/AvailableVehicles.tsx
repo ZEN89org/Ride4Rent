@@ -1,12 +1,13 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Location from "expo-location";
-import { useEffect, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useCallback, useRef, useState } from "react";
 import {
-    FlatList,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  FlatList,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 import AuthRequiredBottomSheet from "@/features/auth/components/AuthRequiredBottomSheet";
@@ -14,22 +15,23 @@ import NearVehicleCard from "@/features/renter/components/home/NearVehicleCard";
 
 import { Colors } from "@/constants/colors";
 import {
-    FontFamily,
-    FontSize,
-    Spacing,
+  FontFamily,
+  FontSize,
+  Spacing,
 } from "@/constants/theme";
 
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import {
-    getAvailableVehicles,
-    getNearbyVehicles,
+  getAvailableVehicles,
+  getNearbyVehicles,
 } from "@/features/operator/services/vehicleService";
 import { Vehicle as ApiVehicle } from "@/features/operator/types/vehicle";
 
-import { router, useNavigation } from "expo-router";
 import { useFavorites } from "@/context/FavoritesContext";
+import { router, useFocusEffect, useNavigation } from "expo-router";
 
 import { VehicleCardSkeleton } from "@/components/common/Skeleton";
+import { getSavedLocation, saveLocation } from "@/storage/locationStorage";
 
 import { matchesVehicleSearch } from "@/utils/vehicleSearch";
 
@@ -47,88 +49,147 @@ export default function AvailableVehicles({ searchQuery = "", onViewMore }: Avai
   const [loading, setLoading] = useState(true);
 
   const [isShowingFallbackAll, setIsShowingFallbackAll] = useState(false);
+  const hasLoadedRef = useRef(false);
+  const lastLocationKeyRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
-    setLoading(true);
+  useFocusEffect(
+    useCallback(() => {
+      let mounted = true;
 
-    const loadVehicles = async () => {
-      let availableVehicles: ApiVehicle[] = [];
-      let usedFallback = false;
+      const checkAndLoad = async () => {
+        const [savedLocPref, savedLoc] = await Promise.all([
+          AsyncStorage.getItem("@settings_location").catch(() => null),
+          getSavedLocation().catch(() => null),
+        ]);
 
-      try {
-        const permission = await Location.requestForegroundPermissionsAsync();
-        if (permission.granted) {
-          const location = await Location.getCurrentPositionAsync({});
-          availableVehicles = await getNearbyVehicles(
-            location.coords.latitude,
-            location.coords.longitude,
-            25
-          );
+        const isLocEnabled = savedLocPref === null ? true : JSON.parse(savedLocPref);
+        const currentLocationKey = `${isLocEnabled}:${savedLoc?.latitude ?? "none"}:${savedLoc?.longitude ?? "none"}`;
 
-          // If no vehicles found strictly nearby, smoothly fallback to all available vehicles
-          if (availableVehicles.length === 0) {
+        if (hasLoadedRef.current && lastLocationKeyRef.current === currentLocationKey) {
+          return;
+        }
+
+        if (!hasLoadedRef.current) {
+          setLoading(true);
+        }
+
+        let availableVehicles: ApiVehicle[] = [];
+        let usedFallback = false;
+
+        try {
+          if (isLocEnabled) {
+            if (
+              savedLoc &&
+              Number.isFinite(savedLoc.latitude) &&
+              Number.isFinite(savedLoc.longitude)
+            ) {
+              availableVehicles = await getNearbyVehicles(
+                savedLoc.latitude,
+                savedLoc.longitude,
+                25
+              );
+
+              if (availableVehicles.length === 0) {
+                availableVehicles = await getAvailableVehicles();
+                usedFallback = true;
+              }
+            } else {
+              const permission = await Location.requestForegroundPermissionsAsync();
+              if (permission.granted) {
+                const location = await Location.getCurrentPositionAsync({});
+                const { latitude, longitude } = location.coords;
+
+                try {
+                  const geo = await Location.reverseGeocodeAsync({ latitude, longitude });
+                  const g = geo?.[0];
+                  const addr = g
+                    ? [g.street, g.district, g.city, g.region].filter(Boolean).join(", ")
+                    : "Current GPS Location";
+                  await saveLocation({
+                    latitude,
+                    longitude,
+                    address: addr || "Current GPS Location",
+                    confirmed: true,
+                  });
+                } catch {
+                  // ignore reverse geocode error
+                }
+
+                availableVehicles = await getNearbyVehicles(latitude, longitude, 25);
+
+                if (availableVehicles.length === 0) {
+                  availableVehicles = await getAvailableVehicles();
+                  usedFallback = true;
+                }
+              } else {
+                availableVehicles = await getAvailableVehicles();
+                usedFallback = true;
+              }
+            }
+          } else {
             availableVehicles = await getAvailableVehicles();
             usedFallback = true;
           }
-        } else {
+        } catch {
           availableVehicles = await getAvailableVehicles();
           usedFallback = true;
         }
-      } catch {
-        availableVehicles = await getAvailableVehicles();
-        usedFallback = true;
-      }
 
-      if (mounted) {
-        setIsShowingFallbackAll(usedFallback && availableVehicles.length > 0);
-      }
-
-      return availableVehicles;
-    };
-
-    loadVehicles()
-      .then((apiVehicles: ApiVehicle[]) => {
         if (!mounted) {
           return;
         }
 
-        setVehicles(apiVehicles.map((vehicle) => ({
-          ...vehicle,
-          id: String(vehicle.id),
-          name: vehicle.name,
-          brand: vehicle.brand,
-          model: vehicle.model,
-          year_model: vehicle.year_model,
-          vehicle_type: vehicle.vehicle_type,
-          body_type: vehicle.body_type,
-          fuel_type: vehicle.fuel_type,
-          pickup_address: vehicle.pickup_address,
-          description: vehicle.description,
-          operator: vehicle.operator,
-          image: vehicle.image_url
-            ? { uri: vehicle.image_url }
-            : { uri: "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=60" },
-          pricePerDay: Number(vehicle.price_per_day),
-          rating: (Number(vehicle.rating_count || 0) > 0 && vehicle.rating !== null && vehicle.rating !== undefined) ? Number(vehicle.rating) : 0,
-          ratingCount: Number(vehicle.rating_count || 0),
-          distance_km: vehicle.distance_km,
-          seats: vehicle.seats,
-          transmission: vehicle.transmission,
-          available_units: vehicle.available_units,
-          demand_badge: (vehicle as any).demand_pricing?.demand_badge,
-          demand_level: (vehicle as any).demand_pricing?.demand_level,
-        })));
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
+        const updatedSavedLoc = await getSavedLocation().catch(() => savedLoc);
+        lastLocationKeyRef.current = `${isLocEnabled}:${updatedSavedLoc?.latitude ?? "none"}:${updatedSavedLoc?.longitude ?? "none"}`;
+        hasLoadedRef.current = true;
 
-    return () => {
-      mounted = false;
-    };
-  }, []);
+        setIsShowingFallbackAll(usedFallback && availableVehicles.length > 0);
+        setVehicles(
+          availableVehicles.map((vehicle) => ({
+            ...vehicle,
+            id: String(vehicle.id),
+            name: vehicle.name,
+            brand: vehicle.brand,
+            model: vehicle.model,
+            year_model: vehicle.year_model,
+            vehicle_type: vehicle.vehicle_type,
+            body_type: vehicle.body_type,
+            fuel_type: vehicle.fuel_type,
+            pickup_address: vehicle.pickup_address,
+            description: vehicle.description,
+            operator: vehicle.operator,
+            image: vehicle.image_url
+              ? { uri: vehicle.image_url }
+              : { uri: "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=60" },
+            pricePerDay: Number(vehicle.price_per_day),
+            rating:
+              Number(vehicle.rating_count || 0) > 0 &&
+              vehicle.rating !== null &&
+              vehicle.rating !== undefined
+                ? Number(vehicle.rating)
+                : 0,
+            ratingCount: Number(vehicle.rating_count || 0),
+            distance_km: vehicle.distance_km,
+            seats: vehicle.seats,
+            transmission: vehicle.transmission,
+            available_units: vehicle.available_units,
+            demand_badge: (vehicle as any).demand_pricing?.demand_badge,
+            demand_level: (vehicle as any).demand_pricing?.demand_level,
+          }))
+        );
+      };
+
+      checkAndLoad()
+        .catch(() => undefined)
+        .finally(() => {
+          if (mounted) setLoading(false);
+        });
+
+      return () => {
+        mounted = false;
+      };
+    }, [])
+  );
 
   const navigation = useNavigation<any>();
 
@@ -165,28 +226,20 @@ export default function AvailableVehicles({ searchQuery = "", onViewMore }: Avai
     <>
       <View style={styles.container}>
 
-        <View style={styles.sectionHeader}>
+        <TouchableOpacity
+          style={styles.sectionHeader}
+          onPress={handleViewMore}
+          activeOpacity={0.75}
+          accessibilityRole="button"
+          accessibilityLabel={searchQuery.trim() ? "Open search results" : "Browse all available vehicles"}
+        >
           <Text style={styles.title} numberOfLines={1}>
             {searchQuery.trim()
               ? `Search: ${searchQuery.trim()} (${displayedVehicles.length})`
               : "Available Vehicles Near You"}
           </Text>
-
-          <TouchableOpacity
-            style={styles.viewMoreButton}
-            onPress={handleViewMore}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.viewMoreText}>
-              View More
-            </Text>
-            <Ionicons
-              name="arrow-forward"
-              size={13}
-              color="#0F172A"
-            />
-          </TouchableOpacity>
-        </View>
+          <Ionicons name="arrow-forward" size={17} color={Colors.primary} />
+        </TouchableOpacity>
 
         <View style={styles.carouselContainer}>
 
@@ -199,14 +252,10 @@ export default function AvailableVehicles({ searchQuery = "", onViewMore }: Avai
             </View>
           ) : displayedVehicles.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <MaterialCommunityIcons name="car-off" size={32} color={Colors.secondary} />
               <Text style={styles.emptyTitle}>No Vehicles Found</Text>
               <Text style={styles.emptyText}>
                 Check back soon or explore different search filters.
               </Text>
-              <TouchableOpacity style={styles.exploreBtn} onPress={handleViewMore}>
-                <Text style={styles.exploreBtnText}>Browse All</Text>
-              </TouchableOpacity>
             </View>
           ) : (
             <FlatList
@@ -258,33 +307,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: Spacing.lg,
+    minHeight: 36,
     marginBottom: 10,
   },
 
   title: {
     flex: 1,
-    fontFamily: FontFamily.bold,
+    fontFamily: FontFamily.semiBold,
     fontSize: 16,
     color: Colors.dark,
     marginRight: Spacing.sm,
-  },
-
-  viewMoreButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: "#F1F5F9",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-
-  viewMoreText: {
-    fontFamily: FontFamily.bold,
-    fontSize: 12,
-    color: "#0F172A",
   },
 
   carouselEndCard: {
@@ -400,39 +432,27 @@ const styles = StyleSheet.create({
   },
 
   emptyContainer: {
-    paddingVertical: Spacing.xl,
-    paddingHorizontal: Spacing.lg,
     alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
+    justifyContent: "flex-start",
+    paddingTop: 24,
+    paddingBottom: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
   },
 
   emptyTitle: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: FontSize.body,
+    fontFamily: FontFamily.bold,
+    fontSize: 18,
     color: Colors.dark,
-    marginTop: Spacing.xs,
-  },
-
-  emptyText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.small,
-    color: Colors.secondary,
     textAlign: "center",
   },
 
-  exploreBtn: {
-    marginTop: Spacing.sm,
-    backgroundColor: Colors.logoBackground,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-
-  exploreBtnText: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: 12,
-    color: Colors.primary,
+  emptyText: {
+    marginTop: 8,
+    fontFamily: FontFamily.regular,
+    fontSize: 13,
+    color: Colors.secondary,
+    textAlign: "center",
+    lineHeight: 19,
+    paddingHorizontal: Spacing.sm,
   },
 });
-

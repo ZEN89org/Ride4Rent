@@ -1,4 +1,4 @@
-import { router, useNavigation } from "expo-router";
+import { router } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -9,12 +9,11 @@ import HomeHeader from "@/features/renter/components/home/HomeHeader";
 import HomeTipsCarousel from "@/features/renter/components/home/HomeTipsCarousel";
 import TopRatedVehicles from "@/features/renter/components/home/TopRatedVehicles";
 
-import { useSideNav } from "@/context/SideNavContext";
+import { useSideNavActions } from "@/context/SideNavContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { Colors } from "@/constants/colors";
 
 export default function Home() {
-  const navigation = useNavigation<any>();
   const {
     user,
     isGuest,
@@ -22,7 +21,7 @@ export default function Home() {
 
   const {
     openSideNav,
-  } = useSideNav();
+  } = useSideNavActions();
 
   const [
     showAuthSheet,
@@ -60,7 +59,7 @@ export default function Home() {
 
   const handleSearchSubmit = () => {
     if (search.trim()) {
-      router.push({
+      router.navigate({
         pathname: "/(tabs)/search",
         params: { query: search.trim() },
       } as any);
@@ -86,11 +85,10 @@ export default function Home() {
         <AvailableVehicles
           searchQuery={search}
           onViewMore={() => {
-            try {
-              navigation.navigate("search");
-            } catch {
-              router.navigate("/(tabs)/search" as any);
-            }
+            router.navigate({
+              pathname: "/(tabs)/search",
+              params: search.trim() ? { query: search.trim() } : {},
+            } as any);
           }}
         />
 

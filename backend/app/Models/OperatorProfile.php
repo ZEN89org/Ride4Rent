@@ -86,5 +86,16 @@ class OperatorProfile extends Model
             'longitude' => 'float',
         ];
     }
+
+    public function toArray(): array
+    {
+        $array = parent::toArray();
+        foreach (['qr_code', 'government_id_front', 'government_id_back', 'business_permit_front', 'business_permit_back', 'dti_sec_registration'] as $field) {
+            if (!empty($array[$field])) {
+                $array[$field] = Vehicle::resolveStorageUrl($array[$field]);
+            }
+        }
+        return $array;
+    }
 }
 

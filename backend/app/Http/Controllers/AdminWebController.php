@@ -201,10 +201,8 @@ class AdminWebController extends Controller
         if ($newStatus === 'suspended') {
             Notification::create([
                 'user_id' => $user->id,
-                'title' => 'Account Suspended by Admin',
-                'message' => $reason 
-                    ? "Your account access has been suspended: {$reason}" 
-                    : "Your account has been temporarily suspended due to a compliance review.",
+                'title' => 'Account Suspended',
+                'message' => 'Your account has been suspended by the administrator.',
                 'type' => 'warning',
                 'action_url' => '/profile',
             ]);
@@ -212,7 +210,7 @@ class AdminWebController extends Controller
             Notification::create([
                 'user_id' => $user->id,
                 'title' => 'Account Reactivated',
-                'message' => 'Your account status has been restored to active. Full platform access is available.',
+                'message' => 'Your account has been restored to active status.',
                 'type' => 'success',
                 'action_url' => '/profile',
             ]);
@@ -245,7 +243,7 @@ class AdminWebController extends Controller
             Notification::create([
                 'user_id' => $user->id,
                 'title' => 'Account Suspended',
-                'message' => 'Your account access has been suspended by the administrator.',
+                'message' => 'Your account has been suspended by the administrator.',
                 'type' => 'warning',
                 'action_url' => '/profile',
             ]);
@@ -542,7 +540,7 @@ class AdminWebController extends Controller
         Notification::create([
             'user_id' => $user->id,
             'title' => 'Operator Account Approved',
-            'message' => 'Congratulations! Your operator account and business permits have been verified and activated.',
+            'message' => 'Your operator account has been verified and activated.',
             'type' => 'success',
             'action_url' => '/operator-profile',
         ]);
@@ -578,7 +576,7 @@ class AdminWebController extends Controller
         Notification::create([
             'user_id' => $user->id,
             'title' => 'Operator Application Rejected',
-            'message' => 'Your operator application was not approved: ' . $validated['rejection_reason'],
+            'message' => 'Your operator application was not approved.',
             'type' => 'error',
             'action_url' => '/operator-profile',
         ]);
@@ -610,7 +608,7 @@ class AdminWebController extends Controller
         Notification::create([
             'user_id' => $user->id,
             'title' => 'Driver\'s License Approved',
-            'message' => 'Your driver\'s license has been verified by the administrator. You now have full booking privileges!',
+            'message' => 'Your driver\'s license has been verified.',
             'type' => 'success',
             'action_url' => '/profile',
         ]);
@@ -645,8 +643,8 @@ class AdminWebController extends Controller
 
         Notification::create([
             'user_id' => $user->id,
-            'title' => 'Driver\'s License Verification Rejected',
-            'message' => 'Reason: ' . $validated['rejection_reason'] . '. Please re-upload a clear copy of your license card.',
+            'title' => 'Driver\'s License Rejected',
+            'message' => 'Your driver\'s license was not approved. Please upload a clear photo.',
             'type' => 'error',
             'action_url' => '/driver-license',
         ]);

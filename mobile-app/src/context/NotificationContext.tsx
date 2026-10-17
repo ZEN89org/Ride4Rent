@@ -1,11 +1,14 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { getNotifications, getUnreadNotificationCount, AppNotification } from "@/services/notificationService";
+import { getMyBookings } from "@/services/bookingService";
 import {
   setupNotificationChannel,
   requestDeviceNotificationPermission,
   triggerDeviceNotification,
   registerNotificationTapListener,
+  cancelAllBookingReminders,
+  syncBookingsReminders,
 } from "@/services/deviceNotificationService";
 
 interface NotificationContextType {
@@ -30,9 +33,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const knownNotificationIds = useRef<Set<string>>(new Set());
   const isInitialFetch = useRef<boolean>(true);
 
-  // Initialize notifications channel and register tap handlers on mount
+  // Initialize notifications channel, request OS permissions, and register tap handlers on mount
   useEffect(() => {
-    setupNotificationChannel().catch(() => {});
+    setupNotificationChannel()
+      .then(() => requestDeviceNotificationPermission())
+      .catch(() => {});
     const cleanupTapListener = registerNotificationTapListener();
     return () => {
       cleanupTapListener();
@@ -45,19 +50,31 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     if (isGuest || !userId) {
       setUnreadCount(0);
       knownNotificationIds.current.clear();
+      if (!isInitialFetch.current) {
+        cancelAllBookingReminders().catch(() => {});
+      }
       isInitialFetch.current = true;
       return;
     }
     try {
+      const wasInitialFetch = isInitialFetch.current;
+
+      if (wasInitialFetch && user?.role !== "operator") {
+        getMyBookings()
+          .then((bookings) => syncBookingsReminders(bookings))
+          .catch(() => {});
+      }
+
       const [count, notifications] = await Promise.all([
         getUnreadNotificationCount(),
         getNotifications().catch(() => [] as AppNotification[]),
       ]);
-      setUnreadCount(count);
+      setUnreadCount((prev) => (prev === count ? prev : count));
 
-      if (Array.isArray(notifications) && notifications.length > 0) {
-        if (isInitialFetch.current) {
-          // On app launch, memorize existing IDs without firing alert spam
+      if (Array.isArray(notifications)) {
+        if (wasInitialFetch) {
+          // Always mark initial fetch complete (even if inbox is currently empty!)
+          // so the very first newly created notification is never swallowed.
           notifications.forEach((n) => knownNotificationIds.current.add(String(n.id)));
           isInitialFetch.current = false;
         } else {
@@ -79,7 +96,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     } catch {
       // silent catch
     }
-  }, [userId, isGuest]);
+  }, [userId, isGuest, user?.role]);
 
   useEffect(() => {
     refreshUnreadCount();
@@ -103,16 +120,19 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     []
   );
 
+  const contextValue = useMemo(
+    () => ({
+      unreadCount,
+      refreshUnreadCount,
+      decrementUnreadCount,
+      resetUnreadCount,
+      sendDeviceAlert,
+    }),
+    [unreadCount, refreshUnreadCount, decrementUnreadCount, resetUnreadCount, sendDeviceAlert]
+  );
+
   return (
-    <NotificationContext.Provider
-      value={{
-        unreadCount,
-        refreshUnreadCount,
-        decrementUnreadCount,
-        resetUnreadCount,
-        sendDeviceAlert,
-      }}
-    >
+    <NotificationContext.Provider value={contextValue}>
       {children}
     </NotificationContext.Provider>
   );

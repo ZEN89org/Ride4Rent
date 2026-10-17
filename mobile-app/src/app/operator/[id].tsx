@@ -99,17 +99,11 @@ export default function OperatorProfileScreen() {
           <Text style={styles.headerTitle}>Host Profile</Text>
           <View style={{ width: 40 }} />
         </View>
-        <View style={[styles.emptyWrap, { paddingHorizontal: Spacing.xl, marginTop: 40 }]}>
-          <Ionicons name="person-circle-outline" size={60} color={Colors.secondary} />
-          <Text style={[styles.emptyText, { fontFamily: FontFamily.bold, fontSize: 16, marginTop: 12 }]}>
-            Host Profile Unavailable
-          </Text>
+        <View style={styles.emptyWrap}>
+          <Text style={styles.emptyText}>Host Profile Unavailable</Text>
           <Text style={styles.emptySubtext}>
             This host does not have any active public profile details or listings yet.
           </Text>
-          <TouchableOpacity style={styles.backBtnAction} onPress={() => router.back()}>
-            <Text style={styles.backBtnText}>Go Back</Text>
-          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -239,7 +233,7 @@ export default function OperatorProfileScreen() {
                   onPress={handleChatPress}
                   activeOpacity={0.85}
                 >
-                  <Ionicons name="chatbubble-ellipses" size={18} color={Colors.white} />
+                  <Ionicons name="chatbubble-ellipses" size={18} color={Colors.dark} />
                   <Text style={styles.chatActionText}>Message Host</Text>
                 </TouchableOpacity>
 
@@ -316,8 +310,7 @@ export default function OperatorProfileScreen() {
         }
         ListEmptyComponent={
           <View style={styles.emptyWrap}>
-            <Ionicons name="car-outline" size={48} color={Colors.secondary} />
-            <Text style={styles.emptyText}>No vehicles currently listed</Text>
+            <Text style={styles.emptyText}>No Vehicles Currently Listed</Text>
             <Text style={styles.emptySubtext}>This host has no active vehicle listings available at the moment.</Text>
           </View>
         }
@@ -530,7 +523,7 @@ const styles = StyleSheet.create({
   chatActionText: {
     fontFamily: FontFamily.bold,
     fontSize: 14,
-    color: Colors.white,
+    color: Colors.dark,
   },
   contactBadge: {
     flexDirection: "row",
@@ -635,22 +628,25 @@ const styles = StyleSheet.create({
   },
   emptyWrap: {
     alignItems: "center",
-    paddingVertical: 30,
+    justifyContent: "flex-start",
+    paddingTop: 32,
+    paddingBottom: Spacing.xl,
+    paddingHorizontal: Spacing.xl,
   },
   emptyText: {
-    fontFamily: FontFamily.regular,
-    fontSize: 13,
-    color: Colors.secondary,
-    marginTop: 8,
+    fontFamily: FontFamily.bold,
+    fontSize: 18,
+    color: Colors.dark,
+    textAlign: "center",
   },
   emptySubtext: {
     fontFamily: FontFamily.regular,
-    fontSize: 12,
+    fontSize: 13,
     color: Colors.secondary,
     textAlign: "center",
-    marginTop: 4,
-    paddingHorizontal: 24,
-    lineHeight: 18,
+    marginTop: 8,
+    paddingHorizontal: Spacing.sm,
+    lineHeight: 19,
   },
   backBtnAction: {
     marginTop: 18,
@@ -662,7 +658,7 @@ const styles = StyleSheet.create({
   backBtnText: {
     fontFamily: FontFamily.bold,
     fontSize: 13,
-    color: Colors.white,
+    color: Colors.dark,
   },
   vehicleCard: {
     flexDirection: "row",

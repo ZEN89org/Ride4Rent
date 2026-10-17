@@ -47,14 +47,19 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     buttons: [{ text: "OK", style: "default" }],
   });
 
+  const cleanMessage = (text?: string): string => {
+    if (!text) return "";
+    return text.replace(/\s*\([^)]*\)/g, "").replace(/\s{2,}/g, " ").trim();
+  };
+
   const showToast = (
     toastType: "success" | "error" | "info" | "warning",
     toastTitle: string,
     toastMsg?: string
   ) => {
     setType(toastType);
-    setTitle(toastTitle);
-    setMessage(toastMsg);
+    setTitle(cleanMessage(toastTitle));
+    setMessage(toastMsg ? cleanMessage(toastMsg) : undefined);
     setVisible(true);
   };
 
@@ -71,8 +76,8 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   ) => {
     setModalConfig({
       visible: true,
-      title: modalTitle,
-      message: modalMsg,
+      title: cleanMessage(modalTitle),
+      message: modalMsg ? cleanMessage(modalMsg) : undefined,
       type: modalType,
       buttons: buttons && buttons.length > 0 ? buttons : [{ text: "OK", style: "default" }],
     });

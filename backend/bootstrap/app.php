@@ -23,6 +23,8 @@ return Application::configure(basePath: dirname(__DIR__))
             users: '/admin/dashboard',
         );
 
+        $middleware->append(\App\Http\Middleware\PersistUploadedStorageFiles::class);
+
         $middleware->alias([
             'admin' => \App\Http\Middleware\AdminMiddleware::class,
             'admin.web' => \App\Http\Middleware\AdminWebMiddleware::class,

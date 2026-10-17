@@ -636,7 +636,7 @@ export default function LiveTrackingScreen() {
             onPress={handleOpenDirections}
             activeOpacity={0.85}
           >
-            <Ionicons name="navigate" size={17} color={Colors.white} />
+            <Ionicons name="navigate" size={17} color={Colors.dark} />
             <Text style={styles.confirmText}>Get Directions</Text>
           </TouchableOpacity>
         ) : null}
@@ -889,6 +889,6 @@ const styles = StyleSheet.create({
   confirmText: {
     fontFamily: FontFamily.bold,
     fontSize: FontSize.body,
-    color: Colors.white,
+    color: Colors.dark,
   },
 });

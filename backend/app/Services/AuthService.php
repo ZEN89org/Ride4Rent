@@ -149,29 +149,33 @@ if (
 
     public function login(array $data): array
     {
-        $user = User::with('operatorProfile')
-            ->where('email', $data['email'])
-            ->first();
+        return DB::transaction(function () use ($data): array {
+            $user = User::with('operatorProfile')
+                ->where('email', $data['email'])
+                ->lockForUpdate()
+                ->first();
 
-        if (
-            ! $user ||
-            ! Hash::check($data['password'], $user->password)
-        ) {
-            throw ValidationException::withMessages([
-                'email' => ['Invalid email or password.'],
+            if (
+                ! $user ||
+                ! Hash::check($data['password'], $user->password)
+            ) {
+                throw ValidationException::withMessages([
+                    'email' => ['Invalid email or password.'],
+                ]);
+            }
+
+            $user->tokens()->delete();
+            $user->update([
+                'last_login_at' => now(),
             ]);
-        }
 
-        $user->update([
-            'last_login_at' => now(),
-        ]);
+            $token = $user->createToken('mobile-token')->plainTextToken;
 
-        $token = $user->createToken('mobile-token')->plainTextToken;
-
-        return [
-            'user' => $user,
-            'token' => $token,
-        ];
+            return [
+                'user' => $user,
+                'token' => $token,
+            ];
+        });
     }
 
     public function logout(User $user): void

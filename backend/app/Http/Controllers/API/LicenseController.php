@@ -70,7 +70,7 @@ class LicenseController extends Controller
         \App\Models\Notification::create([
             'user_id' => $user->id,
             'title' => "License Uploaded",
-            'message' => 'Your driver\'s license was uploaded and will be verified by your host upon booking.',
+            'message' => "Your driver's license was uploaded for verification.",
             'type' => 'info',
             'action_url' => '/driver-license',
         ]);

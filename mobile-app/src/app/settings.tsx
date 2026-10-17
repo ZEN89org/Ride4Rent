@@ -1,7 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
+  AppState,
+  Linking,
+  Platform,
   ScrollView,
   StyleSheet,
   Switch,
@@ -14,182 +18,300 @@ import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { isRunningInExpoGo } from "expo";
-import { Platform } from "react-native";
 
 import { Colors } from "@/constants/colors";
-import { FontFamily, FontSize, Spacing } from "@/constants/theme";
+import { FontFamily, Spacing } from "@/constants/theme";
 import { useAppToast } from "@/context/ToastContext";
-
-const STORAGE_KEY_NOTIFS = "@settings_notifications";
-const STORAGE_KEY_LOCATION = "@settings_location";
-
-const isExpoGo = (() => {
-  try {
-    return (
-      isRunningInExpoGo?.() ||
-      Constants.executionEnvironment === ExecutionEnvironment.StoreClient ||
-      (Constants as any)?.appOwnership === "expo"
-    );
-  } catch {
-    return false;
-  }
-})();
+import {
+  cancelAllBookingReminders,
+  STORAGE_KEY_BOOKING_REMINDERS,
+  STORAGE_KEY_LOCATION,
+  STORAGE_KEY_NOTIFS,
+} from "@/services/deviceNotificationService";
 
 let Notifications: any = null;
-if (!isExpoGo || Platform.OS !== "android") {
+try {
+  Notifications = require("expo-notifications/build/NotificationPermissions");
+} catch {
   try {
     Notifications = require("expo-notifications");
-  } catch (e) {
+  } catch {
     Notifications = null;
   }
 }
 
+const PROTECTED_STORAGE_KEYS = new Set([
+  "@ride4rent_token",
+  "@ride4rent_user",
+  "@ride4rent_favorites",
+  "@ride4rent_has_onboarded",
+  "@ride4rent_location",
+  STORAGE_KEY_NOTIFS,
+  STORAGE_KEY_LOCATION,
+  STORAGE_KEY_BOOKING_REMINDERS,
+]);
+
 export default function SettingsScreen() {
   const { showSuccess, showInfo, showModal } = useAppToast();
+
   const [notifications, setNotifications] = useState(true);
   const [locationServices, setLocationServices] = useState(true);
-  const [darkMode, setDarkMode] = useState(false);
+  const [clearingCache, setClearingCache] = useState(false);
 
-  useEffect(() => {
-    loadSettings();
-  }, []);
-
-  const loadSettings = async () => {
+  const syncSettingsAndPermissions = useCallback(async () => {
     try {
-      const savedNotifs = await AsyncStorage.getItem(STORAGE_KEY_NOTIFS);
-      const savedLocation = await AsyncStorage.getItem(STORAGE_KEY_LOCATION);
+      const [savedNotifs, savedLoc] = await Promise.all([
+        AsyncStorage.getItem(STORAGE_KEY_NOTIFS),
+        AsyncStorage.getItem(STORAGE_KEY_LOCATION),
+      ]);
 
-      if (savedNotifs !== null) setNotifications(JSON.parse(savedNotifs));
-      if (savedLocation !== null) setLocationServices(JSON.parse(savedLocation));
+      // Sync notification toggle with stored preference & OS permission
+      let notifPref = savedNotifs !== null ? JSON.parse(savedNotifs) : true;
+      if (Notifications && typeof Notifications.getPermissionsAsync === "function") {
+        try {
+          const perm = await Notifications.getPermissionsAsync();
+          if (perm?.status === "denied" && savedNotifs === null) {
+            notifPref = false;
+          }
+        } catch {
+          // ignore
+        }
+      }
+      setNotifications(notifPref);
+
+      // Sync location toggle with stored preference & OS permission
+      let locPref = savedLoc !== null ? JSON.parse(savedLoc) : true;
+      try {
+        const locPerm = await Location.getForegroundPermissionsAsync();
+        if (!locPerm.granted && savedLoc === null) {
+          locPref = false;
+        }
+      } catch {
+        // ignore
+      }
+      setLocationServices(locPref);
     } catch (e) {
       console.log("Error reading settings storage:", e);
     }
-  };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      const idleId =
+        typeof requestIdleCallback === "function"
+          ? requestIdleCallback(() => syncSettingsAndPermissions())
+          : setTimeout(() => syncSettingsAndPermissions(), 150);
+
+      return () => {
+        if (typeof cancelIdleCallback === "function" && typeof idleId === "number") {
+          cancelIdleCallback(idleId);
+        } else {
+          clearTimeout(idleId as any);
+        }
+      };
+    }, [syncSettingsAndPermissions])
+  );
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        syncSettingsAndPermissions();
+      }
+    });
+    return () => sub.remove();
+  }, [syncSettingsAndPermissions]);
 
   const handleToggleNotifications = async (value: boolean) => {
-    setNotifications(value);
-    await AsyncStorage.setItem(STORAGE_KEY_NOTIFS, JSON.stringify(value));
-
     if (value) {
-      if (Notifications) {
+      if (Notifications && typeof Notifications.requestPermissionsAsync === "function") {
         try {
-          const { status } = await Notifications.requestPermissionsAsync();
+          const { status, canAskAgain } = await Notifications.requestPermissionsAsync();
           if (status !== "granted") {
-            showModal(
-              "Permission Required",
-              "Notification permissions were denied in device system settings.",
-              [{ text: "OK" }],
-              "warning"
-            );
             setNotifications(false);
             await AsyncStorage.setItem(STORAGE_KEY_NOTIFS, JSON.stringify(false));
+            showModal(
+              "Permission Required",
+              "Notifications are disabled in your phone settings. Enable them to receive booking updates.",
+              [
+                { text: "Cancel", style: "cancel" },
+                ...(canAskAgain === false
+                  ? [{ text: "Open Settings", onPress: () => Linking.openSettings() }]
+                  : []),
+              ],
+              "warning"
+            );
             return;
           }
-        } catch (e) {
-          console.log("Notification permission check failed:", e);
+        } catch {
+          // continue in Expo Go fallback
         }
       }
-      showSuccess("Enabled", "Push notifications have been activated.");
+      setNotifications(true);
+      await AsyncStorage.setItem(STORAGE_KEY_NOTIFS, JSON.stringify(true));
+      showSuccess("Notifications On", "You will receive live booking and trip updates.");
     } else {
-      showInfo("Disabled", "Push notifications have been turned off.");
+      setNotifications(false);
+      await AsyncStorage.setItem(STORAGE_KEY_NOTIFS, JSON.stringify(false));
+      await cancelAllBookingReminders();
+      showInfo("Notifications Off", "Push alerts have been muted.");
     }
   };
 
   const handleToggleLocation = async (value: boolean) => {
-    setLocationServices(value);
-    await AsyncStorage.setItem(STORAGE_KEY_LOCATION, JSON.stringify(value));
-
     if (value) {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        showModal(
-          "Permission Required",
-          "Location permissions were denied in device system settings.",
-          [{ text: "OK" }],
-          "warning"
-        );
-        setLocationServices(false);
-        await AsyncStorage.setItem(STORAGE_KEY_LOCATION, JSON.stringify(false));
-      } else {
-        showSuccess("Enabled", "Location services have been activated for nearby vehicle search.");
+      try {
+        const { status, canAskAgain } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          setLocationServices(false);
+          await AsyncStorage.setItem(STORAGE_KEY_LOCATION, JSON.stringify(false));
+          showModal(
+            "Location Permission Required",
+            "Location access is turned off in your device settings.",
+            [
+              { text: "Cancel", style: "cancel" },
+              ...(canAskAgain === false
+                ? [{ text: "Open Settings", onPress: () => Linking.openSettings() }]
+                : []),
+            ],
+            "warning"
+          );
+          return;
+        }
+      } catch {
+        // fallback
       }
+      setLocationServices(true);
+      await AsyncStorage.setItem(STORAGE_KEY_LOCATION, JSON.stringify(true));
+      showSuccess("Location Enabled", "Nearby vehicles will be shown on your home screen.");
     } else {
-      showInfo("Disabled", "Location services have been turned off.");
+      setLocationServices(false);
+      await AsyncStorage.setItem(STORAGE_KEY_LOCATION, JSON.stringify(false));
+      showInfo("Location Disabled", "Showing all available vehicles without location filtering.");
     }
   };
 
+  const handleClearCache = async () => {
+    try {
+      setClearingCache(true);
+      const allKeys = await AsyncStorage.getAllKeys();
+      const cacheKeys = allKeys.filter((k) => !PROTECTED_STORAGE_KEYS.has(k));
+      if (cacheKeys.length > 0) {
+        await AsyncStorage.multiRemove(cacheKeys);
+      }
+      showSuccess("Cache Cleared", "Temporary offline cache has been cleared.");
+    } catch {
+      showInfo("Notice", "Could not clear cached data.");
+    } finally {
+      setClearingCache(false);
+    }
+  };
+
+  const appVersion = Constants.expoConfig?.version || "1.0.0";
+
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.container}>
+      {/* Clean Minimal Header */}
       <View style={styles.headerBar}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color={Colors.dark} />
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="chevron-back" size={22} color={Colors.dark} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>App Settings</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 38 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* App Preferences */}
-        <Text style={styles.sectionHeader}>Preferences</Text>
-        <View style={styles.card}>
-          <View style={styles.row}>
-            <View style={{ flex: 1 }}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Preferences */}
+        <Text style={styles.sectionLabel}>Preferences</Text>
+        <View style={styles.sectionGroup}>
+          <View style={styles.settingCard}>
+            <View style={styles.iconBox}>
+              <Ionicons name="notifications-outline" size={20} color={Colors.dark} />
+            </View>
+            <View style={styles.textCol}>
               <Text style={styles.rowTitle}>Push Notifications</Text>
-              <Text style={styles.rowSubtitle}>Receive booking updates and announcements</Text>
+              <Text style={styles.rowSubtitle}>
+                Booking approvals, messages, and trip reminders
+              </Text>
             </View>
             <Switch
               value={notifications}
               onValueChange={handleToggleNotifications}
-              trackColor={{ false: Colors.border, true: Colors.primary }}
+              trackColor={{ false: "#E2E2E2", true: Colors.primary }}
+              thumbColor={Colors.white}
             />
           </View>
 
-          <View style={styles.divider} />
-
-          <View style={styles.row}>
-            <View style={{ flex: 1 }}>
+          <View style={styles.settingCard}>
+            <View style={styles.iconBox}>
+              <Ionicons name="navigate-outline" size={20} color={Colors.dark} />
+            </View>
+            <View style={styles.textCol}>
               <Text style={styles.rowTitle}>Location Services</Text>
-              <Text style={styles.rowSubtitle}>Allow automatic detection of available cars near you</Text>
+              <Text style={styles.rowSubtitle}>
+                Show available vehicles near your location
+              </Text>
             </View>
             <Switch
               value={locationServices}
               onValueChange={handleToggleLocation}
-              trackColor={{ false: Colors.border, true: Colors.primary }}
+              trackColor={{ false: "#E2E2E2", true: Colors.primary }}
+              thumbColor={Colors.white}
             />
           </View>
         </View>
 
-        {/* Display */}
-        <Text style={styles.sectionHeader}>Appearance</Text>
-        <View style={styles.card}>
-          <View style={styles.row}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.rowTitle}>Dark Theme</Text>
-              <Text style={styles.rowSubtitle}>Enable dark color scheme across the app</Text>
-            </View>
-            <Switch
-              value={darkMode}
-              onValueChange={(val) => {
-                setDarkMode(val);
-                if (val) showInfo("Coming Soon", "Dark theme is being refined for upcoming releases.");
-              }}
-              trackColor={{ false: Colors.border, true: Colors.primary }}
-            />
-          </View>
-        </View>
-
-        {/* Data & Cache */}
-        <Text style={styles.sectionHeader}>Data & Storage</Text>
-        <View style={styles.card}>
+        {/* Storage & System */}
+        <Text style={styles.sectionLabel}>Storage & System</Text>
+        <View style={styles.sectionGroup}>
           <TouchableOpacity
-            style={styles.actionRow}
-            onPress={() => showSuccess("Cache Cleared", "Temporary offline cache has been emptied.")}
-            activeOpacity={0.7}
+            style={styles.settingCard}
+            onPress={handleClearCache}
+            disabled={clearingCache}
+            activeOpacity={0.8}
           >
-            <Text style={styles.actionRowText}>Clear Offline Cache</Text>
-            <Ionicons name="trash-outline" size={20} color={Colors.secondary} />
+            <View style={styles.iconBox}>
+              <Ionicons name="trash-outline" size={20} color={Colors.dark} />
+            </View>
+            <View style={styles.textCol}>
+              <Text style={styles.rowTitle}>Clear Offline Cache</Text>
+              <Text style={styles.rowSubtitle}>
+                Free up temporary cached bookings and data
+              </Text>
+            </View>
+            {clearingCache ? (
+              <ActivityIndicator size="small" color={Colors.dark} />
+            ) : (
+              <Ionicons name="chevron-forward" size={18} color={Colors.secondary} />
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.settingCard}
+            onPress={() => Linking.openSettings()}
+            activeOpacity={0.8}
+          >
+            <View style={styles.iconBox}>
+              <Ionicons name="settings-outline" size={20} color={Colors.dark} />
+            </View>
+            <View style={styles.textCol}>
+              <Text style={styles.rowTitle}>System Permissions</Text>
+              <Text style={styles.rowSubtitle}>
+                Manage camera, photos, and OS access
+              </Text>
+            </View>
+            <Ionicons name="open-outline" size={18} color={Colors.secondary} />
           </TouchableOpacity>
         </View>
+
+        {/* Version Footer */}
+        <Text style={styles.versionText}>Ride4Rent v{appVersion}</Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -204,81 +326,73 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
     backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.divider,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.inputBackground,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: "center",
     alignItems: "center",
   },
   headerTitle: {
     fontFamily: FontFamily.bold,
-    fontSize: FontSize.title,
+    fontSize: 16,
     color: Colors.dark,
   },
-  content: {
-    padding: Spacing.lg,
+  scrollContent: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.sm,
     paddingBottom: 40,
   },
-  sectionHeader: {
+  sectionLabel: {
     fontFamily: FontFamily.bold,
-    fontSize: 15,
-    color: Colors.secondary,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginTop: Spacing.md,
-    marginBottom: Spacing.sm,
+    fontSize: 14,
+    color: Colors.dark,
+    marginTop: 14,
+    marginBottom: 10,
   },
-  card: {
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.xs,
-    marginBottom: Spacing.md,
-    shadowColor: Colors.dark,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+  sectionGroup: {
+    gap: 10,
+    marginBottom: 8,
   },
-  row: {
+  settingCard: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: Spacing.md,
+    backgroundColor: "#F8F8F8",
+    borderRadius: 16,
+    padding: 14,
+    gap: 12,
+  },
+  iconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: Colors.white,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  textCol: {
+    flex: 1,
   },
   rowTitle: {
     fontFamily: FontFamily.semiBold,
-    fontSize: 15,
+    fontSize: 14,
     color: Colors.dark,
   },
   rowSubtitle: {
     fontFamily: FontFamily.regular,
     fontSize: 12,
     color: Colors.secondary,
-    marginTop: 2,
-    marginRight: Spacing.sm,
+    marginTop: 1,
   },
-  divider: {
-    height: 1,
-    backgroundColor: Colors.divider,
-  },
-  actionRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: Spacing.md,
-  },
-  actionRowText: {
-    fontFamily: FontFamily.medium,
-    fontSize: 15,
-    color: Colors.dark,
+  versionText: {
+    marginTop: 28,
+    textAlign: "center",
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    color: Colors.secondary,
   },
 });

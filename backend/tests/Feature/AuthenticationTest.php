@@ -62,6 +62,42 @@ class AuthenticationTest extends TestCase
             ->assertJsonMissingPath('data.last_login');
     }
 
+    public function test_login_revokes_existing_tokens_for_the_account(): void
+    {
+        $user = $this->createUser('rina@example.com', 'customer');
+        $previousToken = $user->createToken('mobile-token')->plainTextToken;
+
+        $this->postJson('/api/v1/login', [
+            'email' => $user->email,
+            'password' => 'incorrect-password',
+        ])->assertUnprocessable();
+        $this->assertDatabaseCount('personal_access_tokens', 1);
+
+        $login = $this->postJson('/api/v1/login', [
+            'email' => $user->email,
+            'password' => 'password123',
+        ]);
+
+        $login->assertOk();
+        $newToken = $login->json('data.token');
+
+        $this->assertNotEmpty($newToken);
+        $this->assertNotSame($previousToken, $newToken);
+        $this->assertDatabaseCount('personal_access_tokens', 1);
+        $this->assertDatabaseHas('personal_access_tokens', [
+            'token' => hash('sha256', explode('|', $newToken, 2)[1]),
+        ]);
+
+        $this->withHeader('Authorization', "******")
+            ->getJson('/api/v1/user')
+            ->assertUnauthorized();
+
+        $this->withToken($newToken)
+            ->getJson('/api/v1/user')
+            ->assertOk()
+            ->assertJsonPath('data.id', $user->id);
+    }
+
     public function test_operator_registration_persists_the_current_profile_document_fields(): void
     {
         $response = $this->post('/api/v1/operator/register', [

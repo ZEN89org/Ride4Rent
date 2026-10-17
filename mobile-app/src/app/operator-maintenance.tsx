@@ -137,7 +137,6 @@ export default function OperatorMaintenanceScreen() {
         </View>
       ) : vehicles.length === 0 ? (
         <View style={styles.emptyWrap}>
-          <MaterialCommunityIcons name="car-wrench" size={54} color={Colors.secondary} />
           <Text style={styles.emptyTitle}>No Vehicles Registered</Text>
           <Text style={styles.emptySub}>Upload vehicles to your fleet to begin tracking mileage and preventive maintenance recommendations.</Text>
         </View>
@@ -232,7 +231,7 @@ export default function OperatorMaintenanceScreen() {
                     onPress={() => openLogModal(item)}
                     activeOpacity={0.8}
                   >
-                    <Ionicons name="add-circle-outline" size={16} color={Colors.white} />
+                    <Ionicons name="add-circle-outline" size={16} color={Colors.dark} />
                     <Text style={styles.logServiceBtnText}>Log Service Record</Text>
                   </TouchableOpacity>
                 </View>
@@ -334,7 +333,7 @@ export default function OperatorMaintenanceScreen() {
                   disabled={submitting}
                 >
                   {submitting ? (
-                    <ActivityIndicator size="small" color={Colors.white} />
+                    <ActivityIndicator size="small" color={Colors.dark} />
                   ) : (
                     <Text style={styles.modalSubmitText}>Save Record</Text>
                   )}
@@ -426,23 +425,26 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
   },
   emptyWrap: {
-    flex: 1,
-    justifyContent: "center",
     alignItems: "center",
+    justifyContent: "flex-start",
+    paddingTop: 32,
+    paddingBottom: Spacing.xl,
     paddingHorizontal: Spacing.xl,
-    gap: 8,
   },
   emptyTitle: {
     fontFamily: FontFamily.bold,
-    fontSize: 16,
+    fontSize: 18,
     color: Colors.dark,
+    textAlign: "center",
   },
   emptySub: {
+    marginTop: 8,
     fontFamily: FontFamily.regular,
-    fontSize: 12,
+    fontSize: 13,
     color: Colors.secondary,
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: 19,
+    paddingHorizontal: Spacing.sm,
   },
   listContent: {
     paddingHorizontal: Spacing.md,
@@ -584,7 +586,7 @@ const styles = StyleSheet.create({
   logServiceBtnText: {
     fontFamily: FontFamily.bold,
     fontSize: 12,
-    color: Colors.white,
+    color: Colors.dark,
   },
   modalBackdrop: {
     flex: 1,
@@ -648,7 +650,7 @@ const styles = StyleSheet.create({
   },
   serviceChipTextActive: {
     fontFamily: FontFamily.bold,
-    color: Colors.white,
+    color: Colors.dark,
   },
   textInput: {
     backgroundColor: "#F8FAFC",
@@ -690,6 +692,6 @@ const styles = StyleSheet.create({
   modalSubmitText: {
     fontFamily: FontFamily.bold,
     fontSize: 13,
-    color: Colors.white,
+    color: Colors.dark,
   },
 });

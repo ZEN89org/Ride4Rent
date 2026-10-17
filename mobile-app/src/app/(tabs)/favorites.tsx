@@ -1,6 +1,5 @@
-import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   FlatList,
   StyleSheet,
@@ -15,33 +14,64 @@ import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";
 import { useFavorites } from "@/context/FavoritesContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
-import NearVehicleCard, { NearVehicleItem } from "@/features/renter/components/home/NearVehicleCard";
 import { getAvailableVehicles } from "@/features/operator/services/vehicleService";
 import { Vehicle } from "@/features/operator/types/vehicle";
+import NearVehicleCard, { NearVehicleItem } from "@/features/renter/components/home/NearVehicleCard";
 
 export default function Favorites() {
   const { isGuest } = useAuth();
   const { favorites, isFavorite, toggleFavorite } = useFavorites();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sortBy, setSortBy] = useState<"price" | "rating" | "seats">("price");
+  const [availabilityOnly, setAvailabilityOnly] = useState(false);
 
   useEffect(() => {
-    loadVehicles();
+    let isMounted = true;
+    getAvailableVehicles()
+      .then((data) => {
+        if (isMounted) setVehicles(data);
+      })
+      .catch((error) => {
+        console.error("Failed to load vehicles in favorites tab", error);
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  const loadVehicles = async () => {
-    try {
-      setLoading(true);
-      const data = await getAvailableVehicles();
-      setVehicles(data);
-    } catch (e) {
-      console.error("Failed to load vehicles in favorites tab", e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const favoriteVehicles = vehicles.filter((v) => favorites.includes(String(v.id)));
+  const availableFavoriteCount = favoriteVehicles.filter(
+    (vehicle) =>
+      vehicle.is_available &&
+      !vehicle.is_rented &&
+      (vehicle.available_units ?? 1) > 0,
+  ).length;
+  const bestRateVehicle = favoriteVehicles.reduce<Vehicle | null>(
+    (best, vehicle) =>
+      !best || Number(vehicle.price_per_day) < Number(best.price_per_day)
+        ? vehicle
+        : best,
+    null,
+  );
+  const displayedVehicles = favoriteVehicles
+    .filter((vehicle) => {
+      if (!availabilityOnly) return true;
+      return (
+        vehicle.is_available &&
+        !vehicle.is_rented &&
+        (vehicle.available_units ?? 1) > 0
+      );
+    })
+    .sort((a, b) => {
+      if (sortBy === "rating") return Number(b.rating || 0) - Number(a.rating || 0);
+      if (sortBy === "seats") return Number(b.seats || 0) - Number(a.seats || 0);
+      return Number(a.price_per_day) - Number(b.price_per_day);
+    });
 
   const handleViewVehicle = (vehicle: NearVehicleItem) => {
     router.push(`/vehicles/${vehicle.id}` as any);
@@ -54,21 +84,21 @@ export default function Favorites() {
   if (isGuest) {
     return (
       <ScreenContainer>
-        <View style={styles.emptyContainer}>
-          <View style={styles.emptyIconCircle}>
-            <Ionicons name="heart" size={36} color={Colors.primary} />
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <View>
+              <Text style={styles.headerTitle}>Favorite Rides</Text>
+              <Text style={styles.headerSubtitle}>
+                Save your favorite rides for later.
+              </Text>
+            </View>
           </View>
-          <Text style={styles.title}>Save Your Dream Cars</Text>
-          <Text style={styles.subtitle}>
-            Sign in to bookmark vehicles, compare daily rates, and quickly book your favorites.
-          </Text>
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={() => router.push("/auth")}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.primaryButtonText}>Sign In to Ride4Rent</Text>
-          </TouchableOpacity>
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyTitle}>Save Your Dream Cars</Text>
+            <Text style={styles.emptySubtitle}>
+              Sign in to save vehicles and quickly find your next ride.
+            </Text>
+          </View>
         </View>
       </ScreenContainer>
     );
@@ -80,18 +110,12 @@ export default function Favorites() {
         {/* Minimalist Professional Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.title}>Saved Fleet</Text>
-            <Text style={styles.subtitle}>
-              {favoriteVehicles.length} {favoriteVehicles.length === 1 ? "vehicle bookmarked" : "vehicles bookmarked"}
+            <Text style={styles.headerTitle}>Favorite Rides</Text>
+            <Text style={styles.headerSubtitle}>
+              Save your favorite rides for later.
             </Text>
           </View>
 
-          {favoriteVehicles.length > 0 && (
-            <View style={styles.badgeCount}>
-              <Ionicons name="bookmark" size={14} color={Colors.dark} />
-              <Text style={styles.badgeText}>{favoriteVehicles.length}</Text>
-            </View>
-          )}
         </View>
 
         {loading ? (
@@ -104,42 +128,83 @@ export default function Favorites() {
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyTitle}>No Saved Vehicles Yet</Text>
             <Text style={styles.emptySubtitle}>
-              Vehicles you mark as favorite while browsing will appear here for easy comparison and quick access.
+              Vehicles you save while browsing will appear here for easy access.
             </Text>
           </View>
         ) : (
-          <FlatList
-            data={favoriteVehicles}
-            keyExtractor={(item) => String(item.id)}
-            contentContainerStyle={styles.list}
-            showsVerticalScrollIndicator={false}
-            renderItem={({ item }) => {
-              const formattedItem: NearVehicleItem = {
-                id: String(item.id),
-                name: item.name,
-                image: item.image_url
-                  ? { uri: item.image_url }
-                  : { uri: "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=60" },
-                pricePerDay: Number(item.price_per_day),
-                rating: (Number(item.rating_count || 0) > 0 && item.rating !== null && item.rating !== undefined) ? Number(item.rating) : 0,
-                ratingCount: Number(item.rating_count || 0),
-                distance_km: item.distance_km,
-                seats: item.seats ?? undefined,
-                transmission: item.transmission ?? undefined,
-                available_units: item.available_units,
-              };
+          <>
+            <View style={styles.highlightsRow}>
 
-              return (
-                <NearVehicleCard
-                  vehicle={formattedItem}
-                  isFavorite={isFavorite(formattedItem.id)}
-                  onViewPress={handleViewVehicle}
-                  onFavoritePress={handleFavoriteVehicle}
-                  containerStyle={styles.favoriteCard}
-                />
-              );
-            }}
-          />
+            </View>
+
+            <View style={styles.sortHeader}>
+              <Text style={styles.sortLabel}>Sort saved rides</Text>
+              <Text style={styles.resultCount}>
+                {displayedVehicles.length} {displayedVehicles.length === 1 ? "ride" : "rides"}
+              </Text>
+            </View>
+            <View style={styles.sortOptions}>
+              {([
+                ["price", "Lowest price"],
+                ["rating", "Top rated"],
+                ["seats", "Most seats"],
+              ] as const).map(([key, label]) => (
+                <TouchableOpacity
+                  key={key}
+                  style={[styles.sortChip, sortBy === key && styles.sortChipActive]}
+                  onPress={() => setSortBy(key)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.sortChipText, sortBy === key && styles.sortChipTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <FlatList
+              data={displayedVehicles}
+              keyExtractor={(item) => String(item.id)}
+              contentContainerStyle={styles.list}
+              showsVerticalScrollIndicator={false}
+              renderItem={({ item }) => {
+                const formattedItem: NearVehicleItem = {
+                  id: String(item.id),
+                  name: item.name,
+                  image: item.image_url
+                    ? { uri: item.image_url }
+                    : { uri: "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=60" },
+                  pricePerDay: Number(item.price_per_day),
+                  rating: (Number(item.rating_count || 0) > 0 && item.rating !== null && item.rating !== undefined) ? Number(item.rating) : 0,
+                  ratingCount: Number(item.rating_count || 0),
+                  distance_km: item.distance_km,
+                  seats: item.seats ?? undefined,
+                  transmission: item.transmission ?? undefined,
+                  available_units: item.available_units,
+                };
+
+                return (
+                  <View key={formattedItem.id} style={styles.favoriteItem}>
+                    <NearVehicleCard
+                      vehicle={formattedItem}
+                      isFavorite={isFavorite(formattedItem.id)}
+                      onViewPress={handleViewVehicle}
+                      onFavoritePress={handleFavoriteVehicle}
+                      containerStyle={styles.favoriteCard}
+                    />
+                  </View>
+                );
+              }}
+              ListEmptyComponent={
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyTitle}>No Rides Available Right Now</Text>
+                  <Text style={styles.emptySubtitle}>
+                    None of your saved vehicles are currently available for rent.
+                  </Text>
+                </View>
+              }
+            />
+          </>
         )}
       </View>
     </ScreenContainer>
@@ -157,7 +222,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   title: {
     fontSize: FontSize.heading,
@@ -169,6 +234,18 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.regular,
     fontSize: 13,
     color: Colors.secondary,
+  },
+  headerTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.heading,
+    color: Colors.dark,
+    letterSpacing: -0.5,
+  },
+  headerSubtitle: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.small,
+    color: Colors.secondary,
+    marginTop: -2,
   },
   badgeCount: {
     flexDirection: "row",
@@ -187,10 +264,17 @@ const styles = StyleSheet.create({
   skeletonList: {
     marginTop: Spacing.sm,
   },
-  emptyContainer: {
+  guestContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    paddingHorizontal: Spacing.xl,
+  },
+  emptyContainer: {
+    alignItems: "center",
+    justifyContent: "flex-start",
+    paddingTop: 32,
+    paddingBottom: Spacing.xl,
     paddingHorizontal: Spacing.xl,
   },
   emptyIconOuterRing: {
@@ -221,7 +305,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: FontFamily.bold,
     color: Colors.dark,
-    marginTop: 4,
     textAlign: "center",
   },
   emptySubtitle: {
@@ -280,10 +363,119 @@ const styles = StyleSheet.create({
   list: {
     paddingBottom: 32,
   },
+  highlightsRow: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  highlightCard: {
+    flex: 1,
+    minWidth: 0,
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.white,
+  },
+  highlightCardActive: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.logoBackground,
+  },
+  highlightIcon: {
+    width: 28,
+    height: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    backgroundColor: Colors.logoBackground,
+    marginBottom: 8,
+  },
+  highlightIconActive: {
+    backgroundColor: Colors.dark,
+  },
+  highlightLabel: {
+    fontFamily: FontFamily.medium,
+    fontSize: 10,
+    color: Colors.secondary,
+  },
+  highlightValue: {
+    marginTop: 3,
+    fontFamily: FontFamily.bold,
+    fontSize: 18,
+    color: Colors.dark,
+  },
+  highlightTotal: {
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+    color: Colors.secondary,
+  },
+  highlightHint: {
+    marginTop: 2,
+    fontFamily: FontFamily.regular,
+    fontSize: 10,
+    color: Colors.secondary,
+  },
+  sortHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: Spacing.xs,
+  },
+  sortLabel: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 13,
+    color: Colors.dark,
+  },
+  resultCount: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11,
+    color: Colors.secondary,
+  },
+  sortOptions: {
+    flexDirection: "row",
+    gap: Spacing.xs,
+    marginBottom: Spacing.md,
+  },
+  sortChip: {
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 16,
+    backgroundColor: Colors.inputBackground,
+  },
+  sortChipActive: {
+    backgroundColor: Colors.primary,
+  },
+  sortChipText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 11,
+    color: Colors.dark,
+  },
+  sortChipTextActive: {
+    fontFamily: FontFamily.bold,
+    color: Colors.dark,
+  },
+  filteredEmptyState: {
+    alignItems: "center",
+    paddingVertical: Spacing.xl,
+    gap: Spacing.sm,
+  },
+  filteredEmptyTitle: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 13,
+    color: Colors.dark,
+  },
+  showAllText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 12,
+    color: Colors.dark,
+    textDecorationLine: "underline",
+  },
+  favoriteItem: {
+    marginBottom: Spacing.md,
+  },
   favoriteCard: {
     width: "100%",
     height: 190,
     marginRight: 0,
-    marginBottom: Spacing.md,
   },
 });

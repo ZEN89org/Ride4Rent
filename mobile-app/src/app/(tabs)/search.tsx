@@ -11,16 +11,16 @@ import {
   View,
 } from "react-native";
 
+import ListPagination from "@/components/common/ListPagination";
 import ScreenContainer from "@/components/common/ScreenContainer";
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";
 import { useFavorites } from "@/context/FavoritesContext";
-import { useAuth } from "@/features/auth/hooks/useAuth";
 import AuthRequiredBottomSheet from "@/features/auth/components/AuthRequiredBottomSheet";
-import NearVehicleCard, { NearVehicleItem } from "@/features/renter/components/home/NearVehicleCard";
-import ListPagination from "@/components/common/ListPagination";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 import { getAvailableVehicles } from "@/features/operator/services/vehicleService";
 import { Vehicle } from "@/features/operator/types/vehicle";
+import NearVehicleCard, { NearVehicleItem } from "@/features/renter/components/home/NearVehicleCard";
 
 import { matchesVehicleSearch } from "@/utils/vehicleSearch";
 
@@ -32,7 +32,7 @@ export default function Search() {
   const params = useLocalSearchParams<{ query?: string }>();
   const { isGuest } = useAuth();
   const { isFavorite, toggleFavorite } = useFavorites();
-  
+
   const [showAuthSheet, setShowAuthSheet] = useState(false);
   const [searchQuery, setSearchQuery] = useState(params.query || "");
   const [selectedCategory, setSelectedCategory] = useState("All");
@@ -110,11 +110,16 @@ export default function Search() {
   return (
     <ScreenContainer>
       <View style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Find Your Ride</Text>
+          <Text style={styles.subtitle}>Search available vehicles for your next trip.</Text>
+        </View>
+
         {/* Modern Search Bar */}
         <View style={styles.searchBar}>
           <Ionicons name="search" size={20} color={Colors.dark} />
           <TextInput
-            placeholder="Search vehicle, brand, or host..."
+            placeholder="Vehicle, brand, or type"
             placeholderTextColor={Colors.secondary}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -184,7 +189,6 @@ export default function Search() {
           </View>
         ) : filteredVehicles.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="car-outline" size={64} color={Colors.secondary} />
             <Text style={styles.emptyTitle}>No Vehicles Found</Text>
             <Text style={styles.emptySubtitle}>
               Try searching with different terms or selecting another category filter.
@@ -254,6 +258,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
   },
+  header: {
+    marginBottom: Spacing.sm,
+  },
+  title: {
+    fontFamily: FontFamily.bold,
+    fontSize: FontSize.heading,
+    color: Colors.dark,
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontFamily: FontFamily.regular,
+    fontSize: FontSize.small,
+    color: Colors.secondary,
+    marginTop: -2,
+  },
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -290,7 +309,7 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
   },
   categoryPillTextActive: {
-    color: Colors.white,
+    color: Colors.dark,
     fontFamily: FontFamily.bold,
   },
   resultsHeader: {
@@ -324,23 +343,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
     alignItems: "center",
+    justifyContent: "flex-start",
+    paddingTop: 32,
+    paddingBottom: Spacing.xl,
     paddingHorizontal: Spacing.xl,
   },
   emptyTitle: {
-    fontSize: FontSize.title,
+    fontSize: 18,
     fontFamily: FontFamily.bold,
     color: Colors.dark,
-    marginTop: Spacing.md,
+    textAlign: "center",
   },
   emptySubtitle: {
     marginTop: 8,
     fontFamily: FontFamily.regular,
-    fontSize: FontSize.body,
+    fontSize: 13,
     color: Colors.secondary,
     textAlign: "center",
+    lineHeight: 19,
+    paddingHorizontal: Spacing.sm,
   },
   list: {
     paddingBottom: 32,

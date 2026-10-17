@@ -51,7 +51,7 @@ class AdminController extends Controller
         \App\Models\Notification::create([
             'user_id' => $user->id,
             'title' => 'Operator Account Approved',
-            'message' => 'Congratulations! Your operator account and business permits have been verified and activated.',
+            'message' => 'Your operator account has been verified and activated.',
             'type' => 'success',
             'action_url' => '/operator-profile',
         ]);
@@ -86,7 +86,7 @@ class AdminController extends Controller
         \App\Models\Notification::create([
             'user_id' => $user->id,
             'title' => 'Operator Application Rejected',
-            'message' => 'Your operator application was not approved: ' . $validated['rejection_reason'],
+            'message' => 'Your operator application was not approved.',
             'type' => 'error',
             'action_url' => '/operator-profile',
         ]);
@@ -135,7 +135,7 @@ class AdminController extends Controller
         \App\Models\Notification::create([
             'user_id' => $user->id,
             'title' => "Driver's License Approved",
-            'message' => 'Your driver\'s license has been verified by the Admin. You now have full booking privileges!',
+            'message' => "Your driver's license has been verified.",
             'type' => 'success',
             'action_url' => '/profile',
         ]);
@@ -163,8 +163,8 @@ class AdminController extends Controller
 
         \App\Models\Notification::create([
             'user_id' => $user->id,
-            'title' => "Driver's License Verification Rejected",
-            'message' => 'Your driver\'s license verification was not approved: "' . $validated['rejection_reason'] . '". Please re-upload a clear and matching license photo.',
+            'title' => "Driver's License Rejected",
+            'message' => "Your driver's license was not approved. Please upload a clear photo.",
             'type' => 'error',
             'action_url' => '/driver-license',
         ]);

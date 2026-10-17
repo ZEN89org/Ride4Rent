@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Animated,
   FlatList,
@@ -286,18 +286,17 @@ export default function Chats() {
   if (isGuest) {
     return (
       <ScreenContainer>
-        <View style={styles.emptyContainer}>
-          <Ionicons name="chatbubbles-outline" size={64} color={Colors.secondary} />
-          <Text style={styles.emptyTitle}>Direct Host Messaging</Text>
-          <Text style={styles.emptySubtitle}>
-            Sign in to chat directly with verified operators and car rental hosts.
-          </Text>
-          <TouchableOpacity
-            style={styles.signInButton}
-            onPress={() => router.push("/auth")}
-          >
-            <Text style={styles.signInText}>Sign In</Text>
-          </TouchableOpacity>
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <Text style={styles.title}>Messages</Text>
+            <Text style={styles.subtitle}>Direct host & operator communications</Text>
+          </View>
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyTitle}>Direct Host Messaging</Text>
+            <Text style={styles.emptySubtitle}>
+              Sign in to chat directly with verified operators and car rental hosts.
+            </Text>
+          </View>
         </View>
       </ScreenContainer>
     );
@@ -347,20 +346,10 @@ export default function Chats() {
 
         {allOperatorConversations.length === 0 && !loading ? (
           <View style={styles.emptyContainer}>
-            <View style={styles.iconCircle}>
-              <Ionicons name="chatbubble-ellipses-outline" size={38} color={Colors.secondary} />
-            </View>
-            <Text style={styles.emptyTitle}>No Operator Conversations Yet</Text>
+            <Text style={styles.emptyTitle}>No Conversations Yet</Text>
             <Text style={styles.emptySubtitle}>
-              When you contact a vehicle operator or send an inquiry, your conversations will appear here.
+              Contact a vehicle operator or send an inquiry, and your conversations will appear here.
             </Text>
-            <TouchableOpacity
-              style={styles.exploreButton}
-              onPress={() => router.push("/(tabs)/home")}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.exploreButtonText}>Browse Vehicles</Text>
-            </TouchableOpacity>
           </View>
         ) : (
           <FlatList
@@ -389,14 +378,7 @@ export default function Chats() {
                 />
             )}
             ListEmptyComponent={
-                <View style={styles.searchEmptyContainer}>
-                  <View style={styles.iconCircle}>
-                    <Ionicons
-                      name={normalizedSearch ? "search-outline" : "archive-outline"}
-                      size={30}
-                      color={Colors.secondary}
-                    />
-                  </View>
+                <View style={styles.emptyContainer}>
                   <Text style={styles.emptyTitle}>
                     {normalizedSearch
                       ? "No Operators Found"
@@ -406,20 +388,11 @@ export default function Chats() {
                   </Text>
                   <Text style={styles.emptySubtitle}>
                     {normalizedSearch
-                      ? `No operator conversations match “${search.trim()}”.`
+                      ? `No conversations match “${search.trim()}”.`
                       : activeFolder === "archived"
                         ? "Conversations you archive will appear here."
                         : "Your archived conversations are still available in Archived."}
                   </Text>
-                  {normalizedSearch ? (
-                    <TouchableOpacity
-                      style={styles.exploreButton}
-                      onPress={() => setSearch("")}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={styles.exploreButtonText}>Clear Search</Text>
-                    </TouchableOpacity>
-                  ) : null}
                 </View>
             }
           />
@@ -581,17 +554,25 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
     marginTop: 4,
   },
-  emptyContainer: {
+  guestContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: Spacing.xl,
   },
+  emptyContainer: {
+    alignItems: "center",
+    justifyContent: "flex-start",
+    paddingTop: 32,
+    paddingBottom: Spacing.xl,
+    paddingHorizontal: Spacing.xl,
+  },
   searchEmptyContainer: {
     alignItems: "center",
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.xl,
+    justifyContent: "flex-start",
+    paddingTop: 32,
     paddingBottom: Spacing.xl,
+    paddingHorizontal: Spacing.xl,
   },
   iconCircle: {
     width: 76,
@@ -603,18 +584,19 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   emptyTitle: {
-    fontSize: FontSize.title,
+    fontSize: 18,
     fontFamily: FontFamily.bold,
     color: Colors.dark,
-    marginTop: Spacing.xs,
+    textAlign: "center",
   },
   emptySubtitle: {
     marginTop: 8,
     fontFamily: FontFamily.regular,
-    fontSize: FontSize.body,
+    fontSize: 13,
     color: Colors.secondary,
     textAlign: "center",
-    lineHeight: 22,
+    lineHeight: 19,
+    paddingHorizontal: Spacing.sm,
   },
   exploreButton: {
     marginTop: Spacing.xl,
@@ -626,7 +608,7 @@ const styles = StyleSheet.create({
   exploreButtonText: {
     fontFamily: FontFamily.bold,
     fontSize: 14,
-    color: Colors.white,
+    color: Colors.dark,
   },
   signInButton: {
     marginTop: Spacing.xl,
@@ -638,6 +620,6 @@ const styles = StyleSheet.create({
   signInText: {
     fontFamily: FontFamily.bold,
     fontSize: 14,
-    color: Colors.white,
+    color: Colors.dark,
   },
 });

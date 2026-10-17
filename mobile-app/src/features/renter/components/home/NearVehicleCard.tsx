@@ -16,6 +16,7 @@ import { Colors } from "@/constants/colors";
 import {
   FontFamily
 } from "@/constants/theme";
+import { resolveImageUrl } from "@/services/api";
 
 export interface NearVehicleItem {
   id: string;
@@ -53,6 +54,14 @@ export default function NearVehicleCard({
   const ratingVal = hasRating ? Number(vehicle.rating).toFixed(1) : null;
   const ratingCountVal = (vehicle.ratingCount ?? 0) > 0 ? `(${vehicle.ratingCount})` : "";
 
+  const rawUri =
+    typeof vehicle.image === "string"
+      ? vehicle.image
+      : vehicle.image?.uri;
+  const resolvedSource = rawUri
+    ? { uri: resolveImageUrl(rawUri) || rawUri }
+    : vehicle.image;
+
   return (
     <TouchableOpacity
       style={[styles.card, containerStyle]}
@@ -61,7 +70,7 @@ export default function NearVehicleCard({
     >
       {/* Full Card Background Photo */}
       <Image
-        source={vehicle.image}
+        source={resolvedSource}
         contentFit="cover"
         style={styles.backgroundImage}
       />
@@ -241,6 +250,6 @@ const styles = StyleSheet.create({
   viewButtonText: {
     fontFamily: FontFamily.bold,
     fontSize: 14,
-    color: Colors.white,
+    color: Colors.dark,
   },
 });

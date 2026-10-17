@@ -1,100 +1,133 @@
 import {
-    createContext,
-    ReactNode,
-    useContext,
-    useState,
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
 } from "react";
 import {
-    Animated,
-    Dimensions,
+  Animated,
+  Dimensions,
+  Easing,
 } from "react-native";
 
-const { width } =
-  Dimensions.get("window");
+const { width } = Dimensions.get("window");
 
-export const SIDE_NAV_WIDTH =
-  Math.min(width * 0.82, 340);
+export const SIDE_NAV_WIDTH = Math.min(width * 0.82, 340);
 
-interface SideNavContextType {
-  isVisible: boolean;
-  animation: Animated.Value;
+interface SideNavActionsContextType {
   openSideNav: () => void;
-  closeSideNav: () => void;
+  closeSideNav: (immediate?: boolean) => void;
+  closeImmediate: () => void;
 }
 
-const SideNavContext =
-  createContext<SideNavContextType | null>(
-    null
-  );
+interface SideNavContextType extends SideNavActionsContextType {
+  isVisible: boolean;
+  isSettled: boolean;
+  animation: Animated.Value;
+}
+
+const SideNavContext = createContext<SideNavContextType | null>(null);
+const SideNavActionsContext = createContext<SideNavActionsContextType | null>(null);
 
 interface SideNavProviderProps {
   children: ReactNode;
 }
 
-export function SideNavProvider({
-  children,
-}: SideNavProviderProps) {
-  const [isVisible, setIsVisible] =
-    useState(false);
+export function SideNavProvider({ children }: SideNavProviderProps) {
+  const [isVisible, setIsVisible] = useState(false);
+  const [isSettled, setIsSettled] = useState(false);
+  const [animation] = useState(() => new Animated.Value(0));
 
-  const [animation] = useState(
-    () =>
-      new Animated.Value(
-        SIDE_NAV_WIDTH
-      )
-  );
-
-  const openSideNav = () => {
+  const openSideNav = useCallback(() => {
     animation.stopAnimation();
-
+    animation.setValue(0);
+    setIsSettled(false);
     setIsVisible(true);
-
     Animated.timing(animation, {
-      toValue: 0,
-      duration: 280,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const closeSideNav = () => {
-    animation.stopAnimation();
-
-    Animated.timing(animation, {
-      toValue: SIDE_NAV_WIDTH,
-      duration: 280,
+      toValue: 1,
+      duration: 140,
+      easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start(({ finished }) => {
       if (finished) {
+        animation.setValue(1);
+        setIsSettled(true);
+      }
+    });
+  }, [animation]);
+
+  const closeSideNav = useCallback((immediate = false) => {
+    animation.stopAnimation();
+    setIsSettled(false);
+    if (immediate) {
+      animation.setValue(0);
+      setIsVisible(false);
+      return;
+    }
+    Animated.timing(animation, {
+      toValue: 0,
+      duration: 120,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        animation.setValue(0);
         setIsVisible(false);
       }
     });
-  };
+  }, [animation]);
 
-  const value: SideNavContextType = {
-    isVisible,
-    animation,
-    openSideNav,
-    closeSideNav,
-  };
+  const closeImmediate = useCallback(() => closeSideNav(true), [closeSideNav]);
+
+  const actionsValue = useMemo<SideNavActionsContextType>(
+    () => ({
+      openSideNav,
+      closeSideNav,
+      closeImmediate,
+    }),
+    [openSideNav, closeSideNav, closeImmediate]
+  );
+
+  const value = useMemo<SideNavContextType>(
+    () => ({
+      isVisible,
+      isSettled,
+      animation,
+      openSideNav,
+      closeSideNav,
+      closeImmediate,
+    }),
+    [animation, closeImmediate, closeSideNav, isSettled, isVisible, openSideNav]
+  );
 
   return (
-    <SideNavContext.Provider
-      value={value}
-    >
-      {children}
-    </SideNavContext.Provider>
+    <SideNavActionsContext.Provider value={actionsValue}>
+      <SideNavContext.Provider value={value}>
+        {children}
+      </SideNavContext.Provider>
+    </SideNavActionsContext.Provider>
   );
 }
 
 export function useSideNav() {
-  const context =
-    useContext(SideNavContext);
+  const context = useContext(SideNavContext);
 
   if (!context) {
-    throw new Error(
-      "useSideNav must be used inside SideNavProvider"
-    );
+    throw new Error("useSideNav must be used inside SideNavProvider");
   }
 
   return context;
 }
+
+export function useSideNavActions() {
+  const context = useContext(SideNavActionsContext);
+
+  if (!context) {
+    throw new Error("useSideNavActions must be used inside SideNavProvider");
+  }
+
+  return context;
+}
+

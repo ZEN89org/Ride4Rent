@@ -19,7 +19,7 @@ import { FontFamily, FontSize, Spacing } from "@/constants/theme";
 import { useAppToast } from "@/context/ToastContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import OperatorShell from "@/features/operator/components/navigation/OperatorShell";
-import api from "@/services/api";
+import api, { resolveImageUrl } from "@/services/api";
 import { uploadProfilePhoto } from "@/services/profileService";
 
 const GCASH_IMG = require("@/assets/img/gcash.jpg");
@@ -35,21 +35,25 @@ export default function OperatorProfileScreen() {
     }, [refreshUser])
   );
 
-  const [profileImage, setProfileImage] = useState<string | null>(user?.profile_photo || null);
+  const [profileImage, setProfileImage] = useState<string | null>(
+    resolveImageUrl(user?.profile_photo) || null
+  );
   const [uploading, setUploading] = useState(false);
 
   // Business and Payment Setup Fields
   const [accountName, setAccountName] = useState(profile?.account_name || "");
   const [accountNumber, setAccountNumber] = useState(profile?.account_number || "");
   const [paymentMethod, setPaymentMethod] = useState("gcash");
-  const [qrCodeImage, setQrCodeImage] = useState<string | null>(profile?.qr_code || null);
+  const [qrCodeImage, setQrCodeImage] = useState<string | null>(
+    resolveImageUrl(profile?.qr_code) || null
+  );
   const [savingPayment, setSavingPayment] = useState(false);
 
   useEffect(() => {
-    if (user?.profile_photo) setProfileImage(user.profile_photo);
+    if (user?.profile_photo) setProfileImage(resolveImageUrl(user.profile_photo));
     if (profile?.account_name) setAccountName(profile.account_name);
     if (profile?.account_number) setAccountNumber(profile.account_number);
-    if (profile?.qr_code) setQrCodeImage(profile.qr_code);
+    if (profile?.qr_code) setQrCodeImage(resolveImageUrl(profile.qr_code));
   }, [user, profile]);
 
   const handlePickImage = async () => {

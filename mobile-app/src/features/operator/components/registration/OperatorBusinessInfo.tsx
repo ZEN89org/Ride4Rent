@@ -417,7 +417,7 @@ export default function OperatorBusinessInfo({
               <Ionicons
                 name={latitude && longitude ? "checkmark-circle" : "navigate-outline"}
                 size={17}
-                color={latitude && longitude ? Colors.white : Colors.secondary}
+                color={latitude && longitude ? Colors.dark : Colors.secondary}
               />
               <Text
                 style={[
@@ -981,7 +981,7 @@ const styles = StyleSheet.create({
   },
 
   mapActionButtonTextActive: {
-    color: Colors.white,
+    color: Colors.dark,
   },
 
   label: {

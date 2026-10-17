@@ -2,6 +2,7 @@
 import { useRef, useState } from "react";
 import {
   Animated,
+  Dimensions,
   FlatList,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -26,7 +27,7 @@ import { setFirstLaunchComplete } from "@/features/auth/storage/authStorage";
 
 export default function Onboarding() {
   const flatListRef = useRef<FlatList>(null);
-  const scrollX = useRef(new Animated.Value(0)).current;
+  const [scrollX] = useState(() => new Animated.Value(0));
 
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -49,6 +50,8 @@ export default function Onboarding() {
       }
     }
   };
+
+  const screenWidth = Dimensions.get("window").width;
 
   const goToNextSlide = () => {
     if (!isLastSlide) {
@@ -98,6 +101,8 @@ export default function Onboarding() {
         data={onboardingData}
         horizontal
         pagingEnabled
+        decelerationRate="fast"
+        bounces={false}
         contentContainerStyle={{
           flexGrow: 1,
         }}
@@ -106,12 +111,16 @@ export default function Onboarding() {
         initialNumToRender={3}
         maxToRenderPerBatch={3}
         windowSize={3}
+        getItemLayout={(_, index) => ({
+          length: screenWidth,
+          offset: screenWidth * index,
+          index,
+        })}
         scrollEventThrottle={16}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { x: scrollX } } }],
           {
-            useNativeDriver: false,
-            listener: onScroll,
+            useNativeDriver: true,
           }
         )}
         onMomentumScrollEnd={onScroll}

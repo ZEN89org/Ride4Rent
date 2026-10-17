@@ -269,6 +269,6 @@ const styles = StyleSheet.create({
   continueText: {
     fontSize: FontSize.body,
     fontWeight: "700",
-    color: Colors.white,
+    color: Colors.dark,
   },
 });

@@ -191,7 +191,7 @@ export function AppBottomSheet({
   const WrapperComponent = avoidKeyboard ? KeyboardAvoidingView : View;
   const wrapperProps = avoidKeyboard
     ? {
-        behavior: (Platform.OS === "ios" ? "padding" : undefined) as any,
+        behavior: (Platform.OS === "ios" ? "padding" : "height") as any,
         keyboardVerticalOffset: Platform.OS === "ios" ? 10 : 0,
         style: [
           styles.keyboardLayer,

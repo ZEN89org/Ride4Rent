@@ -613,7 +613,7 @@ export default function OperatorVehicleUpload() {
                     Tap to select from gallery (up to 8 high-res photos)
                   </Text>
                   <View style={styles.choosePhotosBtn}>
-                    <Ionicons name="images-outline" size={15} color={Colors.white} />
+                    <Ionicons name="images-outline" size={15} color={Colors.dark} />
                     <Text style={styles.choosePhotosBtnText}>Select Photos</Text>
                   </View>
                 </TouchableOpacity>
@@ -623,7 +623,7 @@ export default function OperatorVehicleUpload() {
                   <View style={styles.coverPhotoWrap}>
                     <Image source={{ uri: images[0] }} style={styles.coverPhotoImage} />
                     <View style={styles.coverTagBadge}>
-                      <Ionicons name="star" size={11} color={Colors.white} />
+                      <Ionicons name="star" size={11} color={Colors.dark} />
                       <Text style={styles.coverTagText}>Cover Photo</Text>
                     </View>
                     <TouchableOpacity
@@ -1717,7 +1717,7 @@ const styles = StyleSheet.create({
   choosePhotosBtnText: {
     fontFamily: FontFamily.bold,
     fontSize: 12,
-    color: Colors.white,
+    color: Colors.dark,
   },
   coverPhotoWrap: {
     position: "relative",
@@ -1747,7 +1747,7 @@ const styles = StyleSheet.create({
   coverTagText: {
     fontFamily: FontFamily.bold,
     fontSize: 10,
-    color: Colors.white,
+    color: Colors.dark,
   },
   coverDeleteBtn: {
     position: "absolute",
@@ -2162,7 +2162,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
   },
   saveText: {
-    color: Colors.white,
+    color: Colors.dark,
     fontFamily: FontFamily.bold,
     fontSize: 13,
   },

@@ -51,15 +51,235 @@ interface SwipeableNotificationItemProps {
   };
 }
 
-function simplifyNotificationText(text?: string | null): string {
-  if (!text) return "";
-  // Strip parentheses and anything inside them e.g. "(...)"
-  let cleaned = text.replace(/\s*\([^)]*\)/g, "");
-  // Strip trailing colons or commas
-  cleaned = cleaned.replace(/[:,-]\s*$/, "");
-  // Normalize whitespace
-  cleaned = cleaned.replace(/\s+/g, " ").trim();
-  return cleaned;
+function formatConciseNotification(
+  rawTitle?: string | null,
+  rawMessage?: string | null
+): { title: string; message: string } {
+  const trimmedTitle = (rawTitle || "").replace(/\s+/g, " ").trim();
+  const trimmedMsg = (rawMessage || "").replace(/\s+/g, " ").trim();
+  const rawLowerT = trimmedTitle.toLowerCase();
+
+  // Preserve personalized pending booking & upcoming trip reminder notifications intact
+  if (
+    rawLowerT.includes("don't miss your ride") ||
+    rawLowerT.includes("complete your reservation") ||
+    rawLowerT.includes("still interested in") ||
+    rawLowerT.includes("reservation expiring soon") ||
+    rawLowerT.includes("upcoming trip reminder")
+  ) {
+    return {
+      title: trimmedTitle,
+      message: trimmedMsg,
+    };
+  }
+
+  const clean = (str?: string | null) =>
+    (str || "")
+      .replace(/\s*\([^)]*\)/g, "")
+      .replace(/[:,-]\s*$/, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const t = clean(rawTitle);
+  const m = clean(rawMessage);
+  const lowerT = t.toLowerCase();
+  const lowerM = m.toLowerCase();
+
+  if (lowerT.includes("new booking")) {
+    return {
+      title: "New Booking Request",
+      message: "New reservation request received.",
+    };
+  }
+  if (lowerT.includes("payment submitted") || lowerT.includes("gcash reservation paid")) {
+    return {
+      title: "Payment Submitted",
+      message: "Renter submitted reservation payment for verification.",
+    };
+  }
+  if (lowerT.includes("reservation payment received") || lowerT.includes("payment received")) {
+    return {
+      title: "Payment Received",
+      message: "Your reservation payment was received. Awaiting host approval.",
+    };
+  }
+  if (
+    lowerT.includes("payment confirmed") ||
+    lowerT.includes("booking approved")
+  ) {
+    return {
+      title: "Booking Approved",
+      message: "Your booking has been approved by the host.",
+    };
+  }
+  if (lowerT.includes("trip started")) {
+    return {
+      title: "Trip Started",
+      message: "Your rental trip has started.",
+    };
+  }
+  if (lowerT.includes("trip completed")) {
+    return {
+      title: "Trip Completed",
+      message: "Your rental trip has been completed.",
+    };
+  }
+  if (lowerT.includes("renter arrived")) {
+    return {
+      title: "Renter Arrived",
+      message: "Renter arrived for pickup.",
+    };
+  }
+  if (lowerT.includes("vehicle returned")) {
+    return {
+      title: "Vehicle Returned",
+      message: "Vehicle returned for inspection.",
+    };
+  }
+  if (lowerT.includes("vehicle unavailable")) {
+    return {
+      title: "Vehicle Unavailable",
+      message: "This vehicle is no longer available.",
+    };
+  }
+  if (lowerT.includes("no-show") || lowerM.includes("no-show")) {
+    if (lowerT.includes("closed")) {
+      return {
+        title: "Booking Closed",
+        message: "Booking closed as no-show.",
+      };
+    }
+    return {
+      title: "Marked as No-Show",
+      message: "Your booking was marked as no-show.",
+    };
+  }
+  if (lowerT.includes("refund required")) {
+    return {
+      title: "Refund Required",
+      message: "Please process the reservation refund for the cancelled booking.",
+    };
+  }
+  if (lowerT.includes("refund completed")) {
+    return {
+      title: "Refund Completed",
+      message: "Your reservation refund has been processed.",
+    };
+  }
+  if (lowerT.includes("auto-cancelled") || lowerT.includes("booking expired")) {
+    if (lowerM.includes("refund")) {
+      return {
+        title: "Booking Expired",
+        message: "Host did not confirm in time. Your refund is pending.",
+      };
+    }
+    return {
+      title: "Booking Expired",
+      message: "Your booking expired due to unpaid reservation fee.",
+    };
+  }
+  if (lowerT.includes("booking cancelled")) {
+    return {
+      title: "Booking Cancelled",
+      message: lowerM.includes("refund")
+        ? "Your booking was cancelled. Refund is pending."
+        : "Reservation was cancelled.",
+    };
+  }
+  if (lowerT.includes("booking declined")) {
+    return {
+      title: "Booking Declined",
+      message: lowerM.includes("refund")
+        ? "Your booking was declined. Refund is pending."
+        : "Reservation was declined.",
+    };
+  }
+  if (lowerT.includes("extension requested")) {
+    return {
+      title: "Extension Requested",
+      message: "A renter requested a trip extension. Please review.",
+    };
+  }
+  if (lowerT.includes("extension submitted")) {
+    return {
+      title: "Extension Submitted",
+      message: "Your trip extension request was sent to the host.",
+    };
+  }
+  if (lowerT.includes("extension agreed") || lowerT.includes("extension approved")) {
+    if (lowerM.includes("you agreed")) {
+      return {
+        title: "Extension Approved",
+        message: "Extension approved. Awaiting renter payment.",
+      };
+    }
+    return {
+      title: "Extension Approved",
+      message: "Your extension request was approved. Please settle the payment.",
+    };
+  }
+  if (lowerT.includes("extension declined")) {
+    return {
+      title: "Extension Declined",
+      message: "Your trip extension request was declined by the host.",
+    };
+  }
+  if (lowerT.includes("extension payment settled") || lowerT.includes("extension paid")) {
+    return {
+      title: "Extension Paid",
+      message: "Renter paid the trip extension fee.",
+    };
+  }
+  if (lowerT.includes("extension confirmed")) {
+    return {
+      title: "Extension Confirmed",
+      message: "Your trip extension is confirmed.",
+    };
+  }
+  if (lowerT.includes("license uploaded")) {
+    return {
+      title: "License Uploaded",
+      message: "Your driver's license was uploaded for verification.",
+    };
+  }
+  if (lowerT.includes("license approved")) {
+    return {
+      title: "Driver's License Approved",
+      message: "Your driver's license has been verified.",
+    };
+  }
+  if (lowerT.includes("license") && lowerT.includes("rejected")) {
+    return {
+      title: "Driver's License Rejected",
+      message: "Your driver's license was not approved. Please upload a clear photo.",
+    };
+  }
+  if (lowerT.includes("operator account approved")) {
+    return {
+      title: "Operator Account Approved",
+      message: "Your operator account has been verified and activated.",
+    };
+  }
+  if (lowerT.includes("operator application rejected")) {
+    return {
+      title: "Operator Application Rejected",
+      message: "Your operator application was not approved.",
+    };
+  }
+  if (lowerT.includes("account suspended")) {
+    return {
+      title: "Account Suspended",
+      message: "Your account has been suspended by the administrator.",
+    };
+  }
+  if (lowerT.includes("account reactivated")) {
+    return {
+      title: "Account Reactivated",
+      message: "Your account has been restored to active status.",
+    };
+  }
+
+  return { title: t, message: m };
 }
 
 function SwipeableNotificationItem({
@@ -124,8 +344,10 @@ function SwipeableNotificationItem({
     isOpen.current = false;
   };
 
-  const cleanTitle = simplifyNotificationText(item.title);
-  const cleanMessage = simplifyNotificationText(item.message);
+  const { title: cleanTitle, message: cleanMessage } = formatConciseNotification(
+    item.title,
+    item.message
+  );
 
   return (
     <View style={styles.swipeContainer}>
@@ -195,7 +417,7 @@ function SwipeableNotificationItem({
             {iconCfg.icon}
           </View>
 
-          {/* Middle Single-Line Structured Content */}
+          {/* Middle Full Content (No Ellipsis Truncation) */}
           <View style={styles.textContainer}>
             <View style={styles.titleRow}>
               <Text
@@ -203,15 +425,14 @@ function SwipeableNotificationItem({
                   styles.itemTitle,
                   !item.is_read && styles.itemTitleUnread,
                 ]}
-                numberOfLines={1}
               >
                 {cleanTitle}
               </Text>
               <Text style={styles.timeText}>{item.time}</Text>
             </View>
 
-            {/* Clean Subtitle / Status Text */}
-            <Text style={styles.itemMessage} numberOfLines={1}>
+            {/* Full Subtitle / Status Text */}
+            <Text style={styles.itemMessage}>
               {cleanMessage}
             </Text>
           </View>
@@ -411,17 +632,33 @@ export default function NotificationsScreen() {
     }
 
     if (targetUrl) {
-      router.push(targetUrl as any);
+      if (targetUrl.startsWith("/(tabs)")) {
+        router.navigate(targetUrl as any);
+      } else {
+        router.push(targetUrl as any);
+      }
       return;
     }
 
     // Role-aware fallback navigation
     if (item.type === "booking") {
-      router.push(isOperator ? ("/operator-bookings" as any) : ("/(tabs)/bookings" as any));
+      if (isOperator) {
+        router.push("/operator-bookings" as any);
+      } else {
+        router.navigate("/(tabs)/bookings" as any);
+      }
     } else if (item.type === "chat") {
-      router.push(isOperator ? ("/operator-chats" as any) : ("/(tabs)/chats" as any));
+      if (isOperator) {
+        router.push("/operator-chats" as any);
+      } else {
+        router.navigate("/(tabs)/chats" as any);
+      }
     } else {
-      router.push(isOperator ? ("/operator-profile" as any) : ("/(tabs)/home" as any));
+      if (isOperator) {
+        router.push("/operator-profile" as any);
+      } else {
+        router.navigate("/(tabs)/home" as any);
+      }
     }
   };
 
@@ -565,15 +802,8 @@ export default function NotificationsScreen() {
         </View>
       ) : activeList.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <View style={styles.emptyIconCircle}>
-            <Ionicons
-              name={notificationTab === "inbox" ? "notifications-outline" : "archive-outline"}
-              size={34}
-              color={Colors.secondary}
-            />
-          </View>
           <Text style={styles.emptyTitle}>
-            {notificationTab === "inbox" ? "No notifications" : "No archived notifications"}
+            {notificationTab === "inbox" ? "No Notifications Yet" : "No Archived Notifications"}
           </Text>
           <Text style={styles.emptySubtitle}>
             {notificationTab === "inbox"
@@ -747,7 +977,7 @@ const styles = StyleSheet.create({
   },
   tabToggleTextActive: {
     fontFamily: FontFamily.bold,
-    color: Colors.white,
+    color: Colors.dark,
   },
   list: {
     paddingHorizontal: Spacing.md,
@@ -831,7 +1061,7 @@ const styles = StyleSheet.create({
   titleRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
   },
   itemTitle: {
     fontFamily: FontFamily.medium,
@@ -852,6 +1082,7 @@ const styles = StyleSheet.create({
   itemMessage: {
     fontFamily: FontFamily.regular,
     fontSize: 12,
+    lineHeight: 17,
     color: Colors.secondary,
     marginTop: 3,
   },
@@ -871,35 +1102,29 @@ const styles = StyleSheet.create({
   unreadPillText: {
     fontFamily: FontFamily.bold,
     fontSize: 10,
-    color: Colors.white,
+    color: Colors.dark,
   },
   emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
     alignItems: "center",
+    justifyContent: "flex-start",
+    paddingTop: 32,
+    paddingBottom: Spacing.xl,
     paddingHorizontal: Spacing.xl,
-  },
-  emptyIconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: Colors.inputBackground,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: Spacing.md,
   },
   emptyTitle: {
     fontFamily: FontFamily.bold,
-    fontSize: 15,
+    fontSize: 18,
     color: Colors.dark,
+    textAlign: "center",
   },
   emptySubtitle: {
     fontFamily: FontFamily.regular,
-    fontSize: 12,
+    fontSize: 13,
     color: Colors.secondary,
     textAlign: "center",
-    lineHeight: 18,
-    marginTop: 4,
+    lineHeight: 19,
+    marginTop: 8,
+    paddingHorizontal: Spacing.sm,
   },
   modalBackdrop: {
     flex: 1,

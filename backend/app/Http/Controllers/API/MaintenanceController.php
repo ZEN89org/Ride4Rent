@@ -17,7 +17,7 @@ class MaintenanceController extends Controller
     {
         $operatorId = $request->user()->id;
 
-        $vehicles = Vehicle::with(['brand', 'vehicleType', 'maintenances' => function ($q) {
+        $vehicles = Vehicle::with(['brand', 'vehicleType', 'images', 'maintenances' => function ($q) {
             $q->latest('service_date');
         }])
         ->where('operator_id', $operatorId)
@@ -71,7 +71,7 @@ class MaintenanceController extends Controller
                 'plate_number' => $vehicle->plate_number,
                 'brand' => $vehicle->brand?->name,
                 'model' => $vehicle->model,
-                'image_url' => $vehicle->primary_image_url,
+                'image_url' => $vehicle->image_url,
                 'current_odometer' => $currentOdo,
                 'last_service_odometer' => $lastServiceOdo,
                 'service_interval_km' => $interval,

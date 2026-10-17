@@ -1,44 +1,41 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   FlatList,
   Modal,
   Platform,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 
 import { AppBottomSheet } from "@/components/common/AppBottomSheet";
-import { Skeleton } from "@/components/common/Skeleton";
 import ListPagination from "@/components/common/ListPagination";
+import { Skeleton } from "@/components/common/Skeleton";
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";
 import { useAppToast } from "@/context/ToastContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import OperatorShell from "@/features/operator/components/navigation/OperatorShell";
-import { useFocusEffect } from "expo-router";
+import { resolveImageUrl } from "@/services/api";
 import {
   approveBookingExtension,
   Booking,
   completeTrip,
   confirmOperatorPayment,
   deleteBooking,
-  getBookingLocation,
   getMyBookings,
   processBookingRefund,
   rejectBookingExtension,
   startTrip,
-  updateBookingStatus,
+  updateBookingStatus
 } from "@/services/bookingService";
-import { API_BASE_URL } from "@/services/api";
 
 type OperatorTabType = "all" | "pending" | "approved" | "ongoing" | "history";
 
@@ -117,14 +114,18 @@ const parseDateString = (dateStr: string | null | undefined): Date => {
 
 const getEffectiveTripDays = (b: Booking | null | undefined): number => {
   if (!b) return 1;
+  if (b.extension_status === "approved" && b.total_days && b.total_days > 0) {
+    return b.total_days;
+  }
+  if (b.total_days && b.total_days > 0) {
+    return b.total_days;
+  }
   const start = b.start_date ? parseDateString(b.start_date) : null;
-  const effectiveEndStr = b.extension_status === "approved"
-    ? (b.extension_end_date || b.extended_end_date || b.end_date)
-    : b.end_date;
+  const effectiveEndStr = getEffectiveReturnDate(b);
   const end = effectiveEndStr ? parseDateString(effectiveEndStr) : null;
-  if (!start || !end) return b.total_days || 1;
+  if (!start || !end) return 1;
   const diffTime = end.getTime() - start.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
   return Math.max(1, diffDays);
 };
 
@@ -262,21 +263,19 @@ const getReturnStatus = (returnDateStr: string | null | undefined) => {
 const DEFAULT_CAR_FALLBACK =
   "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=60";
 
-const resolveVehicleImage = (vehicle: any): string => {
-  if (!vehicle) return DEFAULT_CAR_FALLBACK;
-  if (vehicle.image_url) return vehicle.image_url;
-  if (vehicle.cover_photo) return vehicle.cover_photo;
-  if (Array.isArray(vehicle.images) && vehicle.images.length > 0) {
-    return vehicle.images[0].image_url || DEFAULT_CAR_FALLBACK;
-  }
-  return DEFAULT_CAR_FALLBACK;
+const resolveStorageUrl = (path?: string | null): string | null => {
+  return resolveImageUrl(path);
 };
 
-const resolveStorageUrl = (path?: string | null): string | null => {
-  if (!path) return null;
-  if (path.startsWith("http://") || path.startsWith("https://")) return path;
-  const baseDomain = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
-  return `${baseDomain}/storage/${path.replace(/^\//, "")}`;
+const resolveVehicleImage = (vehicle: any): string => {
+  if (!vehicle) return DEFAULT_CAR_FALLBACK;
+  if (vehicle.image_url) return resolveStorageUrl(vehicle.image_url) || DEFAULT_CAR_FALLBACK;
+  if (vehicle.cover_photo) return resolveStorageUrl(vehicle.cover_photo) || DEFAULT_CAR_FALLBACK;
+  if (Array.isArray(vehicle.images) && vehicle.images.length > 0) {
+    const first = vehicle.images[0].image_url || vehicle.images[0].image_path;
+    return resolveStorageUrl(first) || DEFAULT_CAR_FALLBACK;
+  }
+  return DEFAULT_CAR_FALLBACK;
 };
 
 export default function OperatorBookingsScreen() {
@@ -321,6 +320,10 @@ export default function OperatorBookingsScreen() {
   const [otherChargesInput, setOtherChargesInput] = useState<string>("0");
   const [endNotesInput, setEndNotesInput] = useState<string>("");
   const [submittingReturnTrip, setSubmittingReturnTrip] = useState<boolean>(false);
+
+  // Dedicated Trip Extension Review Modal State
+  const [reviewExtensionBooking, setReviewExtensionBooking] = useState<Booking | null>(null);
+  const [submittingExtensionAction, setSubmittingExtensionAction] = useState<boolean>(false);
 
   // Progressive Disclosure: Track expanded cards
   const [expandedCardIds, setExpandedCardIds] = useState<Record<number, boolean>>({});
@@ -538,6 +541,42 @@ export default function OperatorBookingsScreen() {
       ],
       "confirm"
     );
+  };
+
+  const handleConfirmApproveExtensionModal = async () => {
+    if (!reviewExtensionBooking) return;
+    try {
+      setSubmittingExtensionAction(true);
+      await approveBookingExtension(reviewExtensionBooking.id);
+      showSuccess(
+        "Extension Schedule Agreed",
+        "Renter has been notified to settle the extension fee via GCash."
+      );
+      setReviewExtensionBooking(null);
+      loadOperatorBookings();
+    } catch (e: any) {
+      showError("Approval Error", e.response?.data?.message || "Could not agree to extension.");
+    } finally {
+      setSubmittingExtensionAction(false);
+    }
+  };
+
+  const handleConfirmRejectExtensionModal = async () => {
+    if (!reviewExtensionBooking) return;
+    try {
+      setSubmittingExtensionAction(true);
+      await rejectBookingExtension(reviewExtensionBooking.id);
+      showSuccess(
+        "Extension Declined",
+        "Rental extension request was declined."
+      );
+      setReviewExtensionBooking(null);
+      loadOperatorBookings();
+    } catch (e: any) {
+      showError("Error", e.response?.data?.message || "Could not decline extension.");
+    } finally {
+      setSubmittingExtensionAction(false);
+    }
   };
 
   const openStartTripModal = (booking: Booking) => {
@@ -1033,14 +1072,11 @@ export default function OperatorBookingsScreen() {
           </View>
         ) : filteredBookings.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconCircle}>
-              <MaterialCommunityIcons name="clipboard-text-clock-outline" size={40} color={Colors.secondary} />
-            </View>
             <Text style={styles.emptyTitle}>No {activeTab} bookings</Text>
             <Text style={styles.emptySubtitle}>
               {activeTab === "pending"
                 ? "You currently have no new customer rental requests awaiting payment verification or refunds."
-                : `No reservations under ${activeTab} category.`}
+                : `No reservations under this category.`}
             </Text>
           </View>
         ) : (
@@ -1091,11 +1127,22 @@ export default function OperatorBookingsScreen() {
               const effectiveReturnDateStr = getEffectiveReturnDate(item);
               const returnDateInfo = formatShortDate(effectiveReturnDateStr);
               const returnStatus = getReturnStatus(effectiveReturnDateStr);
+              const tripDays = getEffectiveTripDays(item);
+              const tripDatesDisplay = formatPrettyTripDates(item.start_date, effectiveReturnDateStr);
 
               const isRefundPending =
                 item.refund_status === "pending" || item.payment_status === "refund_pending";
               const isRefundCompleted =
                 item.refund_status === "refunded" || item.payment_status === "refunded";
+
+              const extraDays = Number(item.extension_days || 1);
+              const requestedEndDateStr = cleanDate(item.extension_end_date || item.extended_end_date);
+              const currentPrice = Number(item.total_price || 0);
+              const currentDays = Number(item.total_days || 1);
+              const dailyRate = Number(item.daily_rate || item.vehicle?.daily_rate || (currentDays > 0 ? currentPrice / currentDays : 0));
+              const extraFee = Number(item.extension_price || item.extension_fee || (dailyRate * extraDays));
+              const newTotalDays = currentDays + extraDays;
+              const newTotalPrice = currentPrice + extraFee;
 
               const isExpanded = !!expandedCardIds[item.id];
 
@@ -1136,7 +1183,6 @@ export default function OperatorBookingsScreen() {
                     </View>
 
                     <View style={[styles.statusPill, { backgroundColor: statusCfg.bg, borderColor: (statusCfg as any).border || statusCfg.bg, borderWidth: 1 }]}>
-                      <Ionicons name={statusCfg.icon} size={11} color={statusCfg.text} />
                       <Text style={[styles.statusPillText, { color: statusCfg.text }]}>
                         {statusCfg.label}
                       </Text>
@@ -1183,40 +1229,68 @@ export default function OperatorBookingsScreen() {
                     </View>
                   </View>
 
-                  {/* Compact Alert Pill (Rendered ONLY when actionable or notice is needed) */}
+                  {/* Extension Requests / Notices / Alerts */}
                   {item.extension_status === "pending" ? (
-                    <View style={styles.alertPillWarning}>
-                      <View style={{ flex: 1 }}>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                          <Ionicons name="time" size={13} color="#D97706" />
-                          <Text style={styles.alertPillWarningTitle}>Extension Requested</Text>
+                    <View style={styles.extensionCardBanner}>
+                      <View style={styles.extensionCardHeader}>
+                        <View style={styles.extensionBadge}>
+                          <Ionicons name="calendar-outline" size={12} color="#D97706" />
+                          <Text style={styles.extensionBadgeText}>EXTENSION REQUEST</Text>
                         </View>
-                        <Text style={styles.alertPillWarningDesc}>
-                          +{item.extension_days || 1}d until {cleanDate(item.extension_end_date || item.extended_end_date)} • ₱{Number(item.extension_fee || item.extension_price || ((item.vehicle as any)?.price_per_day ? Number((item.vehicle as any).price_per_day) * (item.extension_days || 1) : 0)).toLocaleString()} extra
+                        <Text style={styles.extensionFeeHighlight}>+₱{extraFee.toLocaleString()}</Text>
+                      </View>
+
+                      <View style={styles.extensionScheduleRow}>
+                        <View style={styles.extensionScheduleItem}>
+                          <Text style={styles.extensionSubLabel}>CURRENT RETURN</Text>
+                          <Text style={styles.extensionMainText}>{formatPrettyDate(item.end_date)}</Text>
+                        </View>
+                        <Ionicons name="arrow-forward" size={14} color="#94A3B8" />
+                        <View style={styles.extensionScheduleItem}>
+                          <Text style={styles.extensionSubLabel}>REQUESTED (+{extraDays}d)</Text>
+                          <Text style={[styles.extensionMainText, { color: Colors.primary }]}>
+                            {formatPrettyDate(requestedEndDateStr)}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.extensionSummaryMathRow}>
+                        <Text style={styles.extensionMathSummaryText}>
+                          Updated Total: <Text style={{ fontFamily: FontFamily.bold, color: Colors.dark }}>{newTotalDays} days</Text> • <Text style={{ fontFamily: FontFamily.bold, color: Colors.dark }}>₱{newTotalPrice.toLocaleString()}</Text>
                         </Text>
                       </View>
-                      <View style={{ flexDirection: "row", gap: 6 }}>
+
+                      <View style={styles.extensionBtnRow}>
                         <TouchableOpacity
-                          style={styles.extensionMiniDeclineBtn}
+                          style={styles.extensionDeclineBtn}
                           onPress={() => handleRejectExtension(item.id)}
                           activeOpacity={0.8}
                         >
-                          <Text style={styles.extensionMiniDeclineText}>Decline</Text>
+                          <Text style={styles.extensionDeclineBtnText}>Decline</Text>
                         </TouchableOpacity>
+
                         <TouchableOpacity
-                          style={styles.extensionMiniApproveBtn}
-                          onPress={() => handleApproveExtension(item.id)}
-                          activeOpacity={0.85}
+                          style={styles.extensionReviewBtn}
+                          onPress={() => setReviewExtensionBooking(item)}
+                          activeOpacity={0.88}
                         >
-                          <Text style={styles.extensionMiniApproveText}>Agree</Text>
+                          <Ionicons name="eye-outline" size={13} color={Colors.dark} />
+                          <Text style={styles.extensionReviewBtnText}>Review & Agree</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
                   ) : item.extension_status === "payment_required" ? (
-                    <View style={styles.alertPillInfo}>
-                      <Ionicons name="hourglass-outline" size={13} color="#D97706" />
-                      <Text style={styles.alertPillInfoText}>
-                        Extension agreed (+{item.extension_days || 1}d) • Awaiting renter GCash payment
+                    <View style={styles.extensionAwaitingPaymentBanner}>
+                      <Ionicons name="hourglass-outline" size={14} color="#D97706" />
+                      <Text style={styles.extensionAwaitingText}>
+                        Extension agreed (+{extraDays}d) • Awaiting renter's ₱{extraFee.toLocaleString()} payment
+                      </Text>
+                    </View>
+                  ) : item.extension_status === "approved" ? (
+                    <View style={styles.extensionActiveBadgeRow}>
+                      <Ionicons name="checkmark-circle" size={14} color="#059669" />
+                      <Text style={styles.extensionActiveBadgeText}>
+                        Trip Extended (+{item.extension_days || 1}d until {formatPrettyDate(effectiveReturnDateStr)})
                       </Text>
                     </View>
                   ) : isRefundPending ? (
@@ -1277,7 +1351,7 @@ export default function OperatorBookingsScreen() {
                           onPress={() => setVerifyModalBooking(item)}
                           activeOpacity={0.85}
                         >
-                          <Ionicons name="shield-checkmark" size={14} color={Colors.white} />
+                          <Ionicons name="shield-checkmark" size={14} color={Colors.dark} />
                           <Text style={styles.primaryActionText}>Verify & Approve</Text>
                         </TouchableOpacity>
                       </View>
@@ -1297,7 +1371,7 @@ export default function OperatorBookingsScreen() {
                           onPress={() => openStartTripModal(item)}
                           activeOpacity={0.85}
                         >
-                          <MaterialCommunityIcons name="car-key" size={16} color={Colors.white} />
+                          <MaterialCommunityIcons name="car-key" size={16} color={Colors.dark} />
                           <Text style={styles.primaryActionText}>Start Handover</Text>
                         </TouchableOpacity>
                       </View>
@@ -1326,7 +1400,7 @@ export default function OperatorBookingsScreen() {
                           onPress={() => openReturnTripModal(item)}
                           activeOpacity={0.85}
                         >
-                          <Ionicons name="clipboard-outline" size={15} color={Colors.white} />
+                          <Ionicons name="clipboard-outline" size={15} color={Colors.dark} />
                           <Text style={styles.primaryActionText}>Return Check</Text>
                         </TouchableOpacity>
                       </View>
@@ -1422,7 +1496,7 @@ export default function OperatorBookingsScreen() {
                   <Ionicons
                     name="flash"
                     size={12}
-                    color={startFuelLevelInput === level ? Colors.white : Colors.secondary}
+                    color={startFuelLevelInput === level ? Colors.dark : Colors.secondary}
                   />
                   <Text style={[styles.fuelBtnText, startFuelLevelInput === level && styles.fuelBtnTextActive]}>
                     {level}%
@@ -1460,7 +1534,7 @@ export default function OperatorBookingsScreen() {
               disabled={submittingStartTrip}
               activeOpacity={0.88}
             >
-              <MaterialCommunityIcons name="car-key" size={18} color={Colors.white} />
+              <MaterialCommunityIcons name="car-key" size={18} color={Colors.dark} />
               <Text style={styles.verifyConfirmBtnText}>
                 {submittingStartTrip ? "Starting..." : "Start Trip"}
               </Text>
@@ -1545,7 +1619,7 @@ export default function OperatorBookingsScreen() {
                       <Ionicons
                         name="flash"
                         size={12}
-                        color={endFuelLevelInput === level ? Colors.white : Colors.secondary}
+                        color={endFuelLevelInput === level ? Colors.dark : Colors.secondary}
                       />
                       <Text style={[styles.fuelBtnText, endFuelLevelInput === level && styles.fuelBtnTextActive]}>
                         {level}%
@@ -1624,7 +1698,7 @@ export default function OperatorBookingsScreen() {
                   onPress={handleExecuteReturnTrip}
                   disabled={submittingReturnTrip}
                 >
-                  <Ionicons name="checkmark-done" size={16} color={Colors.white} />
+                  <Ionicons name="checkmark-done" size={16} color={Colors.dark} />
                   <Text style={styles.confirmCompleteBtnText}>
                     {submittingReturnTrip ? "Completing..." : "Complete Trip"}
                   </Text>
@@ -1716,7 +1790,7 @@ export default function OperatorBookingsScreen() {
                   disabled={submittingRefund}
                 >
                   <Ionicons name="checkmark-circle" size={16} color={Colors.white} />
-                  <Text style={styles.confirmCompleteBtnText}>
+                  <Text style={[styles.confirmCompleteBtnText, { color: Colors.white }]}>
                     {submittingRefund ? "Submitting..." : "Confirm Refund"}
                   </Text>
                 </TouchableOpacity>
@@ -2195,13 +2269,205 @@ export default function OperatorBookingsScreen() {
                 disabled={submittingVerifyApprove}
                 activeOpacity={0.88}
               >
-                <Ionicons name="checkmark-circle" size={17} color={Colors.white} />
+                <Ionicons name="checkmark-circle" size={17} color={Colors.dark} />
                 <Text style={styles.verifyConfirmBtnText}>
                   {submittingVerifyApprove ? "Approving..." : "Verify & Approve"}
                 </Text>
               </TouchableOpacity>
             </View>
           </ScrollView>
+        </AppBottomSheet>
+
+        {/* Dedicated Modern Trip Extension Review Bottom Sheet */}
+        <AppBottomSheet
+          visible={!!reviewExtensionBooking}
+          onClose={() => setReviewExtensionBooking(null)}
+          position="bottom"
+          showHandle={true}
+          sheetStyle={[styles.verifyModalCard, { maxHeight: "90%" }]}
+        >
+          {reviewExtensionBooking && (() => {
+            const extExtraDays = Number(reviewExtensionBooking.extension_days || 1);
+            const extCurrentPrice = Number(reviewExtensionBooking.total_price || 0);
+            const extCurrentDays = Number(reviewExtensionBooking.total_days || 1);
+            const extDailyRate = Number(
+              reviewExtensionBooking.daily_rate ||
+              reviewExtensionBooking.vehicle?.daily_rate ||
+              (extCurrentDays > 0 ? extCurrentPrice / extCurrentDays : 0)
+            );
+            const extFee = Number(
+              reviewExtensionBooking.extension_price ||
+              reviewExtensionBooking.extension_fee ||
+              (extDailyRate * extExtraDays)
+            );
+            const extNewTotalDays = extCurrentDays + extExtraDays;
+            const extNewTotalPrice = extCurrentPrice + extFee;
+            const extRenterName = reviewExtensionBooking.renter
+              ? `${reviewExtensionBooking.renter.first_name || ""} ${reviewExtensionBooking.renter.last_name || ""}`.trim()
+              : "Renter";
+
+            return (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ alignItems: "center", paddingBottom: 16 }}
+                style={{ width: "100%" }}
+              >
+                {/* Glowing Top Circle */}
+                <View style={[styles.verifyGlowCircle, { backgroundColor: "#FEF3C7" }]}>
+                  <Ionicons name="calendar" size={30} color="#D97706" />
+                </View>
+
+                <Text style={styles.verifyModalHeading}>Review Trip Extension</Text>
+                <Text style={styles.verifyModalSubheading}>
+                  Renter requested to extend this active rental schedule
+                </Text>
+
+                {/* Summary Card */}
+                <View style={styles.verifySummaryCard}>
+                  <View style={styles.verifyRow}>
+                    <Text style={styles.verifyLabel}>Renter</Text>
+                    <Text style={styles.verifyValue} numberOfLines={1}>
+                      {extRenterName}
+                    </Text>
+                  </View>
+
+                  <View style={styles.verifyDivider} />
+
+                  <View style={styles.verifyRow}>
+                    <Text style={styles.verifyLabel}>Vehicle</Text>
+                    <Text style={styles.verifyValue} numberOfLines={1}>
+                      {reviewExtensionBooking.vehicle?.name || "Vehicle"}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Schedule Comparison Box */}
+                <View style={styles.extComparisonCard}>
+                  <View style={styles.extComparisonHeader}>
+                    <Text style={styles.extComparisonSectionTitle}>SCHEDULE CHANGE</Text>
+                    <View style={styles.extDaysAddedPill}>
+                      <Text style={styles.extDaysAddedPillText}>+{extExtraDays} {extExtraDays === 1 ? "day" : "days"}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.extComparisonRow}>
+                    <View style={styles.extComparisonCol}>
+                      <Text style={styles.extComparisonColLabel}>CURRENT RETURN</Text>
+                      <Text style={styles.extComparisonColValue}>
+                        {formatFullDate(reviewExtensionBooking.end_date)}
+                      </Text>
+                      <Text style={styles.extComparisonColSub}>
+                        {extCurrentDays} {extCurrentDays === 1 ? "day" : "days"} duration
+                      </Text>
+                    </View>
+
+                    <View style={styles.extComparisonArrow}>
+                      <Ionicons name="arrow-forward" size={16} color={Colors.primary} />
+                    </View>
+
+                    <View style={styles.extComparisonCol}>
+                      <Text style={[styles.extComparisonColLabel, { color: Colors.primary }]}>PROPOSED RETURN</Text>
+                      <Text style={[styles.extComparisonColValue, { color: Colors.dark }]}>
+                        {formatFullDate(reviewExtensionBooking.extension_end_date || reviewExtensionBooking.extended_end_date)}
+                      </Text>
+                      <Text style={[styles.extComparisonColSub, { color: Colors.primary, fontFamily: FontFamily.semiBold }]}>
+                        {extNewTotalDays} days total
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Financial Calculation Breakdown */}
+                <View style={styles.extFinancialCard}>
+                  <Text style={styles.extComparisonSectionTitle}>FINANCIAL SUMMARY</Text>
+
+                  <View style={styles.extFeeRow}>
+                    <Text style={styles.extFeeLabel}>Current Total Price</Text>
+                    <Text style={styles.extFeeValue}>₱{extCurrentPrice.toLocaleString()}</Text>
+                  </View>
+
+                  <View style={styles.extFeeRow}>
+                    <View>
+                      <Text style={styles.extFeeLabel}>Extension Fee</Text>
+                      <Text style={styles.extFeeSub}>
+                        {extExtraDays} {extExtraDays === 1 ? "day" : "days"} × ₱{extDailyRate.toLocaleString()}/day
+                      </Text>
+                    </View>
+                    <Text style={[styles.extFeeValue, { color: "#D97706", fontFamily: FontFamily.bold }]}>
+                      +₱{extFee.toLocaleString()}
+                    </Text>
+                  </View>
+
+                  <View style={styles.extDivider} />
+
+                  <View style={styles.extFeeRow}>
+                    <Text style={styles.extTotalLabel}>New Total Rental Amount</Text>
+                    <Text style={styles.extTotalValue}>₱{extNewTotalPrice.toLocaleString()}</Text>
+                  </View>
+                </View>
+
+                {/* Optional Renter Notes */}
+                {reviewExtensionBooking.extension_notes ? (
+                  <View style={styles.extNotesCard}>
+                    <Ionicons name="chatbubble-ellipses-outline" size={15} color={Colors.secondary} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.extNotesLabel}>Renter's Note:</Text>
+                      <Text style={styles.extNotesText}>{reviewExtensionBooking.extension_notes}</Text>
+                    </View>
+                  </View>
+                ) : null}
+
+                {/* Helpful Instruction Note */}
+                <View style={styles.extNoticeBox}>
+                  <Ionicons name="information-circle-outline" size={15} color="#1D4ED8" />
+                  <Text style={styles.extNoticeText}>
+                    Once agreed, the renter will be prompted to settle the ₱{extFee.toLocaleString()} extension fee via GCash. The booking schedule will update automatically upon payment.
+                  </Text>
+                </View>
+
+                {/* Action Buttons */}
+                <View style={styles.verifyActionsRow}>
+                  <TouchableOpacity
+                    style={styles.verifyDeclineBtn}
+                    onPress={handleConfirmRejectExtensionModal}
+                    disabled={submittingExtensionAction}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="close-circle-outline" size={16} color="#DC2626" />
+                    <Text style={styles.verifyDeclineBtnText}>Decline</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.verifyCancelBtn, { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4 }]}
+                    onPress={() => {
+                      const rId = reviewExtensionBooking?.renter_id;
+                      const rName = extRenterName;
+                      setReviewExtensionBooking(null);
+                      if (rId) {
+                        router.push({ pathname: `/chat/${rId}`, params: { name: rName } } as any);
+                      }
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="chatbubble-ellipses-outline" size={15} color={Colors.dark} />
+                    <Text style={styles.verifyCancelBtnText}>Chat</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.verifyConfirmBtn, { backgroundColor: Colors.dark }]}
+                    onPress={handleConfirmApproveExtensionModal}
+                    disabled={submittingExtensionAction}
+                    activeOpacity={0.88}
+                  >
+                    <Ionicons name="checkmark-circle" size={17} color={Colors.white} />
+                    <Text style={[styles.verifyConfirmBtnText, { color: Colors.white }]}>
+                      {submittingExtensionAction ? "Agreeing..." : "Agree & Request Pay"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            );
+          })()}
         </AppBottomSheet>
 
         {/* Full-Screen Driver's License Image Inspection Modal */}
@@ -2537,6 +2803,308 @@ const styles = StyleSheet.create({
     backgroundColor: "#E2E8F0",
     marginHorizontal: 12,
   },
+  // Modern Trip Extension Card Banner
+  extensionCardBanner: {
+    backgroundColor: "#FFFBEB",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 10,
+  },
+  extensionCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  extensionBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#FEF3C7",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  extensionBadgeText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 9.5,
+    color: "#B45309",
+    letterSpacing: 0.3,
+  },
+  extensionFeeHighlight: {
+    fontFamily: FontFamily.bold,
+    fontSize: 14,
+    color: "#B45309",
+  },
+  extensionScheduleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: Colors.white,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#FEF3C7",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  extensionScheduleItem: {
+    flex: 1,
+  },
+  extensionSubLabel: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 9,
+    color: "#94A3B8",
+    letterSpacing: 0.4,
+    marginBottom: 2,
+  },
+  extensionMainText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 12,
+    color: Colors.dark,
+  },
+  extensionSummaryMathRow: {
+    marginTop: 7,
+    paddingHorizontal: 2,
+  },
+  extensionMathSummaryText: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11,
+    color: "#64748B",
+  },
+  extensionBtnRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 10,
+  },
+  extensionDeclineBtn: {
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FEE2E2",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  extensionDeclineBtnText: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 11.5,
+    color: "#991B1B",
+  },
+  extensionReviewBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    backgroundColor: Colors.primary,
+  },
+  extensionReviewBtnText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 12,
+    color: Colors.dark,
+  },
+  extensionAwaitingPaymentBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#FFFBEB",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: 8,
+  },
+  extensionAwaitingText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 11,
+    color: "#B45309",
+    flex: 1,
+  },
+  extensionActiveBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    marginTop: 8,
+  },
+  extensionActiveBadgeText: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 11,
+    color: "#047857",
+    flex: 1,
+  },
+  // Extension Review Sheet Modal Styles
+  extComparisonCard: {
+    width: "100%",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    padding: 14,
+    marginBottom: 12,
+  },
+  extComparisonHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  extComparisonSectionTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 10,
+    color: "#64748B",
+    letterSpacing: 0.6,
+  },
+  extDaysAddedPill: {
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  extDaysAddedPillText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 10,
+    color: "#1D4ED8",
+  },
+  extComparisonRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  extComparisonCol: {
+    flex: 1,
+  },
+  extComparisonColLabel: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 9,
+    color: "#94A3B8",
+    letterSpacing: 0.4,
+    marginBottom: 2,
+  },
+  extComparisonColValue: {
+    fontFamily: FontFamily.bold,
+    fontSize: 12.5,
+    color: Colors.dark,
+    lineHeight: 16,
+  },
+  extComparisonColSub: {
+    fontFamily: FontFamily.regular,
+    fontSize: 10.5,
+    color: Colors.secondary,
+    marginTop: 2,
+  },
+  extComparisonArrow: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  extFinancialCard: {
+    width: "100%",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    padding: 14,
+    marginBottom: 12,
+  },
+  extFeeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 8,
+  },
+  extFeeLabel: {
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+    color: "#475569",
+  },
+  extFeeSub: {
+    fontFamily: FontFamily.regular,
+    fontSize: 10,
+    color: Colors.secondary,
+    marginTop: 1,
+  },
+  extFeeValue: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 13,
+    color: Colors.dark,
+  },
+  extDivider: {
+    height: 1,
+    backgroundColor: "#E2E8F0",
+    marginVertical: 10,
+  },
+  extTotalLabel: {
+    fontFamily: FontFamily.bold,
+    fontSize: 13,
+    color: Colors.dark,
+  },
+  extTotalValue: {
+    fontFamily: FontFamily.bold,
+    fontSize: 16,
+    color: Colors.primary,
+  },
+  extNotesCard: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: "#F1F5F9",
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 10,
+  },
+  extNotesLabel: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 11,
+    color: Colors.secondary,
+    marginBottom: 2,
+  },
+  extNotesText: {
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    color: Colors.dark,
+  },
+  extNoticeBox: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 14,
+  },
+  extNoticeText: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11,
+    color: "#1E40AF",
+    lineHeight: 15,
+    flex: 1,
+  },
   // Compact Alert Pills
   alertPillWarning: {
     flexDirection: "row",
@@ -2584,7 +3152,7 @@ const styles = StyleSheet.create({
   extensionMiniApproveText: {
     fontFamily: FontFamily.bold,
     fontSize: 10.5,
-    color: Colors.white,
+    color: Colors.dark,
   },
   alertPillInfo: {
     flexDirection: "row",
@@ -2738,7 +3306,7 @@ const styles = StyleSheet.create({
   approvedStartTripBtnText: {
     fontFamily: FontFamily.bold,
     fontSize: 13.5,
-    color: Colors.white,
+    color: Colors.dark,
     letterSpacing: -0.2,
   },
   dualActionRow: {
@@ -2781,7 +3349,7 @@ const styles = StyleSheet.create({
   primaryActionText: {
     fontFamily: FontFamily.bold,
     fontSize: 12,
-    color: Colors.white,
+    color: Colors.dark,
   },
   dangerActionBtn: {
     paddingHorizontal: 12,
@@ -2900,7 +3468,7 @@ const styles = StyleSheet.create({
   approveBtnText: {
     fontFamily: FontFamily.bold,
     fontSize: 12,
-    color: Colors.white,
+    color: Colors.dark,
   },
   startBtn: {
     flexDirection: "row",
@@ -2914,7 +3482,7 @@ const styles = StyleSheet.create({
   startBtnText: {
     fontFamily: FontFamily.bold,
     fontSize: 12,
-    color: Colors.white,
+    color: Colors.dark,
   },
   completeBtn: {
     flexDirection: "row",
@@ -2932,9 +3500,10 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 60,
-    paddingHorizontal: Spacing.lg,
+    justifyContent: "flex-start",
+    paddingTop: 32,
+    paddingBottom: Spacing.xl,
+    paddingHorizontal: Spacing.xl,
   },
   emptyIconCircle: {
     width: 72,
@@ -2947,17 +3516,18 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontFamily: FontFamily.bold,
-    fontSize: 16,
+    fontSize: 18,
     color: Colors.dark,
+    textAlign: "center",
   },
   emptySubtitle: {
     fontFamily: FontFamily.regular,
     fontSize: 13,
     color: Colors.secondary,
     textAlign: "center",
-    marginTop: 4,
-    marginBottom: Spacing.lg,
-    lineHeight: 18,
+    marginTop: 8,
+    lineHeight: 19,
+    paddingHorizontal: Spacing.sm,
   },
   modalOverlay: {
     flex: 1,
@@ -3326,7 +3896,7 @@ const styles = StyleSheet.create({
   },
   fuelBtnTextActive: {
     fontFamily: FontFamily.bold,
-    color: Colors.white,
+    color: Colors.dark,
   },
   chargeRow: {
     flexDirection: "row",
@@ -3383,7 +3953,7 @@ const styles = StyleSheet.create({
   confirmStartBtnText: {
     fontFamily: FontFamily.bold,
     fontSize: 13,
-    color: Colors.white,
+    color: Colors.dark,
   },
   confirmCompleteBtn: {
     flexDirection: "row",
@@ -3397,7 +3967,7 @@ const styles = StyleSheet.create({
   confirmCompleteBtnText: {
     fontFamily: FontFamily.bold,
     fontSize: 13,
-    color: Colors.white,
+    color: Colors.dark,
   },
   trackGpsBtn: {
     flexDirection: "row",
@@ -3665,7 +4235,7 @@ const styles = StyleSheet.create({
   extensionApproveText: {
     fontFamily: FontFamily.bold,
     fontSize: 12.5,
-    color: Colors.white,
+    color: Colors.dark,
   },
   extensionApprovedBox: {
     flexDirection: "row",
@@ -3841,7 +4411,7 @@ const styles = StyleSheet.create({
   verifyConfirmBtnText: {
     fontFamily: FontFamily.bold,
     fontSize: 14,
-    color: Colors.white,
+    color: Colors.dark,
     letterSpacing: -0.2,
   },
   pendingNoticeBanner: {
@@ -4076,4 +4646,3 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 });
-

@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -16,6 +16,7 @@ import { WebView, WebViewMessageEvent } from "react-native-webview";
 
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Radius, Spacing } from "@/constants/theme";
+import { getSavedLocation, saveLocation } from "@/storage/locationStorage";
 
 type LocationData = {
   latitude: number;
@@ -39,6 +40,7 @@ const DEFAULT_MINDORO_COORDS: LocationData = {
 };
 
 export default function CurrentLocation() {
+  const { from } = useLocalSearchParams<{ from?: string }>();
   const webViewRef = useRef<WebView>(null);
 
   const [activeLayer, setActiveLayer] = useState<"streets" | "satellite">("streets");
@@ -532,7 +534,24 @@ export default function CurrentLocation() {
   };
 
   useEffect(() => {
-    getCurrentLocation();
+    const initLocation = async () => {
+      try {
+        const saved = await getSavedLocation();
+        if (saved && Number.isFinite(saved.latitude) && Number.isFinite(saved.longitude)) {
+          const coords = { latitude: saved.latitude, longitude: saved.longitude };
+          setMapInitialRegion(coords);
+          setRegion(coords);
+          setLoading(false);
+          reverseGeocode(coords.latitude, coords.longitude);
+          return;
+        }
+      } catch {
+        // fallback to live GPS
+      }
+      getCurrentLocation();
+    };
+
+    initLocation();
 
     // Auto-detect when user returns from phone Settings after enabling location
     const subscription = AppState.addEventListener("change", (nextAppState) => {
@@ -540,7 +559,9 @@ export default function CurrentLocation() {
         Location.getForegroundPermissionsAsync().then((perm) => {
           if (perm.status === "granted") {
             setPermissionDenied(false);
-            getCurrentLocation();
+            if (!region) {
+              getCurrentLocation();
+            }
           }
         });
       }
@@ -571,7 +592,7 @@ export default function CurrentLocation() {
     getCurrentLocation();
   };
 
-  const handleConfirmLocation = () => {
+  const handleConfirmLocation = async () => {
     if (permissionDenied || !region) {
       Alert.alert(
         "Location Required",
@@ -583,7 +604,27 @@ export default function CurrentLocation() {
       );
       return;
     }
-    router.replace("/(tabs)/home");
+
+    const fullAddress = [getAddressText(), getCityText()]
+      .filter((part) => part && part !== "Locating address...")
+      .join(", ");
+
+    try {
+      await saveLocation({
+        latitude: region.latitude,
+        longitude: region.longitude,
+        address: fullAddress || "Selected location",
+        confirmed: true,
+      });
+    } catch {
+      // ignore storage write error
+    }
+
+    if (from === "profile" && router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace("/(tabs)/home");
+    }
   };
 
   return (
@@ -660,7 +701,7 @@ export default function CurrentLocation() {
               activeOpacity={0.85}
               onPress={handleRequestPermission}
             >
-              <Ionicons name="navigate" size={17} color={Colors.white} />
+              <Ionicons name="navigate" size={17} color={Colors.dark} />
               <Text style={styles.enableLocationBtnText}>Enable Location</Text>
             </TouchableOpacity>
 
@@ -936,7 +977,7 @@ const styles = StyleSheet.create({
   enableLocationBtnText: {
     fontFamily: FontFamily.bold,
     fontSize: 15,
-    color: Colors.white,
+    color: Colors.dark,
   },
 
   openSettingsBtn: {
@@ -998,7 +1039,7 @@ const styles = StyleSheet.create({
 
   retryText: {
     fontFamily: FontFamily.bold,
-    color: Colors.white,
+    color: Colors.dark,
   },
 
   sheetHandle: {
@@ -1062,6 +1103,6 @@ const styles = StyleSheet.create({
   confirmText: {
     fontFamily: FontFamily.bold,
     fontSize: FontSize.body,
-    color: Colors.white,
+    color: Colors.dark,
   },
 });

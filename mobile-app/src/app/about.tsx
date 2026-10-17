@@ -29,7 +29,11 @@ export default function About() {
         {/* Brand Banner */}
         <View style={styles.brandBox}>
           <View style={styles.logoWrap}>
-            <Ionicons name="car-sport" size={40} color={Colors.white} />
+            <Image
+              source={require("@/assets/images/applogo.png")}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
           <Text style={styles.brandTitle}>Ride4Rent</Text>
           <Text style={styles.brandTagline}>Your trusted peer-to-peer car rental platform</Text>
@@ -112,13 +116,23 @@ const styles = StyleSheet.create({
     marginVertical: Spacing.lg,
   },
   logoWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: Colors.primary,
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    backgroundColor: Colors.white,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: Spacing.sm,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  logoImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 14,
   },
   brandTitle: {
     fontFamily: FontFamily.bold,

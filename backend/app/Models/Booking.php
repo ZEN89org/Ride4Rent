@@ -127,14 +127,12 @@ class Booking extends Model
             return null;
         }
 
-        $scheme = request()?->getSchemeAndHttpHost() ?: '';
-
         return [
             'business_name' => $profile->business_name,
             'account_name' => $profile->account_name ?: trim(($op->first_name ?? '') . ' ' . ($op->last_name ?? '')) ?: ($op->name ?? 'Host'),
             'account_number' => $profile->account_number ?: ($profile->business_contact_number ?? $op->phone_number ?? ''),
             'accepted_payment_methods' => $profile->accepted_payment_methods ?: ['cash', 'gcash', 'maya'],
-            'qr_code_url' => $profile->qr_code ? ($scheme . '/storage/' . $profile->qr_code) : null,
+            'qr_code_url' => Vehicle::resolveStorageUrl($profile->qr_code),
         ];
     }
 

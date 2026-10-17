@@ -64,13 +64,20 @@ export const deleteConversation = async (otherUserId: number): Promise<void> => 
 };
 
 export const getChatThread = async (
-  otherUserId: number | string
-): Promise<{ other_user: any; booking_context?: BookingContext | null; messages: ChatThreadMessage[] }> => {
-  const response = await api.get(`/messages/thread/${otherUserId}`);
+  otherUserId: number | string,
+  params?: { before_id?: string | number; limit?: number }
+): Promise<{
+  other_user: any;
+  booking_context?: BookingContext | null;
+  messages: ChatThreadMessage[];
+  has_more?: boolean;
+}> => {
+  const response = await api.get(`/messages/thread/${otherUserId}`, { params });
   return {
     other_user: response.data.other_user,
     booking_context: response.data.booking_context,
     messages: response.data.data,
+    has_more: Boolean(response.data.has_more),
   };
 };
 

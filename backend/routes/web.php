@@ -1,11 +1,47 @@
 <?php
 
 use App\Http\Controllers\AdminWebController;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 
 Route::get('/', function () {
     return view('welcome');
 });
+
+// Fallback route to serve public storage files and auto-restore from PostgreSQL if the container redeployed
+Route::get('/storage/{path}', function (string $path) {
+    $cleanPath = ltrim(preg_replace('#^/?storage/#', '', $path), '/');
+    $disk = Storage::disk('public');
+
+    if ($disk->exists($cleanPath)) {
+        return $disk->response($cleanPath, null, [
+            'Cache-Control' => 'public, max-age=86400',
+        ]);
+    }
+
+    try {
+        if (Schema::hasTable('stored_files')) {
+            $record = DB::table('stored_files')->where('path', $cleanPath)->first();
+            if ($record && ! empty($record->content_base64)) {
+                $binary = base64_decode($record->content_base64, true);
+                if ($binary !== false) {
+                    $disk->put($cleanPath, $binary);
+
+                    return response($binary, 200, [
+                        'Content-Type' => $record->mime_type ?: 'image/jpeg',
+                        'Cache-Control' => 'public, max-age=86400',
+                    ]);
+                }
+            }
+        }
+    } catch (\Throwable $e) {
+        // Ignore DB lookup errors and fall through to 404
+    }
+
+    abort(404);
+})->where('path', '.*');
 
 // Fallback named route for authentication redirects
 Route::get('/login', fn () => redirect()->route('admin.login'))->name('login');

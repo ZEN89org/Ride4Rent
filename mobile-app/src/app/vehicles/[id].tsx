@@ -5,11 +5,8 @@ import {
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Dimensions,
   Image,
-  KeyboardAvoidingView,
-  Linking,
   Modal,
   Platform,
   Pressable,
@@ -18,30 +15,31 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import PrimaryButton from "@/components/common/PrimaryButton";
 import { AppBottomSheet } from "@/components/common/AppBottomSheet";
-import TripDateTimeSelector from "@/components/common/TripDateTimeSelector";
+import PrimaryButton from "@/components/common/PrimaryButton";
 import { Skeleton } from "@/components/common/Skeleton";
+import TripDateTimeSelector from "@/components/common/TripDateTimeSelector";
 import { Colors } from "@/constants/colors";
-import { FontFamily, FontSize, Spacing } from "@/constants/theme";
-import { useFavorites } from "@/context/FavoritesContext";
-import { useAppToast } from "@/context/ToastContext";
+import { resolveCoordinatesFromAddress } from "@/constants/orientalMindoroLocations";
+import { FontFamily, Spacing } from "@/constants/theme";
 import {
   getDefaultAmenitiesForType,
   resolveAmenityDisplay,
 } from "@/constants/vehicleAmenities";
+import { useFavorites } from "@/context/FavoritesContext";
+import { useAppToast } from "@/context/ToastContext";
 import AssistantModal from "@/features/assistant/components/AssistantModal";
 import AuthRequiredBottomSheet from "@/features/auth/components/AuthRequiredBottomSheet";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { getVehicleById } from "@/features/operator/services/vehicleService";
 import { Vehicle } from "@/features/operator/types/vehicle";
-import { createBooking, getMyBookings, Booking } from "@/services/bookingService";
-import { resolveCoordinatesFromAddress } from "@/constants/orientalMindoroLocations";
-import api from "@/services/api";
+import api, { resolveImageUrl } from "@/services/api";
+import { createBooking, getMyBookings } from "@/services/bookingService";
+import { scheduleBookingReminders } from "@/services/deviceNotificationService";
 
 export default function VehicleDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -218,7 +216,7 @@ export default function VehicleDetailsScreen() {
             "Pending Reservation Notice",
             "You already have a pending vehicle reservation awaiting payment. Please settle or cancel your existing request in 'My Bookings' before reserving another vehicle.",
             [
-              { text: "View Bookings", style: "default", onPress: () => router.push("/(tabs)/bookings") },
+              { text: "View Bookings", style: "default", onPress: () => router.navigate("/(tabs)/bookings") },
               { text: "Close", style: "cancel" },
             ],
             "warning"
@@ -237,7 +235,7 @@ export default function VehicleDetailsScreen() {
             "Existing Reservation",
             "You already have an active reservation request for this vehicle. Please manage your trip in 'My Bookings'.",
             [
-              { text: "View Bookings", style: "default", onPress: () => router.push("/(tabs)/bookings") },
+              { text: "View Bookings", style: "default", onPress: () => router.navigate("/(tabs)/bookings") },
               { text: "Close", style: "cancel" },
             ],
             "warning"
@@ -302,7 +300,7 @@ export default function VehicleDetailsScreen() {
     return {
       startDateStr: formatDate(selectedStartDate),
       endDateStr: formatDate(selectedEndDate),
-      displaySummary: `${sDay} – ${eDay} • ${tripDays} ${tripDays === 1 ? "Day" : "Days"}`,
+      displaySummary: `${sDay} – ${eDay} for ${tripDays} ${tripDays === 1 ? "Day" : "Days"}`,
       displayStart: `${sDay} (${selectedStartTime})`,
       displayEnd: `${eDay} (${selectedEndTime})`,
     };
@@ -341,7 +339,7 @@ export default function VehicleDetailsScreen() {
         return;
       }
 
-      await createBooking({
+      const createdBooking = await createBooking({
         vehicle_id: vehicle.id,
         start_date: startDateStr,
         end_date: endDateStr,
@@ -353,9 +351,11 @@ export default function VehicleDetailsScreen() {
         secondary_driver_phone: hasActiveTripOverlap ? secondaryDriverPhone.trim() : undefined,
       } as any);
 
+      scheduleBookingReminders(createdBooking, true).catch(() => {});
+
       setShowBookingModal(false);
       showSuccess("Reservation Created", "Booking request sent to host. Please settle reservation payment.");
-      router.push("/(tabs)/bookings");
+      router.navigate("/(tabs)/bookings");
     } catch (e: any) {
       if (e.response?.data?.code === "LICENSE_REQUIRED") {
         setShowBookingModal(false);
@@ -445,8 +445,8 @@ export default function VehicleDetailsScreen() {
         {/* Multi-Image Showcase Carousel */}
         {(() => {
           const allImages = (vehicle.images && vehicle.images.length > 0)
-            ? vehicle.images.map((img) => img.image_url)
-            : [vehicle.image_url || "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=60"];
+            ? vehicle.images.map((img) => resolveImageUrl(img.image_url) || img.image_url)
+            : [resolveImageUrl(vehicle.image_url) || "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=60"];
 
           const screenWidth = Dimensions.get("window").width;
 
@@ -511,21 +511,24 @@ export default function VehicleDetailsScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.thumbnailStrip}
           >
-            {vehicle.images.map((img, idx) => (
-              <TouchableOpacity
-                key={img.id}
-                onPress={() => {
-                  setActiveImageIndex(idx);
-                  setFullscreenImage(img.image_url);
-                }}
-                style={[
-                  styles.thumbItem,
-                  activeImageIndex === idx && styles.thumbItemActive,
-                ]}
-              >
-                <Image source={{ uri: img.image_url }} style={styles.thumbImage} />
-              </TouchableOpacity>
-            ))}
+            {vehicle.images.map((img, idx) => {
+              const resolvedThumb = resolveImageUrl(img.image_url) || img.image_url;
+              return (
+                <TouchableOpacity
+                  key={img.id}
+                  onPress={() => {
+                    setActiveImageIndex(idx);
+                    setFullscreenImage(resolvedThumb);
+                  }}
+                  style={[
+                    styles.thumbItem,
+                    activeImageIndex === idx && styles.thumbItemActive,
+                  ]}
+                >
+                  <Image source={{ uri: resolvedThumb }} style={styles.thumbImage} />
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         )}
 
@@ -536,7 +539,7 @@ export default function VehicleDetailsScreen() {
               <Text style={styles.vehicleName}>{vehicle.name}</Text>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 3 }}>
                 <Text style={styles.vehicleModel}>
-                  {vehicle.brand || "Sedan"} • {vehicle.transmission || "Automatic"}
+                  {vehicle.brand || "Sedan"} - {vehicle.transmission || "Automatic"}
                 </Text>
                 {vehicle.rating && (vehicle.rating_count ?? 0) > 0 ? (
                   <View style={styles.inlineRatingBadge}>
@@ -671,7 +674,7 @@ export default function VehicleDetailsScreen() {
               <Text style={styles.breakdownValue}>₱{Number(vehicle.price_per_day).toLocaleString()} / day</Text>
             </View>
             <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Required Reservation Fee (GCash/Maya)</Text>
+              <Text style={styles.breakdownLabel}>Required Reservation Fee</Text>
               <Text style={[styles.breakdownValue, { color: Colors.primary }]}>
                 ₱{Number(vehicle.reservation_fee || 500).toLocaleString()}
               </Text>
@@ -679,7 +682,7 @@ export default function VehicleDetailsScreen() {
             <View style={styles.breakdownRow}>
               <Text style={styles.breakdownLabel}>Remaining Balance on Handover</Text>
               <Text style={styles.breakdownValue}>
-                ₱{Math.max(0, Number(vehicle.price_per_day) - Number(vehicle.reservation_fee || 500)).toLocaleString()} (for 1 day)
+                ₱{Math.max(0, Number(vehicle.price_per_day) - Number(vehicle.reservation_fee || 500)).toLocaleString()}
               </Text>
             </View>
           </View>
@@ -690,7 +693,7 @@ export default function VehicleDetailsScreen() {
           <View style={styles.policiesCard}>
             <View style={styles.policyRow}>
               <View style={styles.policyIconCircle}>
-                <Ionicons name="id-card-outline" size={18} color={Colors.primary} />
+                <Ionicons name="id-card-outline" size={18} color={Colors.dark} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.policyTitle}>Driver Requirements</Text>
@@ -702,7 +705,7 @@ export default function VehicleDetailsScreen() {
 
             <View style={styles.policyRow}>
               <View style={styles.policyIconCircle}>
-                <MaterialCommunityIcons name="gas-station" size={18} color={Colors.primary} />
+                <MaterialCommunityIcons name="gas-station" size={18} color={Colors.dark} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.policyTitle}>Fuel Policy</Text>
@@ -712,23 +715,11 @@ export default function VehicleDetailsScreen() {
 
             <View style={styles.policyRow}>
               <View style={styles.policyIconCircle}>
-                <Ionicons name="time-outline" size={18} color={Colors.primary} />
+                <Ionicons name="time-outline" size={18} color={Colors.dark} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.policyTitle}>Late Return & Extension</Text>
                 <Text style={styles.policyDesc}>{vehicle.late_return_policy || "Inform host 3 hours prior to extension. Overtime rates apply."}</Text>
-              </View>
-            </View>
-
-            <View style={styles.policyRow}>
-              <View style={styles.policyIconCircle}>
-                <Ionicons name="ban-outline" size={18} color={Colors.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.policyTitle}>Inside Vehicle Policies</Text>
-                <Text style={styles.policyDesc}>
-                  {vehicle.smoking_policy || "Strictly no smoking inside."} • {vehicle.pet_policy || "Pets allowed in carrier."}
-                </Text>
               </View>
             </View>
           </View>
@@ -738,7 +729,7 @@ export default function VehicleDetailsScreen() {
           <Text style={styles.sectionHeading}>Pickup & Meetup Location</Text>
           <View style={styles.locationCard}>
             <View style={styles.locationInfoRow}>
-              <Ionicons name="location-sharp" size={22} color={Colors.primary} />
+              <Ionicons name="location-sharp" size={22} color={Colors.dark} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.locationTitle}>{vehicle.pickup_address || "Pinamalayan, Oriental Mindoro"}</Text>
                 <Text style={styles.locationSubtitle}>Exact meetup coordination provided upon booking confirmation.</Text>
@@ -779,7 +770,7 @@ export default function VehicleDetailsScreen() {
               activeOpacity={0.8}
             >
               <Ionicons name="map-outline" size={16} color={Colors.dark} />
-              <Text style={styles.directionsButtonText}>View Pickup Location on Map</Text>
+              <Text style={styles.directionsButtonText}>View Pickup Location</Text>
             </TouchableOpacity>
           </View>
 
@@ -787,7 +778,7 @@ export default function VehicleDetailsScreen() {
           <View style={styles.sectionDivider} />
           <View style={styles.sectionHeadingRow}>
             <Text style={styles.sectionHeading}>
-              Ratings & Reviews {vehicle.rating_count ? `(${vehicle.rating_count})` : ""}
+              Ratings & Reviews
             </Text>
             {vehicle.rating ? (
               <View style={styles.ratingBadgePill}>
@@ -803,7 +794,7 @@ export default function VehicleDetailsScreen() {
                 <View key={rev.id} style={styles.reviewCard}>
                   <View style={styles.reviewHeader}>
                     {rev.renter_photo ? (
-                      <Image source={{ uri: rev.renter_photo }} style={styles.reviewerAvatarImage} />
+                      <Image source={{ uri: resolveImageUrl(rev.renter_photo) || rev.renter_photo }} style={styles.reviewerAvatarImage} />
                     ) : (
                       <View style={styles.reviewerAvatar}>
                         <Text style={styles.reviewerInitial}>
@@ -838,13 +829,10 @@ export default function VehicleDetailsScreen() {
             </View>
           ) : (
             <View style={styles.newListingReviewCard}>
-              <Ionicons name="sparkles-outline" size={20} color={Colors.primary} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.newListingReviewTitle}>No Reviews Yet</Text>
-                <Text style={styles.newListingReviewText}>
-                  Be among the first renters to book this vehicle and share your experience!
-                </Text>
-              </View>
+              <Text style={styles.newListingReviewTitle}>No Reviews Yet</Text>
+              <Text style={styles.newListingReviewText}>
+                Be among the first renters to book this vehicle and share your experience!
+              </Text>
             </View>
           )}
 
@@ -852,7 +840,7 @@ export default function VehicleDetailsScreen() {
           {isOwner ? (
             <View style={styles.ownerControlsCard}>
               <Text style={styles.ownerTitle}>Operator Management Actions</Text>
-              
+
               {vehicle.is_rented && (
                 <View style={{
                   flexDirection: "row",
@@ -936,7 +924,7 @@ export default function VehicleDetailsScreen() {
                   activeOpacity={0.8}
                 >
                   {operator?.profile_photo ? (
-                    <Image source={{ uri: operator.profile_photo }} style={styles.operatorAvatar} />
+                    <Image source={{ uri: resolveImageUrl(operator.profile_photo) || operator.profile_photo }} style={styles.operatorAvatar} />
                   ) : (
                     <View style={styles.operatorIconWrap}>
                       <Ionicons name="business" size={20} color={Colors.dark} />
@@ -1059,7 +1047,7 @@ export default function VehicleDetailsScreen() {
             </View>
 
             <Text style={styles.modalSubtitle}>
-              Reserve {vehicle.name} • ₱{Number(vehicle.price_per_day).toLocaleString()}/day
+              {vehicle.name} - ₱{Number(vehicle.price_per_day).toLocaleString()}/day
             </Text>
 
             <ScrollView
@@ -1117,34 +1105,34 @@ export default function VehicleDetailsScreen() {
                 </Text>
               </View>
 
-              {/* Dynamic Price & Fee Breakdown for Selected Trip Duration */}
-              <View style={[styles.priceBreakdownCard, { marginHorizontal: 0, marginTop: 12, padding: 14 }]}>
-                <View style={styles.breakdownRow}>
-                  <Text style={styles.breakdownLabel}>
-                    Daily Rate ({tripDurationDays} {tripDurationDays === 1 ? "day" : "days"})
-                  </Text>
-                  <Text style={styles.breakdownValue}>
-                    ₱{Number(vehicle.price_per_day).toLocaleString()} × {tripDurationDays}
-                  </Text>
-                </View>
-
-                <View style={styles.breakdownRow}>
-                  <Text style={[styles.breakdownLabel, { fontFamily: FontFamily.bold, color: Colors.dark }]}>Total Rental Cost</Text>
-                  <Text style={[styles.breakdownValue, { fontFamily: FontFamily.bold, color: Colors.dark }]}>
-                    ₱{(Number(vehicle.price_per_day) * tripDurationDays).toLocaleString()}
-                  </Text>
-                </View>
-
-                <View style={styles.breakdownRow}>
-                  <Text style={styles.breakdownLabel}>Required Upfront Deposit (GCash/Maya)</Text>
-                  <Text style={[styles.breakdownValue, { color: Colors.primary }]}>
+              {/* Minimal reservation fee summary */}
+              <View style={styles.reservationSummaryCard}>
+                <View style={styles.reservationSummaryHeader}>
+                  <View style={styles.reservationSummaryIcon}>
+                    <Ionicons name="shield-checkmark-outline" size={18} color={Colors.dark} />
+                  </View>
+                  <View style={styles.reservationSummaryHeading}>
+                    <Text style={styles.reservationSummaryTitle}>Reservation fee</Text>
+                    <Text style={styles.reservationSummaryCaption}>Pay now via GCash only</Text>
+                  </View>
+                  <Text style={styles.reservationDepositAmount}>
                     ₱{Number(vehicle.reservation_fee || 500).toLocaleString()}
                   </Text>
                 </View>
 
-                <View style={styles.breakdownRow}>
-                  <Text style={styles.breakdownLabel}>Remaining Balance on Meetup</Text>
-                  <Text style={[styles.breakdownValue, { color: "#10B981", fontFamily: FontFamily.bold }]}>
+                <View style={styles.reservationSummaryDivider} />
+
+                <View style={styles.reservationSummaryRow}>
+                  <Text style={styles.reservationSummaryLabel}>
+                    Rental total for {tripDurationDays} {tripDurationDays === 1 ? "day" : "days"}
+                  </Text>
+                  <Text style={styles.reservationSummaryValue}>
+                    ₱{(Number(vehicle.price_per_day) * tripDurationDays).toLocaleString()}
+                  </Text>
+                </View>
+                <View style={styles.reservationSummaryRow}>
+                  <Text style={styles.reservationSummaryLabel}>Balance at meetup</Text>
+                  <Text style={styles.reservationSummaryValue}>
                     ₱{Math.max(0, Number(vehicle.price_per_day) * tripDurationDays - Number(vehicle.reservation_fee || 500)).toLocaleString()}
                   </Text>
                 </View>
@@ -1155,33 +1143,33 @@ export default function VehicleDetailsScreen() {
                 <View style={styles.multiCarNoticeCard}>
                   <View style={styles.multiCarNoticeHeader}>
                     <Ionicons name="shield-checkmark" size={16} color="#B45309" />
-                    <Text style={styles.multiCarNoticeTitle}>Concurrent Multi-Vehicle Rental</Text>
+                    <Text style={styles.multiCarNoticeTitle}>Multi-Vehicle Rental</Text>
                   </View>
                   <Text style={styles.multiCarNoticeText}>
                     You have an active ongoing trip ({activeTripVehicleName}). For insurance and verification, please designate the authorized secondary driver for this vehicle.
                   </Text>
 
-                  <Text style={[styles.fieldLabel, { marginTop: 10 }]}>Designated Driver Name *</Text>
+                  <Text style={[styles.fieldLabel, { marginTop: 10 }]}>Driver Name *</Text>
                   <TextInput
                     style={styles.modalInput}
                     value={secondaryDriverName}
                     onChangeText={setSecondaryDriverName}
-                    placeholder="Full name (as written on Driver's License)"
+                    placeholder="Full name"
                   />
 
-                  <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Designated Driver Mobile *</Text>
+                  <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Driver Mobile Number</Text>
                   <TextInput
                     style={styles.modalInput}
                     value={secondaryDriverPhone}
                     onChangeText={setSecondaryDriverPhone}
                     keyboardType="phone-pad"
-                    placeholder="e.g. 09171234567"
+                    placeholder="phonenumber"
                   />
                 </View>
               )}
 
               {/* Trip Notes */}
-              <Text style={styles.fieldLabel}>Trip Notes (Optional)</Text>
+              <Text style={styles.fieldLabel}>Trip Notes</Text>
               <TextInput
                 style={styles.modalInput}
                 value={bookingNotes}
@@ -1191,7 +1179,7 @@ export default function VehicleDetailsScreen() {
 
               <View style={{ marginTop: Spacing.lg }}>
                 <PrimaryButton
-                  title={submittingBooking ? "Creating Booking..." : "Confirm & Proceed to Payment"}
+                  title={submittingBooking ? "Creating Booking..." : "Proceed to Payment"}
                   onPress={handleConfirmReservation}
                   loading={submittingBooking}
                 />
@@ -1354,10 +1342,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   statusAvail: {
-    backgroundColor: "rgba(16, 185, 129, 0.95)",
+    backgroundColor: "rgba(5, 81, 55, 0.95)",
   },
   statusUnavail: {
-    backgroundColor: "rgba(239, 68, 68, 0.95)",
+    backgroundColor: "rgba(65, 6, 6, 0.95)",
   },
   statusTagText: {
     fontFamily: FontFamily.bold,
@@ -1508,8 +1496,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.logoBackground,
-    borderWidth: 1,
-    borderColor: Colors.primary,
     padding: Spacing.md,
     borderRadius: 16,
     marginTop: Spacing.lg,
@@ -1540,6 +1526,68 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: Spacing.md,
     marginTop: 8,
+  },
+  reservationSummaryCard: {
+    backgroundColor: Colors.white,
+    borderColor: Colors.border,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 12,
+  },
+  reservationSummaryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  reservationSummaryIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: Colors.logoBackground,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reservationSummaryHeading: {
+    flex: 1,
+  },
+  reservationSummaryTitle: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 13,
+    color: Colors.dark,
+  },
+  reservationSummaryCaption: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11,
+    color: Colors.secondary,
+    marginTop: 1,
+  },
+  reservationDepositAmount: {
+    fontFamily: FontFamily.bold,
+    fontSize: 16,
+    color: Colors.dark,
+  },
+  reservationSummaryDivider: {
+    height: 1,
+    backgroundColor: Colors.divider,
+    marginVertical: 10,
+  },
+  reservationSummaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 3,
+  },
+  reservationSummaryLabel: {
+    flex: 1,
+    fontFamily: FontFamily.regular,
+    fontSize: 11,
+    color: Colors.secondary,
+  },
+  reservationSummaryValue: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 12,
+    color: Colors.dark,
   },
   breakdownRow: {
     flexDirection: "row",
@@ -1593,7 +1641,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: Colors.logoBackground,
+    backgroundColor: "#cdcdcd",
     justifyContent: "center",
     alignItems: "center",
     marginTop: 2,
@@ -1741,25 +1789,26 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   newListingReviewCard: {
-    flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Colors.inputBackground,
-    padding: Spacing.md,
-    borderRadius: 16,
-    marginTop: 8,
-    gap: 12,
+    justifyContent: "flex-start",
+    paddingTop: 20,
+    paddingBottom: Spacing.md,
+    paddingHorizontal: Spacing.xl,
   },
   newListingReviewTitle: {
     fontFamily: FontFamily.bold,
-    fontSize: 13,
+    fontSize: 18,
     color: Colors.dark,
+    textAlign: "center",
   },
   newListingReviewText: {
     fontFamily: FontFamily.regular,
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.secondary,
-    marginTop: 2,
-    lineHeight: 16,
+    marginTop: 8,
+    lineHeight: 19,
+    textAlign: "center",
+    paddingHorizontal: Spacing.sm,
   },
   chatHostButton: {
     flexDirection: "row",
@@ -1853,7 +1902,7 @@ const styles = StyleSheet.create({
   bookNowText: {
     fontFamily: FontFamily.bold,
     fontSize: 14,
-    color: Colors.white,
+    color: Colors.dark,
   },
   modalOverlay: {
     flex: 1,
@@ -1984,6 +2033,6 @@ const styles = StyleSheet.create({
   backButtonText: {
     fontFamily: FontFamily.bold,
     fontSize: 13,
-    color: Colors.white,
+    color: Colors.dark,
   },
 });

@@ -2,9 +2,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
   FlatList,
   KeyboardAvoidingView,
   Linking,
@@ -21,10 +22,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppBottomSheet } from "@/components/common/AppBottomSheet";
 import { Colors } from "@/constants/colors";
-import { FontFamily, FontSize, Spacing } from "@/constants/theme";
+import { FontFamily, Spacing } from "@/constants/theme";
 import { useAppToast } from "@/context/ToastContext";
+import { useCall } from "@/context/CallContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
-import { copyToClipboard } from "@/utils/clipboard";
 import {
   BookingContext,
   ChatThreadMessage,
@@ -32,8 +33,48 @@ import {
   getChatThread,
   sendMessage,
 } from "@/services/messageService";
+import { copyToClipboard } from "@/utils/clipboard";
 
 const GCASH_LOGO = require("../../../assets/img/gcash.jpg");
+
+const isSameMessage = (
+  left: ChatThreadMessage,
+  right: ChatThreadMessage
+): boolean =>
+  left.id === right.id &&
+  left.sender === right.sender &&
+  left.text === right.text &&
+  left.image_url === right.image_url &&
+  left.created_at === right.created_at &&
+  left.time === right.time &&
+  left.is_read === right.is_read;
+
+const isSameShallowValue = (left: unknown, right: unknown): boolean => {
+  if (Object.is(left, right)) return true;
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+    return false;
+  }
+  return left.every((value, index) => Object.is(value, right[index]));
+};
+
+const isSameShallowObject = <T extends object>(
+  left: T | null | undefined,
+  right: T | null | undefined
+): boolean => {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  const leftEntries = Object.entries(left);
+  const rightEntries = Object.entries(right);
+  return (
+    leftEntries.length === rightEntries.length &&
+    leftEntries.every(([key, value]) =>
+      rightEntries.some(
+        ([rightKey, rightValue]) =>
+          key === rightKey && isSameShallowValue(value, rightValue)
+      )
+    )
+  );
+};
 
 const parseReplyData = (text?: string | null) => {
   if (!text || !text.startsWith("[REPLY:")) return { reply: null, cleanText: text || "" };
@@ -48,15 +89,15 @@ const parseReplyData = (text?: string | null) => {
   const jsonStr = match[1];
   const cleanText = match[2] || "";
   try {
-    const reply = JSON.parse(jsonStr) as { author: string; snippet: string };
+    const reply = JSON.parse(jsonStr) as { snippet: string; author?: string };
     return { reply, cleanText };
   } catch {
-    const authorMatch = jsonStr.match(/['"]author['"]\s*:\s*['"]([^'"]+)['"]/i);
     const snippetMatch = jsonStr.match(/['"]snippet['"]\s*:\s*['"]([^'"]+)['"]/i);
-    if (authorMatch) {
+    const authorMatch = jsonStr.match(/['"]author['"]\s*:\s*['"]([^'"]+)['"]/i);
+    if (snippetMatch || authorMatch) {
       return {
         reply: {
-          author: authorMatch[1],
+          author: authorMatch ? authorMatch[1] : undefined,
           snippet: snippetMatch ? snippetMatch[1] : "Message",
         },
         cleanText,
@@ -75,6 +116,8 @@ interface ReceiptData {
   amount?: string;
   status?: string;
   notes?: string;
+  recipient?: string;
+  phone?: string;
 }
 
 const parseReceiptData = (text?: string | null): ReceiptData | null => {
@@ -112,6 +155,10 @@ const parseReceiptData = (text?: string | null): ReceiptData | null => {
       data.reference = clean.replace(/^(gcash\s+ref|reference|reference\s+no|ref\s*no):\s*/i, "").trim();
     } else if (/^(amount\s+paid|reservation\s+fee\s+paid|amount):\s*(.+)$/i.test(clean)) {
       data.amount = clean.replace(/^(amount\s+paid|reservation\s+fee\s+paid|amount):\s*/i, "").trim();
+    } else if (/^(recipient|host|account\s+name|paid\s+to):\s*(.+)$/i.test(clean)) {
+      data.recipient = clean.replace(/^(recipient|host|account\s+name|paid\s+to):\s*/i, "").trim();
+    } else if (/^(phone|contact|mobile|gcash\s+no|gcash\s+number):\s*(.+)$/i.test(clean)) {
+      data.phone = clean.replace(/^(phone|contact|mobile|gcash\s+no|gcash\s+number):\s*/i, "").trim();
     } else if (/^status:\s*(.+)$/i.test(clean)) {
       data.status = clean.replace(/^status:\s*/i, "").trim();
     } else if (clean.toLowerCase().includes("awaiting host verification")) {
@@ -124,19 +171,29 @@ const parseReceiptData = (text?: string | null): ReceiptData | null => {
   return data;
 };
 
+const maskSingleWord = (word: string): string => {
+  const clean = word.trim();
+  if (clean.length <= 2) return clean.toUpperCase();
+  // Length >= 3: first letter + '*' for each middle letter + last letter
+  // Examples: "ZEN" -> "Z*N", "MARK" -> "M**K", "ANTHONY" -> "A*****Y"
+  const middleStars = "*".repeat(clean.length - 2);
+  return `${clean[0].toUpperCase()}${middleStars}${clean.slice(-1).toUpperCase()}`;
+};
+
 const maskName = (name?: string): string => {
-  if (!name) return "DO••••C L.";
-  const parts = name.trim().split(" ");
+  if (!name) return "Z*N J.";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "Z*N J.";
   if (parts.length === 1) {
-    const n = parts[0];
-    if (n.length <= 2) return n.toUpperCase();
-    return `${n.slice(0, 2).toUpperCase()}••••${n.slice(-1).toUpperCase()}`;
+    return maskSingleWord(parts[0]);
   }
-  const first = parts[0];
-  const last = parts[parts.length - 1];
-  const firstMasked = first.length > 2 ? `${first.slice(0, 2).toUpperCase()}••••${first.slice(-1).toUpperCase()}` : first.toUpperCase();
-  const lastInitial = last ? `${last.charAt(0).toUpperCase()}.` : "";
-  return `${firstMasked} ${lastInitial}`;
+  // Last part is the surname: abbreviated to initial + dot (e.g., SANTOS -> "S.", JARDELEZA -> "J.")
+  const surname = parts[parts.length - 1];
+  const surnameInitial = `${surname.charAt(0).toUpperCase()}.`;
+  // All preceding parts are given/middle names masked character-by-character
+  const givenParts = parts.slice(0, parts.length - 1);
+  const maskedGiven = givenParts.map(maskSingleWord).join(" ");
+  return `${maskedGiven} ${surnameInitial}`;
 };
 
 const maskPhone = (phone?: string): string => {
@@ -169,10 +226,81 @@ const formatReceiptDateTime = (dateStr?: string): string => {
   }
 };
 
+interface CallLogData {
+  type: "voice" | "missed";
+  duration: number;
+}
+
+const parseCallData = (text?: string | null): CallLogData | null => {
+  if (!text || !text.startsWith("[CALL:")) return null;
+  const match = text.match(/^\[CALL:(\{[\s\S]*?\})\]$/);
+  if (!match) return null;
+  try {
+    const data = JSON.parse(match[1]);
+    return {
+      type: data.type === "missed" ? "missed" : "voice",
+      duration: typeof data.duration === "number" ? data.duration : 0,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const formatCallDurationText = (seconds: number): string => {
+  if (seconds < 60) return `${seconds}s`;
+  const mins = Math.floor(seconds / 60);
+  const remainingSecs = seconds % 60;
+  return remainingSecs > 0 ? `${mins}m ${remainingSecs}s` : `${mins}m`;
+};
+
+const ChatImage = ({
+  uri,
+  isAlone = false,
+  onPress,
+  onLongPress,
+}: {
+  uri: string;
+  isAlone?: boolean;
+  onPress: () => void;
+  onLongPress?: () => void;
+}) => {
+  const [aspectRatio, setAspectRatio] = useState<number>(4 / 3);
+  const screenWidth = Dimensions.get("window").width;
+  const imageWidth = Math.min(screenWidth * 0.74, 280);
+
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={220}
+      activeOpacity={0.92}
+      style={[
+        styles.chatImageWrap,
+        isAlone ? styles.chatImageAlone : styles.chatImageWithText,
+        { width: imageWidth, aspectRatio },
+      ]}
+    >
+      <Image
+        source={{ uri }}
+        style={styles.chatImageFill}
+        contentFit="cover"
+        onLoad={(e) => {
+          if (e.source?.width && e.source?.height) {
+            const rawRatio = e.source.width / e.source.height;
+            const clamped = Math.max(0.55, Math.min(1.85, rawRatio));
+            setAspectRatio(clamped);
+          }
+        }}
+      />
+    </TouchableOpacity>
+  );
+};
+
 export default function ChatThreadScreen() {
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
   const { user } = useAuth();
   const { showError } = useAppToast();
+  const { startCall } = useCall();
 
   const [chatUser, setChatUser] = useState<any>(null);
   const [bookingContext, setBookingContext] = useState<BookingContext | null>(null);
@@ -180,6 +308,8 @@ export default function ChatThreadScreen() {
   const [messages, setMessages] = useState<ChatThreadMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [sending, setSending] = useState(false);
   const [selectedViewerImage, setSelectedViewerImage] = useState<string | null>(null);
 
@@ -193,6 +323,7 @@ export default function ChatThreadScreen() {
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
   const isSendingRef = useRef(false);
+  const shouldScrollToEndRef = useRef(true);
 
   useEffect(() => {
     if (!id) return;
@@ -206,9 +337,11 @@ export default function ChatThreadScreen() {
   const loadThread = async () => {
     try {
       setLoading(true);
-      const res = await getChatThread(id);
+      shouldScrollToEndRef.current = true;
+      const res = await getChatThread(id, { limit: 40 });
       setChatUser(res.other_user);
       setBookingContext(res.booking_context || null);
+      setHasMore(Boolean(res.has_more));
       const raw = res.messages || [];
       setMessages(raw.filter((m) => !deletedForMeIds.has(m.id)));
     } catch (e) {
@@ -218,12 +351,52 @@ export default function ChatThreadScreen() {
     }
   };
 
+  const handleLoadEarlier = async () => {
+    if (loadingEarlier || !hasMore || messages.length === 0) return;
+    const earliestMessage = messages.find((m) => !m.id.startsWith("temp_"));
+    if (!earliestMessage) return;
+
+    try {
+      setLoadingEarlier(true);
+      shouldScrollToEndRef.current = false;
+      const res = await getChatThread(id, {
+        before_id: earliestMessage.id,
+        limit: 40,
+      });
+      setHasMore(Boolean(res.has_more));
+      if (res.messages && res.messages.length > 0) {
+        const olderFiltered = res.messages.filter((m) => !deletedForMeIds.has(m.id));
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map((m) => m.id));
+          const newOlder = olderFiltered.filter((m) => !existingIds.has(m.id));
+          return [...newOlder, ...prev];
+        });
+      }
+    } catch (e) {
+      console.log("Error loading earlier messages:", e);
+    } finally {
+      setLoadingEarlier(false);
+    }
+  };
+
   const loadThreadSilent = async () => {
     if (sending || isSendingRef.current) return;
     try {
-      const res = await getChatThread(id);
-      if (res.other_user) setChatUser(res.other_user);
-      setBookingContext(res.booking_context || null);
+      const res = await getChatThread(id, { limit: 40 });
+      if (res.other_user) {
+        setChatUser((previous: any) =>
+          isSameShallowObject(previous, res.other_user) ? previous : res.other_user
+        );
+      }
+      setBookingContext((previous) => {
+        const next = res.booking_context || null;
+        if (!previous || !next) return previous === next ? previous : next;
+        const { operator_payment_info: previousPaymentInfo, ...previousFields } = previous;
+        const { operator_payment_info: nextPaymentInfo, ...nextFields } = next;
+        const sameContext = isSameShallowObject(previousFields, nextFields);
+        const samePaymentInfo = isSameShallowObject(previousPaymentInfo, nextPaymentInfo);
+        return sameContext && samePaymentInfo ? previous : next;
+      });
       if (Array.isArray(res.messages)) {
         const filtered = res.messages.filter((m) => !deletedForMeIds.has(m.id));
         setMessages((prev) => {
@@ -231,6 +404,16 @@ export default function ChatThreadScreen() {
             return prev;
           }
           const serverIdSet = new Set(filtered.map((m) => String(m.id)));
+          const serverEarliest = filtered[0];
+
+          // Preserve older history loaded previously
+          const olderHistory = prev.filter((m) => {
+            if (m.id.startsWith("temp_")) return false;
+            if (serverIdSet.has(String(m.id))) return false;
+            if (!serverEarliest) return false;
+            return m.created_at < serverEarliest.created_at;
+          });
+
           const nowMs = Date.now();
           const pendingUnsynced = prev.filter((m) => {
             if (m.id.startsWith("temp_")) return true;
@@ -238,10 +421,20 @@ export default function ChatThreadScreen() {
             const createdMs = new Date(m.created_at).getTime();
             return !isNaN(createdMs) && nowMs - createdMs < 30000;
           });
-          if (pendingUnsynced.length > 0) {
-            return [...filtered, ...pendingUnsynced];
+
+          const nextMessages = [...olderHistory, ...filtered, ...pendingUnsynced];
+          const previousById = new Map(prev.map((message) => [message.id, message]));
+          const stableMessages = nextMessages.map((message) => {
+            const previous = previousById.get(message.id);
+            return previous && isSameMessage(previous, message) ? previous : message;
+          });
+          if (
+            stableMessages.length === prev.length &&
+            stableMessages.every((message, index) => message === prev[index])
+          ) {
+            return prev;
           }
-          return filtered;
+          return stableMessages;
         });
       }
     } catch (e) {
@@ -254,15 +447,15 @@ export default function ChatThreadScreen() {
     if (!rawTextToSend && !base64Img) return;
     if (sending || isSendingRef.current) return;
 
+    shouldScrollToEndRef.current = true;
     setInputMessage("");
     isSendingRef.current = true;
 
     let textToSend = rawTextToSend;
     if (replyingToMessage) {
-      const replyAuthor = replyingToMessage.sender === "user" ? "You" : (chatUser?.name || "Host");
       const { cleanText: snippetText } = parseReplyData(replyingToMessage.text);
       const replySnippet = (snippetText || (replyingToMessage.image_url ? "📷 Photo" : "")).slice(0, 240);
-      const replyHeader = `[REPLY:{"author":"${replyAuthor.replace(/"/g, "'")}","snippet":"${replySnippet.replace(/"/g, "'").replace(/\n/g, " ")}"}]\n`;
+      const replyHeader = `[REPLY:{"snippet":"${replySnippet.replace(/"/g, "'").replace(/\n/g, " ")}"}]\n`;
       textToSend = replyHeader + rawTextToSend;
       setReplyingToMessage(null);
     }
@@ -329,6 +522,7 @@ export default function ChatThreadScreen() {
 
   const handleSendMultipleImages = async (assets: ImagePicker.ImagePickerAsset[]) => {
     if (!assets || assets.length === 0) return;
+    shouldScrollToEndRef.current = true;
     const textToSend = inputMessage.trim();
     setInputMessage("");
 
@@ -469,8 +663,33 @@ export default function ChatThreadScreen() {
   const operatorPhone = chatUser?.business_contact_number || chatUser?.mobile_number;
   const paymentInfo = bookingContext?.operator_payment_info;
 
+  // The recipient of rental payments on official receipts is ALWAYS the Operator / Host's REAL name
+  const resolvedOperatorName = (() => {
+    if (user?.role === "operator") {
+      const real = `${user?.first_name || ""} ${user?.last_name || ""}`.trim() || user?.name;
+      return real || "Vehicle Host";
+    }
+    const realChatUser = `${chatUser?.first_name || ""} ${chatUser?.last_name || ""}`.trim() || chatUser?.name;
+    return realChatUser || "Vehicle Host";
+  })();
+
+  const resolvedOperatorPhone = (() => {
+    if (user?.role === "operator") {
+      const opProfile = (user as any)?.operatorProfile || (user as any)?.operator_profile;
+      return (
+        opProfile?.account_number ||
+        (user as any)?.phone_number ||
+        (user as any)?.mobile_number ||
+        operatorPhone
+      );
+    }
+    const opInfo = bookingContext?.operator_payment_info;
+    return opInfo?.account_number || operatorPhone;
+  })();
+
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.container}>
+      <View style={styles.chatContent}>
       {/* Modern Messenger-Inspired Header */}
       <View style={styles.headerBar}>
         <TouchableOpacity
@@ -506,7 +725,7 @@ export default function ChatThreadScreen() {
             </Text>
             <View style={styles.statusRow}>
               <Text style={styles.headerSubtitle} numberOfLines={1}>
-                {chatUser?.role === "operator" ? "Verified Host • Operator" : "Active now"}
+                {chatUser?.role === "operator" ? "Operator" : "Active now"}
               </Text>
             </View>
           </View>
@@ -514,17 +733,23 @@ export default function ChatThreadScreen() {
 
         {/* Right Header Actions */}
         <View style={styles.headerActionsRow}>
-          {operatorPhone ? (
-            <TouchableOpacity
-              style={styles.headerIconBtn}
-              onPress={() => Linking.openURL(`tel:${operatorPhone}`)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="call" size={18} color={Colors.dark} />
-            </TouchableOpacity>
-          ) : (
-            <View style={{ width: 8 }} />
-          )}
+          <TouchableOpacity
+            style={styles.headerIconBtn}
+            onPress={() => {
+              if (chatUser) {
+                startCall(chatUser);
+              } else if (id) {
+                startCall({
+                  id: parseInt(id, 10),
+                  name: displayName,
+                  role: user?.role === "operator" ? "renter" : "operator",
+                });
+              }
+            }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="call" size={18} color={Colors.dark} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -641,14 +866,40 @@ export default function ChatThreadScreen() {
             contentContainerStyle={styles.messagesList}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+            initialNumToRender={12}
+            maxToRenderPerBatch={8}
+            updateCellsBatchingPeriod={50}
+            windowSize={7}
+            removeClippedSubviews={Platform.OS === "android"}
+            onContentSizeChange={() => {
+              if (shouldScrollToEndRef.current) {
+                flatListRef.current?.scrollToEnd({ animated: true });
+              }
+            }}
+            ListHeaderComponent={
+              hasMore ? (
+                <View style={styles.loadMoreWrap}>
+                  {loadingEarlier ? (
+                    <ActivityIndicator size="small" color={Colors.primary} />
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.loadMoreBtn}
+                      onPress={handleLoadEarlier}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="time-outline" size={14} color="#64748B" />
+                      <Text style={styles.loadMoreText}>Load earlier messages</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ) : null
+            }
             ListEmptyComponent={
               !sending && messages.length === 0 ? (
                 <View style={styles.emptyWrap}>
-                  <Ionicons name="chatbubbles-outline" size={44} color={Colors.secondary} />
                   <Text style={styles.emptyTitle}>Start a Conversation</Text>
                   <Text style={styles.emptySub}>
-                    Discuss payment details, send receipts/photos, and coordinate rental pickup!
+                    Discuss payment details, send receipts orphotos, and coordinate rental pickup!
                   </Text>
                 </View>
               ) : null
@@ -657,6 +908,10 @@ export default function ChatThreadScreen() {
               const isUser = item.sender === "user";
               const parsed = parseReplyData(item.text);
               const receipt = parseReceiptData(parsed.cleanText);
+              const callLog = parseCallData(parsed.cleanText || item.text);
+              const hasImage = Boolean(item.image_url);
+              const hasText = Boolean(parsed.cleanText);
+              const isImageOnly = hasImage && !hasText && !parsed.reply && !receipt && !callLog;
 
               return (
                 <View
@@ -670,17 +925,23 @@ export default function ChatThreadScreen() {
                       styles.messageBubble,
                       receipt
                         ? styles.receiptBubble
-                        : isUser ? styles.userBubble : styles.operatorBubble,
+                        : isImageOnly
+                        ? styles.imageOnlyBubble
+                        : callLog
+                        ? styles.callLogBubble
+                        : isUser
+                        ? styles.userBubble
+                        : styles.operatorBubble,
                       parsed.reply ? styles.replyBubbleWrap : null,
                     ]}
                     onLongPress={() => {
-                      if (receipt) return;
+                      if (receipt || callLog) return;
                       setSelectedMessageForAction(item);
                     }}
                     delayLongPress={220}
-                    activeOpacity={receipt ? 1 : 0.92}
+                    activeOpacity={receipt || isImageOnly || callLog ? 1 : 0.92}
                   >
-                    {/* Quoted Reply Preview inside bubble */}
+                    {/* Quoted Reply Preview inside bubble (No author label, just the message snippet) */}
                     {parsed.reply ? (
                       <View
                         style={[
@@ -692,19 +953,10 @@ export default function ChatThreadScreen() {
                         <View style={{ flex: 1, paddingVertical: 2, paddingRight: 4 }}>
                           <Text
                             style={[
-                              styles.quotedAuthor,
-                              isUser ? styles.quotedAuthorUser : styles.quotedAuthorOperator,
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {parsed.reply.author}
-                          </Text>
-                          <Text
-                            style={[
                               styles.quotedSnippet,
                               isUser ? styles.quotedSnippetUser : styles.quotedSnippetOperator,
                             ]}
-                            numberOfLines={10}
+                            numberOfLines={4}
                           >
                             {parsed.reply.snippet}
                           </Text>
@@ -712,19 +964,14 @@ export default function ChatThreadScreen() {
                       </View>
                     ) : null}
 
-                    {/* Image Attachment in Chat */}
+                    {/* Image Attachment in Chat (Natural aspect ratio, no bubble container when standalone) */}
                     {item.image_url ? (
-                      <TouchableOpacity
+                      <ChatImage
+                        uri={item.image_url}
+                        isAlone={isImageOnly}
                         onPress={() => setSelectedViewerImage(item.image_url || null)}
-                        activeOpacity={0.88}
-                        style={{ marginBottom: parsed.cleanText ? 6 : 0 }}
-                      >
-                        <Image
-                          source={{ uri: item.image_url }}
-                          style={styles.chatImage}
-                          contentFit="cover"
-                        />
-                      </TouchableOpacity>
+                        onLongPress={() => setSelectedMessageForAction(item)}
+                      />
                     ) : null}
 
                     {/* Authentic GCash Receipt Card matching reference or Standard Text */}
@@ -739,15 +986,19 @@ export default function ChatThreadScreen() {
 
                         {/* White Main Card Body */}
                         <View style={styles.gcashWhiteCard}>
-                          {/* Recipient Name */}
+                          {/* Recipient Name - Always the operator's real name masked */}
                           <Text style={styles.gcashRecipientName} numberOfLines={1}>
-                            {maskName(chatUser?.name || displayName)}
+                            {maskName(
+                              resolvedOperatorName && resolvedOperatorName !== "Vehicle Host"
+                                ? resolvedOperatorName
+                                : receipt.recipient || "Vehicle Host"
+                            )}
                           </Text>
 
                           {/* Recipient Phone Pill */}
                           <View style={styles.gcashPhonePill}>
                             <Text style={styles.gcashPhoneText}>
-                              {maskPhone(operatorPhone || paymentInfo?.account_number)}
+                              {maskPhone(receipt.phone || resolvedOperatorPhone)}
                             </Text>
                           </View>
 
@@ -805,6 +1056,48 @@ export default function ChatThreadScreen() {
                           </TouchableOpacity>
                         </View>
                       </View>
+                    ) : callLog ? (
+                      <TouchableOpacity
+                        style={styles.callLogCard}
+                        onPress={() => {
+                          if (chatUser) {
+                            startCall(chatUser);
+                          } else if (id) {
+                            startCall({
+                              id: parseInt(id, 10),
+                              name: displayName,
+                              role: user?.role === "operator" ? "renter" : "operator",
+                            });
+                          }
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <View
+                          style={[
+                            styles.callLogIconWrap,
+                            callLog.type === "missed" ? styles.callLogIconMissed : styles.callLogIconVoice,
+                          ]}
+                        >
+                          <Ionicons
+                            name="call"
+                            size={18}
+                            color={callLog.type === "missed" ? "#EF4444" : "#10B981"}
+                            style={callLog.type === "missed" ? { transform: [{ rotate: "135deg" }] } : undefined}
+                          />
+                        </View>
+                        <View style={styles.callLogTextCol}>
+                          <Text style={styles.callLogTitle}>
+                            {callLog.type === "missed" ? "Missed Call" : "Voice Call"}
+                          </Text>
+                          <Text style={styles.callLogSubtitle}>
+                            {callLog.type === "missed"
+                              ? "Tap to call back"
+                              : callLog.duration > 0
+                              ? `${formatCallDurationText(callLog.duration)} • Tap to call back`
+                              : "Tap to call back"}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
                     ) : parsed.cleanText ? (
                       <Text
                         style={[
@@ -815,48 +1108,50 @@ export default function ChatThreadScreen() {
                         {parsed.cleanText}
                       </Text>
                     ) : null}
-
-                    {/* Time & Delivery Status Indicator (hidden for authentic GCash receipt) */}
-                    {!receipt ? (
-                      <View style={styles.bubbleFooter}>
-                        <Text
-                          style={[
-                            styles.timeText,
-                            isUser ? styles.userTimeText : styles.operatorTimeText,
-                          ]}
-                        >
-                          {item.time}
-                        </Text>
-                        {isUser && (
-                          <View style={{ flexDirection: "row", alignItems: "center", marginLeft: 4 }}>
-                            <Ionicons
-                              name={item.is_read ? "checkmark-done" : "checkmark"}
-                              size={14}
-                              color={item.is_read ? "#60A5FA" : "rgba(255,255,255,0.7)"}
-                            />
-                            {item.is_read ? (
-                              <Text style={styles.seenBadgeText}>Seen</Text>
-                            ) : null}
-                          </View>
-                        )}
-                      </View>
-                    ) : null}
                   </TouchableOpacity>
+
+                  {/* Time & Delivery Status Indicator (Placed Outside the Bubble) */}
+                  {!receipt ? (
+                    <View
+                      style={[
+                        styles.outsideFooter,
+                        isUser ? styles.outsideFooterUser : styles.outsideFooterOperator,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.outsideTimeText,
+                          isUser ? styles.outsideUserTimeText : styles.outsideOperatorTimeText,
+                        ]}
+                      >
+                        {item.time}
+                      </Text>
+                      {isUser && (
+                        <View style={styles.outsideStatusWrap}>
+                          <Ionicons
+                            name={item.is_read ? "checkmark-done" : "checkmark"}
+                            size={13}
+                            color={item.is_read ? "#3B82F6" : "#94A3B8"}
+                          />
+                          {item.is_read ? (
+                            <Text style={styles.outsideSeenText}>Seen</Text>
+                          ) : null}
+                        </View>
+                      )}
+                    </View>
+                  ) : null}
                 </View>
               );
             }}
           />
         )}
 
-        {/* Replying Preview Banner */}
+        {/* Replying Preview Banner (No author label, just the message snippet) */}
         {replyingToMessage && (
           <View style={styles.replyBar}>
             <View style={styles.replyBarAccent} />
             <View style={styles.replyBarTextCol}>
-              <Text style={styles.replyBarAuthor}>
-                Replying to {replyingToMessage.sender === "user" ? "yourself" : (chatUser?.name || "Host")}
-              </Text>
-              <Text style={styles.replyBarSnippet} numberOfLines={1}>
+              <Text style={styles.replyBarSnippet} numberOfLines={2}>
                 {parseReplyData(replyingToMessage.text).cleanText || (replyingToMessage.image_url ? "📷 Photo" : "")}
               </Text>
             </View>
@@ -885,7 +1180,7 @@ export default function ChatThreadScreen() {
           <TextInput
             ref={inputRef}
             style={styles.textInput}
-            placeholder="Type message or send receipt..."
+            placeholder="message"
             placeholderTextColor={Colors.secondary}
             value={inputMessage}
             onChangeText={setInputMessage}
@@ -1072,6 +1367,7 @@ export default function ChatThreadScreen() {
           ) : null}
         </View>
       </Modal>
+      </View>
     </SafeAreaView>
   );
 }
@@ -1080,6 +1376,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.white,
+  },
+  chatContent: {
+    flex: 1,
   },
   headerBar: {
     flexDirection: "row",
@@ -1279,23 +1578,47 @@ const styles = StyleSheet.create({
   },
   emptyWrap: {
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
+    justifyContent: "flex-start",
+    paddingTop: 32,
+    paddingBottom: Spacing.xl,
     paddingHorizontal: Spacing.xl,
   },
   emptyTitle: {
     fontFamily: FontFamily.bold,
-    fontSize: FontSize.title,
+    fontSize: 18,
     color: Colors.dark,
-    marginTop: 8,
+    textAlign: "center",
   },
   emptySub: {
     fontFamily: FontFamily.regular,
     fontSize: 13,
     color: Colors.secondary,
     textAlign: "center",
-    lineHeight: 18,
-    marginTop: 4,
+    lineHeight: 19,
+    marginTop: 8,
+    paddingHorizontal: Spacing.sm,
+  },
+  loadMoreWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    marginBottom: 6,
+  },
+  loadMoreBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F1F5F9",
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  loadMoreText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+    color: "#475569",
   },
   messagesList: {
     padding: Spacing.lg,
@@ -1307,14 +1630,72 @@ const styles = StyleSheet.create({
   },
   userBubbleWrap: {
     alignSelf: "flex-end",
+    alignItems: "flex-end",
   },
   operatorBubbleWrap: {
     alignSelf: "flex-start",
+    alignItems: "flex-start",
   },
   messageBubble: {
     paddingHorizontal: 13,
     paddingVertical: 9,
     borderRadius: 18,
+  },
+  imageOnlyBubble: {
+    backgroundColor: "transparent",
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    borderWidth: 0,
+    borderRadius: 16,
+    shadowColor: "transparent",
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  callLogBubble: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+    minWidth: 220,
+  },
+  callLogCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  callLogIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  callLogIconVoice: {
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
+  },
+  callLogIconMissed: {
+    backgroundColor: "rgba(239, 68, 68, 0.12)",
+  },
+  callLogTextCol: {
+    flex: 1,
+  },
+  callLogTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 14,
+    color: "#0F172A",
+  },
+  callLogSubtitle: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11.5,
+    color: "#64748B",
+    marginTop: 2,
   },
   userBubble: {
     backgroundColor: "#1A1A1A",
@@ -1337,6 +1718,28 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E2E8F0",
   },
+  chatImageWrap: {
+    overflow: "hidden",
+    borderRadius: 16,
+    backgroundColor: "#E2E8F0",
+  },
+  chatImageAlone: {
+    borderWidth: 1,
+    borderColor: "rgba(0, 0, 0, 0.08)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1.5 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  chatImageWithText: {
+    marginBottom: 6,
+    borderRadius: 12,
+  },
+  chatImageFill: {
+    width: "100%",
+    height: "100%",
+  },
   chatImage: {
     width: 220,
     height: 165,
@@ -1353,6 +1756,43 @@ const styles = StyleSheet.create({
   },
   operatorMessageText: {
     color: "#0F172A",
+  },
+  outsideFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 3,
+    marginHorizontal: 4,
+    gap: 4,
+  },
+  outsideFooterUser: {
+    alignSelf: "flex-end",
+    justifyContent: "flex-end",
+  },
+  outsideFooterOperator: {
+    alignSelf: "flex-start",
+    justifyContent: "flex-start",
+  },
+  outsideTimeText: {
+    fontFamily: FontFamily.regular,
+    fontSize: 10.5,
+    color: "#94A3B8",
+  },
+  outsideUserTimeText: {
+    color: "#94A3B8",
+  },
+  outsideOperatorTimeText: {
+    color: "#94A3B8",
+  },
+  outsideStatusWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    marginLeft: 2,
+  },
+  outsideSeenText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 10,
+    color: "#3B82F6",
   },
   bubbleFooter: {
     flexDirection: "row",
@@ -1500,9 +1940,10 @@ const styles = StyleSheet.create({
     color: Colors.dark,
   },
   replyBarSnippet: {
-    fontFamily: FontFamily.regular,
-    fontSize: 11.5,
-    color: Colors.secondary,
+    fontFamily: FontFamily.medium,
+    fontSize: 13,
+    color: Colors.dark,
+    lineHeight: 18,
   },
   replyBarCloseBtn: {
     padding: 4,
@@ -1798,12 +2239,12 @@ const styles = StyleSheet.create({
   },
   gcashTotalLabel: {
     fontFamily: FontFamily.bold,
-    fontSize: 16,
+    fontSize: 10,
     color: "#0047BA",
   },
   gcashTotalValue: {
     fontFamily: FontFamily.bold,
-    fontSize: 19,
+    fontSize: 14,
     color: "#0047BA",
   },
   gcashFooter: {

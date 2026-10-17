@@ -1,11 +1,13 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Dimensions,
+  Image,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -26,7 +28,7 @@ import RegistrationRoleBottomSheet from "@/features/auth/components/Registration
 import SocialButton from "@/features/auth/components/SocialButton";
 
 import { Colors } from "@/constants/colors";
-import { FontFamily, FontSize, Radius, Spacing } from "@/constants/theme";
+import { FontFamily, FontSize, Spacing } from "@/constants/theme";
 import { useAppToast } from "@/context/ToastContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { login } from "@/features/auth/services/authService";
@@ -40,25 +42,12 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
-
   const [loginError, setLoginError] = useState("");
+  const [loggingIn, setLoggingIn] = useState(false);
+  const loggingInOpacity = useRef(new Animated.Value(0)).current;
 
   const { login: signIn } = useAuth();
   const { showSuccess } = useAppToast();
-
-  useEffect(() => {
-    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-
-    const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
-    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
-
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
 
   // Animation values for smooth entrance slide
   const sheetTranslateY = useRef(new Animated.Value(SCREEN_HEIGHT * 0.7)).current;
@@ -127,9 +116,20 @@ export default function Login() {
       const loggedInUser = response.data.user;
       const loggedInToken = response.data.token;
 
-      showSuccess("Welcome Back", `Signed in as ${loggedInUser.first_name || "User"}`);
+      Keyboard.dismiss();
+      setLoggingIn(true);
+      Animated.timing(loggingInOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
 
-      await signIn(loggedInUser, loggedInToken);
+      await Promise.all([
+        signIn(loggedInUser, loggedInToken),
+        new Promise((resolve) => setTimeout(resolve, 900)),
+      ]);
+
+      setLoggingIn(false);
 
       router.dismissAll();
 
@@ -152,6 +152,8 @@ export default function Login() {
         error?.response?.data?.message ??
         "Invalid email or password.";
       setLoginError(message);
+      setLoggingIn(false);
+      loggingInOpacity.setValue(0);
     } finally {
       setLoading(false);
     }
@@ -162,33 +164,25 @@ export default function Login() {
       <SafeAreaView edges={["top"]} style={styles.safeTop}>
         <KeyboardAvoidingView
           style={styles.keyboardAvoid}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
           keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
         >
           {/* Top Primary Background Section with Welcome Animation */}
           <Animated.View
             style={[
               styles.topBanner,
-              keyboardVisible && styles.topBannerCompact,
               {
                 opacity: headerOpacity,
                 transform: [{ translateY: headerTranslateY }],
               },
             ]}
           >
-            <Text
-              style={[
-                styles.welcomeTitle,
-                keyboardVisible && styles.welcomeTitleCompact,
-              ]}
-            >
-              {keyboardVisible ? "Welcome Back" : `Welcome\nBack`}
+            <Text style={styles.welcomeTitle}>
+              Welcome{'\n'}Back
             </Text>
-            {!keyboardVisible && (
-              <Text style={styles.welcomeSubtitle}>
-                Please sign in to continue
-              </Text>
-            )}
+            <Text style={styles.welcomeSubtitle}>
+              Please sign in to continue
+            </Text>
           </Animated.View>
 
           {/* Bottom Sheet Card sliding up from bottom with integrated footer */}
@@ -201,19 +195,17 @@ export default function Login() {
             ]}
           >
             <ScrollView
+              scrollEnabled={false}
               contentContainerStyle={styles.sheetScrollContent}
               keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="on-drag"
-              nestedScrollEnabled={true}
               showsVerticalScrollIndicator={false}
-              automaticallyAdjustKeyboardInsets={true}
               bounces={false}
             >
               <View style={styles.sheetHandle} />
 
               <AppInput
                 label="Email Address"
-                placeholder="johndoe@example.com"
+                placeholder="johndoe@gmail.com"
                 value={email}
                 onChangeText={handleEmailChange}
                 keyboardType="email-address"
@@ -222,7 +214,7 @@ export default function Login() {
 
               <PasswordInput
                 label="Password"
-                placeholder="Enter your password"
+                placeholder="password"
                 value={password}
                 onChangeText={handlePasswordChange}
                 error={loginError || undefined}
@@ -246,10 +238,10 @@ export default function Login() {
               <SocialButton
                 title="Continue with Google"
                 icon={
-                  <MaterialCommunityIcons
-                    name="gmail"
-                    size={22}
-                    color="#EA4335"
+                  <Image
+                    source={require("../../assets/img/google.png")}
+                    style={styles.googleIcon}
+                    resizeMode="contain"
                   />
                 }
                 onPress={async () => {
@@ -298,11 +290,43 @@ export default function Login() {
           />
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      <Modal visible={loggingIn} transparent animationType="none" statusBarTranslucent>
+        <Animated.View style={[styles.loggingInOverlay, { opacity: loggingInOpacity }]}>
+          <View style={styles.loggingInCard}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+            <Text style={styles.loggingInText}>Signing you in...</Text>
+          </View>
+        </Animated.View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  loggingInOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  loggingInCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 20,
+    paddingVertical: 28,
+    paddingHorizontal: 36,
+    alignItems: "center",
+    gap: 14,
+    minWidth: 200,
+  },
+
+  loggingInText: {
+    fontFamily: FontFamily.semiBold,
+    fontSize: 15,
+    color: Colors.dark,
+  },
+
   root: {
     flex: 1,
     backgroundColor: Colors.primary,
@@ -320,24 +344,14 @@ const styles = StyleSheet.create({
   topBanner: {
     paddingHorizontal: Spacing.xl,
     paddingTop: Platform.OS === "ios" ? 15 : 20,
-    paddingBottom: 25,
-  },
-
-  topBannerCompact: {
-    paddingTop: Platform.OS === "ios" ? 8 : 10,
-    paddingBottom: 10,
+    paddingBottom: 22,
   },
 
   welcomeTitle: {
     color: Colors.white,
     fontFamily: FontFamily.bold,
-    fontSize: 34,
-    lineHeight: 38,
-  },
-
-  welcomeTitleCompact: {
-    fontSize: 22,
-    lineHeight: 26,
+    fontSize: 32,
+    lineHeight: 36,
   },
 
   welcomeSubtitle: {
@@ -365,7 +379,7 @@ const styles = StyleSheet.create({
   sheetScrollContent: {
     paddingHorizontal: Spacing.xl,
     paddingTop: 16,
-    paddingBottom: Platform.OS === "ios" ? 40 : 130,
+    paddingBottom: Platform.OS === "ios" ? 40 : 36,
     flexGrow: 1,
   },
 
@@ -421,5 +435,10 @@ const styles = StyleSheet.create({
     marginTop: 14,
     paddingBottom: Platform.OS === "ios" ? 10 : 8,
     alignItems: "center",
+  },
+
+  googleIcon: {
+    width: 20,
+    height: 20,
   },
 });

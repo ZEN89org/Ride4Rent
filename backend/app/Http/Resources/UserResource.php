@@ -19,15 +19,9 @@ class UserResource extends JsonResource
 
             'email' => $this->email,
             'mobile_number' => $this->mobile_number,
-            'profile_photo' => $this->profile_photo
-                ? $request->getSchemeAndHttpHost().'/storage/'.$this->profile_photo
-                : null,
-            'drivers_license_front' => $this->drivers_license_front
-                ? $request->getSchemeAndHttpHost().'/storage/'.$this->drivers_license_front
-                : null,
-            'drivers_license_back' => $this->drivers_license_back
-                ? $request->getSchemeAndHttpHost().'/storage/'.$this->drivers_license_back
-                : null,
+            'profile_photo' => \App\Models\Vehicle::resolveStorageUrl($this->profile_photo, $request->getSchemeAndHttpHost()),
+            'drivers_license_front' => \App\Models\Vehicle::resolveStorageUrl($this->drivers_license_front, $request->getSchemeAndHttpHost()),
+            'drivers_license_back' => \App\Models\Vehicle::resolveStorageUrl($this->drivers_license_back, $request->getSchemeAndHttpHost()),
             'is_drivers_license_verified' => (bool) $this->is_drivers_license_verified,
             'license_verification_status' => $this->license_verification_status ?? ($this->is_drivers_license_verified ? 'approved' : ($this->drivers_license_front ? 'pending' : 'unverified')),
             'license_rejection_reason' => $this->license_rejection_reason,
@@ -41,6 +35,7 @@ class UserResource extends JsonResource
             'operator_profile' => $this->operatorProfile ? array_merge(
                 $this->operatorProfile->toArray(),
                 [
+                    'qr_code' => \App\Models\Vehicle::resolveStorageUrl($this->operatorProfile->qr_code, $request->getSchemeAndHttpHost()),
                     'latitude' => $this->operatorProfile->getCoordinates()['latitude'],
                     'longitude' => $this->operatorProfile->getCoordinates()['longitude'],
                 ]

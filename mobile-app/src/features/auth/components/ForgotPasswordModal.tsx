@@ -1,10 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
+  Dimensions,
   KeyboardAvoidingView,
   Modal,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -20,6 +23,8 @@ import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Radius, Spacing } from "@/constants/theme";
 import { useAppToast } from "@/context/ToastContext";
 import { forgotPassword, resetPassword } from "@/features/auth/services/authService";
+
+const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 interface ForgotPasswordModalProps {
   visible: boolean;
@@ -48,63 +53,116 @@ export default function ForgotPasswordModal({
   const [countdown, setCountdown] = useState(60);
   const [error, setError] = useState("");
 
-  const inputRefs = useRef<Array<TextInput | null>>([]);
+  const otpInputRefs = useRef<(TextInput | null)[]>([]);
+  const [sheetTranslateY] = useState(
+    () => new Animated.Value(SCREEN_HEIGHT)
+  );
+  const [backdropOpacity] = useState(
+    () => new Animated.Value(0)
+  );
+
+  const resetForm = useCallback(() => {
+    setStep(1);
+    setEmail("");
+    setOtp(["", "", "", "", "", ""]);
+    setNewPassword("");
+    setConfirmPassword("");
+    setError("");
+    setCountdown(60);
+  }, []);
+
+  const closeSheet = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(sheetTranslateY, {
+        toValue: SCREEN_HEIGHT,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+      Animated.timing(backdropOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      resetForm();
+      onClose();
+    });
+  }, [backdropOpacity, onClose, resetForm, sheetTranslateY]);
 
   useEffect(() => {
     if (visible) {
-      setStep(1);
-      setEmail("");
-      setOtp(["", "", "", "", "", ""]);
-      setNewPassword("");
-      setConfirmPassword("");
-      setError("");
-      setCountdown(60);
+      sheetTranslateY.setValue(SCREEN_HEIGHT);
+      backdropOpacity.setValue(0);
+
+      Animated.parallel([
+        Animated.timing(backdropOpacity, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+        Animated.spring(sheetTranslateY, {
+          toValue: 0,
+          useNativeDriver: true,
+          tension: 65,
+          friction: 11,
+        }),
+      ]).start();
     }
-  }, [visible]);
+  }, [backdropOpacity, sheetTranslateY, visible]);
 
   useEffect(() => {
-    let timer: any;
-    if (visible && step === 2) {
-      setTimeout(() => {
-        inputRefs.current[0]?.focus();
-      }, 300);
-
-      if (countdown > 0) {
-        timer = setInterval(() => {
-          setCountdown((prev) => prev - 1);
-        }, 1000);
-      }
+    if (!visible || step !== 2) {
+      return;
     }
-    return () => clearInterval(timer);
+
+    const focusTimer = setTimeout(() => {
+      otpInputRefs.current[0]?.focus();
+    }, 300);
+
+    return () => clearTimeout(focusTimer);
+  }, [visible, step]);
+
+  useEffect(() => {
+    if (!visible || step !== 2 || countdown <= 0) {
+      return;
+    }
+
+    const countdownTimer = setInterval(() => {
+      setCountdown((previous) => previous - 1);
+    }, 1000);
+
+    return () => clearInterval(countdownTimer);
   }, [visible, step, countdown]);
 
   const handleOtpChange = (text: string, index: number) => {
     setError("");
-    const cleaned = text.replace(/[^0-9]/g, "");
-    if (cleaned.length > 1) {
-      const digits = cleaned.slice(0, 6).split("");
-      const newOtp = [...otp];
-      digits.forEach((d, i) => {
-        if (i < 6) newOtp[i] = d;
+    const digits = text.replace(/[^0-9]/g, "").slice(0, 6);
+    const nextOtp = [...otp];
+
+    if (digits.length > 1) {
+      digits.split("").forEach((digit, offset) => {
+        if (index + offset < nextOtp.length) {
+          nextOtp[index + offset] = digit;
+        }
       });
-      setOtp(newOtp);
-      const nextIndex = Math.min(digits.length, 5);
-      inputRefs.current[nextIndex]?.focus();
+      setOtp(nextOtp);
+      otpInputRefs.current[Math.min(index + digits.length, 5)]?.focus();
       return;
     }
 
-    const newOtp = [...otp];
-    newOtp[index] = cleaned;
-    setOtp(newOtp);
-
-    if (cleaned && index < 5) {
-      inputRefs.current[index + 1]?.focus();
+    nextOtp[index] = digits;
+    setOtp(nextOtp);
+    if (digits && index < nextOtp.length - 1) {
+      otpInputRefs.current[index + 1]?.focus();
     }
   };
 
-  const handleOtpKeyPress = (e: any, index: number) => {
-    if (e.nativeEvent.key === "Backspace" && !otp[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
+  const handleOtpKeyPress = (event: any, index: number) => {
+    if (event.nativeEvent.key === "Backspace" && !otp[index] && index > 0) {
+      const nextOtp = [...otp];
+      nextOtp[index - 1] = "";
+      setOtp(nextOtp);
+      otpInputRefs.current[index - 1]?.focus();
     }
   };
 
@@ -128,13 +186,14 @@ export default function ForgotPasswordModal({
       await forgotPassword(trimmedEmail);
       setStep(2);
       setCountdown(60);
-      setTimeout(() => {
-        inputRefs.current[0]?.focus();
-      }, 300);
     } catch (e: any) {
       const message =
         e.response?.data?.message ||
-        "Could not send reset code. Please check your email.";
+        (e.code === "ECONNABORTED"
+          ? "The password reset request timed out. Please try again."
+          : e.message === "Network Error"
+          ? "Could not connect to the password reset service. Check your connection and try again."
+          : "Could not send the reset code. Please try again.");
       setError(message);
     } finally {
       setLoading(false);
@@ -201,6 +260,7 @@ export default function ForgotPasswordModal({
         password_confirmation: confirmPassword,
       });
 
+      resetForm();
       showModal(
         "Password Reset Successful",
         "Your password has been reset. You can now sign in with your new password.",
@@ -228,13 +288,23 @@ export default function ForgotPasswordModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" statusBarTranslucent={true} onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="none" statusBarTranslucent={true} onRequestClose={closeSheet}>
       <KeyboardAvoidingView
         style={styles.overlay}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
       >
-        <View style={styles.card}>
+        <Animated.View
+          style={[styles.backdrop, { opacity: backdropOpacity }]}
+        >
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeSheet} />
+        </Animated.View>
+        <Animated.View
+          style={[
+            styles.card,
+            { transform: [{ translateY: sheetTranslateY }] },
+          ]}
+        >
           <ScrollView
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
@@ -257,7 +327,7 @@ export default function ForgotPasswordModal({
                   color={Colors.primary}
                 />
               </View>
-              <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+              <TouchableOpacity onPress={closeSheet} style={styles.closeBtn}>
                 <Ionicons name="close" size={24} color={Colors.secondary} />
               </TouchableOpacity>
             </View>
@@ -267,13 +337,13 @@ export default function ForgotPasswordModal({
               <View>
                 <Text style={styles.title}>Forgot Password</Text>
                 <Text style={styles.subtitle}>
-                  Enter your registered Gmail address and we'll send you a 6-digit confirmation code to reset your password.
+                  Enter your registered Gmail address and we&apos;ll send you a 6-digit confirmation code to reset your password.
                 </Text>
 
                 <View style={styles.inputContainer}>
                   <AppInput
                     label="Email Address"
-                    placeholder="johndoe@gmail.com"
+                    placeholder="email"
                     value={email}
                     onChangeText={(val) => {
                       setEmail(val);
@@ -305,32 +375,52 @@ export default function ForgotPasswordModal({
                 </Text>
                 <Text style={styles.emailHighlight}>{email.trim().toLowerCase()}</Text>
 
-                <View style={styles.otpRow}>
-                  {otp.map((digit, index) => (
-                    <TextInput
-                      key={index}
-                      ref={(ref) => {
-                        inputRefs.current[index] = ref;
-                      }}
-                      style={[
-                        styles.otpInput,
-                        digit ? styles.otpInputFilled : null,
-                        error ? styles.otpInputError : null,
-                      ]}
-                      keyboardType="number-pad"
-                      maxLength={1}
-                      value={digit}
-                      onChangeText={(val) => handleOtpChange(val, index)}
-                      onKeyPress={(e) => handleOtpKeyPress(e, index)}
-                      selectTextOnFocus
-                    />
-                  ))}
-                </View>
+                <Pressable
+                  style={styles.otpRow}
+                  onPress={() => otpInputRefs.current[0]?.focus()}
+                >
+                  {otp.map((digit, index) => {
+                    const filledCount = otp.join("").length;
+                    const isActive = index === Math.min(filledCount, 5);
+                    return (
+                      <View
+                        key={index}
+                        style={[
+                          styles.otpInput,
+                          styles.otpBox,
+                          digit ? styles.otpInputFilled : null,
+                          isActive ? styles.otpInputActive : null,
+                          error ? styles.otpInputError : null,
+                        ]}
+                      >
+                        <Text style={styles.otpDigit}>{digit}</Text>
+                      </View>
+                    );
+                  })}
+                  <TextInput
+                    ref={(ref) => {
+                      otpInputRefs.current[0] = ref;
+                    }}
+                    style={styles.otpHiddenInput}
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    value={otp.join("")}
+                    onChangeText={(value) => {
+                      setError("");
+                      const digits = value.replace(/[^0-9]/g, "").slice(0, 6);
+                      setOtp(Array.from({ length: 6 }, (_, i) => digits[i] || ""));
+                    }}
+                    autoComplete="one-time-code"
+                    textContentType="oneTimeCode"
+                    caretHidden
+                    accessibilityLabel="6-digit reset code"
+                  />
+                </Pressable>
 
                 {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
                 <View style={styles.resendRow}>
-                  <Text style={styles.resendPrompt}>Didn't receive code? </Text>
+                  <Text style={styles.resendPrompt}>Didn&apos;t receive code? </Text>
                   {countdown > 0 ? (
                     <Text style={styles.countdownText}>Resend in {countdown}s</Text>
                   ) : (
@@ -374,7 +464,7 @@ export default function ForgotPasswordModal({
                 <View style={styles.inputContainer}>
                   <PasswordInput
                     label="New Password"
-                    placeholder="Enter new password (min. 8 chars)"
+                    placeholder="Enter new password "
                     value={newPassword}
                     onChangeText={(val: string) => {
                       setNewPassword(val);
@@ -405,7 +495,7 @@ export default function ForgotPasswordModal({
               </View>
             )}
           </ScrollView>
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -414,8 +504,11 @@ export default function ForgotPasswordModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "flex-end",
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: "rgba(0,0,0,0.5)",
   },
   card: {
     backgroundColor: Colors.white,
@@ -492,6 +585,26 @@ const styles = StyleSheet.create({
   },
   otpInputError: {
     borderColor: Colors.error,
+  },
+  otpBox: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  otpInputActive: {
+    borderColor: Colors.primary,
+    borderWidth: 2,
+  },
+  otpDigit: {
+    fontFamily: FontFamily.bold,
+    fontSize: 22,
+    color: Colors.dark,
+  },
+  otpHiddenInput: {
+    position: "absolute",
+    width: "100%",
+    height: "100%",
+    opacity: 0,
+    color: "transparent",
   },
   errorText: {
     fontFamily: FontFamily.medium,

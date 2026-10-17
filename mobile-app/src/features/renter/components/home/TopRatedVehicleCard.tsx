@@ -12,6 +12,7 @@ import { Colors } from "@/constants/colors";
 import {
   FontFamily
 } from "@/constants/theme";
+import { resolveImageUrl } from "@/services/api";
 
 export interface TopRatedVehicle {
   id: string;
@@ -35,6 +36,14 @@ export default function TopRatedVehicleCard({
   const ratingVal = hasRating ? Number(vehicle.rating).toFixed(1) : null;
   const countVal = (vehicle.ratingCount ?? 0) > 0 ? `(${vehicle.ratingCount})` : "";
 
+  const rawUri =
+    typeof vehicle.image === "string"
+      ? vehicle.image
+      : (vehicle.image as any)?.uri;
+  const resolvedSource = rawUri
+    ? { uri: resolveImageUrl(rawUri) || rawUri }
+    : vehicle.image;
+
   return (
     <TouchableOpacity
       style={styles.card}
@@ -44,7 +53,7 @@ export default function TopRatedVehicleCard({
       {/* Fixed-size image container with background fill */}
       <View style={styles.imageContainer}>
         <Image
-          source={vehicle.image}
+          source={resolvedSource}
           contentFit="cover"
           style={styles.carImage}
         />
@@ -185,6 +194,6 @@ const styles = StyleSheet.create({
   viewButtonText: {
     fontFamily: FontFamily.bold,
     fontSize: 11.5,
-    color: Colors.white,
+    color: Colors.dark,
   },
 });

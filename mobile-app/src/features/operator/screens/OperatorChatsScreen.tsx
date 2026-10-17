@@ -100,9 +100,6 @@ export default function OperatorChatsScreen() {
 
         {conversations.length === 0 && !loading ? (
           <View style={styles.empty}>
-            <View style={styles.emptyIconCircle}>
-              <Ionicons name="chatbubble-ellipses-outline" size={38} color={Colors.secondary} />
-            </View>
             <Text style={styles.emptyTitle}>No Renter Messages Yet</Text>
             <Text style={styles.emptySubtitle}>
               When renters visit your vehicle listings and send an inquiry, conversations will appear right here.
@@ -122,6 +119,14 @@ export default function OperatorChatsScreen() {
                 }}
                 colors={[Colors.primary]}
               />
+            }
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                <Text style={styles.emptyTitle}>No Renter Found</Text>
+                <Text style={styles.emptySubtitle}>
+                  No conversations match your current search query.
+                </Text>
+              </View>
             }
             renderItem={({ item }) => (
               <TouchableOpacity
@@ -251,35 +256,24 @@ const styles = StyleSheet.create({
   },
   empty: {
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.white,
-    borderColor: Colors.border,
-    borderRadius: 20,
-    borderWidth: 1,
-    padding: Spacing.xl,
-    marginTop: Spacing.xl,
-  },
-  emptyIconCircle: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: Colors.inputBackground,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: Spacing.sm,
+    justifyContent: "flex-start",
+    paddingTop: 32,
+    paddingBottom: Spacing.xl,
+    paddingHorizontal: Spacing.xl,
   },
   emptyTitle: {
     color: Colors.dark,
     fontFamily: FontFamily.bold,
-    fontSize: FontSize.title,
-    marginTop: Spacing.xs,
+    fontSize: 18,
+    textAlign: "center",
   },
   emptySubtitle: {
     color: Colors.secondary,
     fontFamily: FontFamily.regular,
-    fontSize: FontSize.body,
-    lineHeight: 20,
-    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 8,
     textAlign: "center",
+    paddingHorizontal: Spacing.sm,
   },
 });

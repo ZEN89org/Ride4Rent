@@ -349,7 +349,7 @@ const styles = StyleSheet.create({
   },
   selectedDayText: {
     fontFamily: FontFamily.bold,
-    color: Colors.white,
+    color: Colors.dark,
   },
   helperRow: {
     flexDirection: "row",

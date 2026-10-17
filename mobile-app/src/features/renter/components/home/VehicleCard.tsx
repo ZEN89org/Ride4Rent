@@ -16,6 +16,7 @@ import {
   FontSize,
   Spacing,
 } from "@/constants/theme";
+import { resolveImageUrl } from "@/services/api";
 
 interface Vehicle {
   id: string;
@@ -47,6 +48,14 @@ export default function VehicleCard({
 }: Props) {
   const unitsLeft = vehicle.available_units ?? 1;
 
+  const rawUri =
+    typeof vehicle.image === "string"
+      ? vehicle.image
+      : vehicle.image?.uri;
+  const resolvedSource = rawUri
+    ? { uri: resolveImageUrl(rawUri) || rawUri }
+    : vehicle.image;
+
   return (
     <TouchableOpacity
       style={styles.card}
@@ -56,7 +65,7 @@ export default function VehicleCard({
       {/* Top Media Showcase */}
       <View style={styles.imageContainer}>
         <Image
-          source={vehicle.image}
+          source={resolvedSource}
           contentFit="cover"
           style={styles.vehicleImage}
         />
@@ -278,6 +287,6 @@ const styles = StyleSheet.create({
   bookButtonText: {
     fontFamily: FontFamily.bold,
     fontSize: 12,
-    color: Colors.white,
+    color: Colors.dark,
   },
 });

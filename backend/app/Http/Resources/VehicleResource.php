@@ -63,13 +63,14 @@ class VehicleResource extends JsonResource
             'distance_km' => isset($this->distance_km) ? round($this->distance_km, 1) : null,
             'features' => $this->features ?? [],
             'description' => $this->description,
-            'image_url' => $this->cover_photo
-                ? $request->getSchemeAndHttpHost().'/storage/'.$this->cover_photo
-                : ($this->images->first() ? $request->getSchemeAndHttpHost().'/storage/'.$this->images->first()->image_path : null),
+            'image_url' => \App\Models\Vehicle::resolveStorageUrl(
+                $this->cover_photo ?: ($this->images->first()?->image_path),
+                $request->getSchemeAndHttpHost()
+            ),
             'images' => $this->images->map(function ($img) use ($request) {
                 return [
                     'id' => $img->id,
-                    'image_url' => $request->getSchemeAndHttpHost().'/storage/'.$img->image_path,
+                    'image_url' => \App\Models\Vehicle::resolveStorageUrl($img->image_path, $request->getSchemeAndHttpHost()),
                     'is_cover' => (bool) $img->is_cover,
                     'sort_order' => (int) $img->sort_order,
                 ];
@@ -93,9 +94,7 @@ class VehicleResource extends JsonResource
                 'name' => trim(($operator?->first_name ?? '').' '.($operator?->last_name ?? '')),
                 'email' => $operator?->email,
                 'mobile_number' => $operator?->mobile_number,
-                'profile_photo' => $operator?->profile_photo
-                    ? $request->getSchemeAndHttpHost().'/storage/'.$operator->profile_photo
-                    : null,
+                'profile_photo' => \App\Models\Vehicle::resolveStorageUrl($operator?->profile_photo, $request->getSchemeAndHttpHost()),
                 'business_name' => $profile?->business_name,
                 'business_email' => $profile?->business_email,
                 'business_contact_number' => $profile?->business_contact_number,
@@ -107,9 +106,7 @@ class VehicleResource extends JsonResource
                 'accepted_payment_methods' => $profile?->accepted_payment_methods,
                 'account_name' => $profile?->account_name,
                 'account_number' => $profile?->account_number,
-                'qr_code' => $profile?->qr_code
-                    ? $request->getSchemeAndHttpHost().'/storage/'.$profile->qr_code
-                    : null,
+                'qr_code' => \App\Models\Vehicle::resolveStorageUrl($profile?->qr_code, $request->getSchemeAndHttpHost()),
             ],
             'reviews' => $this->relationLoaded('bookings')
                 ? $this->bookings
@@ -120,9 +117,7 @@ class VehicleResource extends JsonResource
                         return [
                             'id' => $b->id,
                             'renter_name' => $fullName !== '' ? $fullName : 'Verified Renter',
-                            'renter_photo' => $renter?->profile_photo
-                                ? $request->getSchemeAndHttpHost() . '/storage/' . $renter->profile_photo
-                                : null,
+                            'renter_photo' => \App\Models\Vehicle::resolveStorageUrl($renter?->profile_photo, $request->getSchemeAndHttpHost()),
                             'rating' => (int) $b->rating,
                             'review' => $b->review,
                             'created_at' => $b->updated_at ? $b->updated_at->diffForHumans() : 'Recently',
