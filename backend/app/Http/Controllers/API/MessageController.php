@@ -59,7 +59,21 @@ class MessageController extends Controller
                 ->count();
 
             $displayMsg = $lastMsg?->message;
-            if ($displayMsg && str_starts_with($displayMsg, '[REPLY:')) {
+            if ($displayMsg && str_starts_with($displayMsg, '[CALL:')) {
+                $jsonStr = substr($displayMsg, 6, -1);
+                $callData = json_decode($jsonStr, true);
+                if (is_array($callData)) {
+                    if (($callData['type'] ?? '') === 'missed') {
+                        $displayMsg = '📵 Missed Call';
+                    } elseif (($callData['type'] ?? '') === 'voice') {
+                        $dur = (int) ($callData['duration'] ?? 0);
+                        $mins = floor($dur / 60);
+                        $secs = $dur % 60;
+                        $timeStr = $mins > 0 ? "{$mins}m {$secs}s" : "{$secs}s";
+                        $displayMsg = "📞 Voice Call ({$timeStr})";
+                    }
+                }
+            } elseif ($displayMsg && str_starts_with($displayMsg, '[REPLY:')) {
                 $endBracket = strpos($displayMsg, "}]\n");
                 if ($endBracket !== false) {
                     $displayMsg = trim(substr($displayMsg, $endBracket + 3)) ?: 'Replied to message';

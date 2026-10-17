@@ -29,6 +29,26 @@ import {
 
 const cleanMessagePreview = (msg?: string | null): string => {
   if (!msg) return "No messages yet";
+
+  if (msg.startsWith("[CALL:")) {
+    try {
+      const jsonStr = msg.slice(6, -1);
+      const callData = JSON.parse(jsonStr);
+      if (callData.type === "missed") {
+        return "📵 Missed Call";
+      }
+      if (callData.type === "voice") {
+        const dur = Number(callData.duration) || 0;
+        const mins = Math.floor(dur / 60);
+        const secs = dur % 60;
+        const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+        return `📞 Voice Call (${timeStr})`;
+      }
+    } catch {
+      return "📞 Voice Call";
+    }
+  }
+
   const cleaned = msg.replace(/^\[REPLY:[\s\S]*?\]\s*/i, "").trim();
   if (cleaned.includes("EXTENSION PAYMENT RECEIPT")) {
     return "🧾 Extension Receipt Settled";

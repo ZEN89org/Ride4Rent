@@ -1,19 +1,3 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Animated,
-  Dimensions,
-  Modal,
-  Platform,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  Vibration,
-  View,
-} from "react-native";
-import { Image } from "expo-image";
-import { Ionicons } from "@expo/vector-icons";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { Colors } from "@/constants/colors";
 import { FontFamily } from "@/constants/theme";
 import { useAuth } from "@/features/auth/hooks/useAuth";
@@ -31,6 +15,20 @@ import {
   disconnectLiveKitRoom,
   setLiveKitMicrophoneMuted,
 } from "@/services/livekitAudioService";
+import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
+import {
+  Animated,
+  Modal,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  Vibration,
+  View
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 interface CallContextType {
   activeCall: ActiveCallData | null;
@@ -321,10 +319,6 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             <SafeAreaView style={styles.callSafeArea}>
               {/* Header Status Bar */}
               <View style={styles.topHeader}>
-                <View style={styles.secureBadge}>
-                  <Ionicons name="lock-closed" size={12} color="#10B981" />
-                  <Text style={styles.secureText}>Ride4Rent Voice Call</Text>
-                </View>
 
                 {/* Main Call Status */}
                 <Text style={styles.statusLabel}>
