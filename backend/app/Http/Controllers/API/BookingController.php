@@ -475,8 +475,7 @@ class BookingController extends Controller
             'start_mileage' => ['required', 'integer', 'min:0'],
             'start_fuel_level' => ['required', 'integer', 'min:0', 'max:100'],
             'start_inspection_notes' => ['nullable', 'string', 'max:1000'],
-            'start_inspection_photos' => ['nullable', 'array'],
-            'start_inspection_photos.*' => ['string'],
+            'start_inspection_photos' => ['nullable'],
         ]);
 
         $booking = Booking::with(['vehicle', 'renter', 'operator'])->findOrFail($id);
@@ -496,6 +495,15 @@ class BookingController extends Controller
             ], 422);
         }
 
+        $photoPaths = [];
+        if ($request->hasFile('start_inspection_photos')) {
+            foreach ($request->file('start_inspection_photos') as $file) {
+                $photoPaths[] = $file->store('inspections', 'public');
+            }
+        } elseif (isset($validated['start_inspection_photos']) && is_array($validated['start_inspection_photos'])) {
+            $photoPaths = $validated['start_inspection_photos'];
+        }
+
         $now = now();
         $booking->update([
             'status' => 'trip_in_progress',
@@ -503,7 +511,7 @@ class BookingController extends Controller
             'start_mileage' => $validated['start_mileage'],
             'start_fuel_level' => $validated['start_fuel_level'],
             'start_inspection_notes' => $validated['start_inspection_notes'] ?? null,
-            'start_inspection_photos' => $validated['start_inspection_photos'] ?? null,
+            'start_inspection_photos' => !empty($photoPaths) ? $photoPaths : null,
         ]);
 
         Notification::create([
@@ -534,8 +542,7 @@ class BookingController extends Controller
             'late_fee' => ['nullable', 'numeric', 'min:0'],
             'other_charges' => ['nullable', 'numeric', 'min:0'],
             'end_inspection_notes' => ['nullable', 'string', 'max:1000'],
-            'end_inspection_photos' => ['nullable', 'array'],
-            'end_inspection_photos.*' => ['string'],
+            'end_inspection_photos' => ['nullable'],
         ]);
 
         $booking = Booking::with(['vehicle', 'renter', 'operator'])->findOrFail($id);
@@ -573,6 +580,15 @@ class BookingController extends Controller
         }
         $finalAmountDue = max(0, (float) $booking->total_price - $totalPaidSoFar + $additionalTotal);
 
+        $endPhotoPaths = [];
+        if ($request->hasFile('end_inspection_photos')) {
+            foreach ($request->file('end_inspection_photos') as $file) {
+                $endPhotoPaths[] = $file->store('inspections', 'public');
+            }
+        } elseif (isset($validated['end_inspection_photos']) && is_array($validated['end_inspection_photos'])) {
+            $endPhotoPaths = $validated['end_inspection_photos'];
+        }
+
         $booking->update([
             'status' => 'completed',
             'payment_status' => 'paid_full',
@@ -586,7 +602,7 @@ class BookingController extends Controller
             'other_charges' => $otherCharges,
             'final_amount_due' => $finalAmountDue,
             'end_inspection_notes' => $validated['end_inspection_notes'] ?? null,
-            'end_inspection_photos' => $validated['end_inspection_photos'] ?? null,
+            'end_inspection_photos' => !empty($endPhotoPaths) ? $endPhotoPaths : null,
         ]);
 
         // Release vehicle availability count
