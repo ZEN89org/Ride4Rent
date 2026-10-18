@@ -32,16 +32,88 @@ class NotificationController extends Controller
             // Do not block notification feed if reminder check fails
         }
 
+        $sanitizeText = function (?string $text): string {
+            if (empty($text)) {
+                return '';
+            }
+            $clean = $text;
+            if (str_contains($clean, '{"') || str_contains($clean, "{'")) {
+                $clean = preg_replace_callback('/\{[^{}]*?"name"\s*:\s*"([^"]+)"[^{}]*?\}/i', function ($m) {
+                    return $m[1] ?? 'vehicle';
+                }, $clean);
+                $clean = preg_replace('/\{[^{}]+\}/', '', $clean);
+            }
+            // Deduplicate consecutive repeated words (e.g. "Honda Honda" -> "Honda")
+            $clean = preg_replace('/\b(\w+)\s+\1\b/i', '$1', $clean);
+            return preg_replace('/\s{2,}/', ' ', trim($clean));
+        };
+
+        // Auto-heal any legacy notifications containing raw JSON objects, duplicate words, or empty titles
+        try {
+            Notification::where('user_id', $request->user()->id)
+                ->where(function ($q) {
+                    $q->where('message', 'like', '%{%')
+                        ->orWhere('title', 'like', '%{%')
+                        ->orWhere('message', 'like', '%Honda Honda%')
+                        ->orWhere('title', 'like', '%Honda Honda%')
+                        ->orWhereNull('title')
+                        ->orWhere('title', '');
+                })
+                ->get()
+                ->each(function ($notif) use ($sanitizeText) {
+                    $cleanedMsg = $sanitizeText($notif->message);
+                    $cleanedTitle = $sanitizeText($notif->title);
+                    if (empty($cleanedTitle)) {
+                        $lower = strtolower($cleanedMsg);
+                        if (str_contains($lower, "don't miss your trip") || str_contains($lower, 'upcoming trip')) {
+                            $cleanedTitle = 'Upcoming Trip Reminder';
+                        } elseif (str_contains($lower, "don't miss your ride")) {
+                            $cleanedTitle = "Don't Miss Your Ride!";
+                        } elseif (str_contains($lower, 'still interested in')) {
+                            $cleanedTitle = 'Still Interested in Your Ride?';
+                        } elseif (str_contains($lower, 'complete your reservation')) {
+                            $cleanedTitle = 'Complete Your Reservation';
+                        } else {
+                            $cleanedTitle = 'Notification';
+                        }
+                    }
+                    if ($cleanedMsg !== $notif->message || $cleanedTitle !== $notif->title) {
+                        $notif->update([
+                            'message' => $cleanedMsg,
+                            'title' => $cleanedTitle,
+                        ]);
+                    }
+                });
+        } catch (\Throwable $e) {
+            // ignore
+        }
+
         $notifications = Notification::where('user_id', $request->user()->id)
             ->whereNotIn('title', $this->excludedTitles)
             ->latest()
             ->take(50)
             ->get()
-            ->map(function ($notif) {
+            ->map(function ($notif) use ($sanitizeText) {
+                $cleanTitle = $sanitizeText($notif->title);
+                $cleanMessage = $sanitizeText($notif->message);
+
+                if (empty($cleanTitle)) {
+                    $lowerMsg = strtolower($cleanMessage);
+                    if (str_contains($lowerMsg, "don't miss your trip") || str_contains($lowerMsg, 'upcoming trip')) {
+                        $cleanTitle = 'Upcoming Trip Reminder';
+                    } elseif (str_contains($lowerMsg, "don't miss your ride")) {
+                        $cleanTitle = "Don't Miss Your Ride!";
+                    } elseif (str_contains($lowerMsg, 'still interested in')) {
+                        $cleanTitle = 'Still Interested in Your Ride?';
+                    } else {
+                        $cleanTitle = 'Notification';
+                    }
+                }
+
                 return [
                     'id' => (string) $notif->id,
-                    'title' => $notif->title,
-                    'message' => $notif->message,
+                    'title' => $cleanTitle,
+                    'message' => $cleanMessage,
                     'type' => $notif->type,
                     'action_url' => $notif->action_url,
                     'is_read' => $notif->is_read,

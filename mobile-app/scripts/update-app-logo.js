@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { generateImageAsync } = require('@expo/image-utils');
 
-const projectRoot = path.resolve(__dirname, '..');
+const projectRoot = path.dirname(require.resolve('../package.json'));
 const srcLogo = path.join(projectRoot, 'assets', 'images', 'applogo.png');
 
 if (!fs.existsSync(srcLogo)) {

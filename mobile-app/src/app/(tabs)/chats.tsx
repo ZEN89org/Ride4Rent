@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Animated,
   FlatList,
@@ -53,7 +53,10 @@ const cleanMessagePreview = (msg?: string | null): string => {
   if (cleaned.includes("EXTENSION PAYMENT RECEIPT")) {
     return "🧾 Extension Receipt Settled";
   }
-  if (cleaned.includes("PAYMENT RECEIPT") || cleaned.includes("RESERVATION PAYMENT RECEIPT")) {
+  if (
+    cleaned.includes("PAYMENT RECEIPT") ||
+    cleaned.includes("RESERVATION PAYMENT RECEIPT")
+  ) {
     return "🧾 Payment Receipt Settled";
   }
   return cleaned || "Replied to a message";
@@ -129,7 +132,9 @@ function SwipeableConversationRow({
             size={18}
             color={Colors.white}
           />
-          <Text style={styles.swipeActionText}>{isArchived ? "Restore" : "Archive"}</Text>
+          <Text style={styles.swipeActionText}>
+            {isArchived ? "Restore" : "Archive"}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.swipeAction, styles.deleteAction]}
@@ -148,10 +153,17 @@ function SwipeableConversationRow({
         style={[styles.chatRowForeground, { transform: [{ translateX }] }]}
         {...panResponder.panHandlers}
       >
-        <TouchableOpacity style={styles.chatCard} activeOpacity={0.7} onPress={onPress}>
+        <TouchableOpacity
+          style={styles.chatCard}
+          activeOpacity={0.7}
+          onPress={onPress}
+        >
           <View style={styles.avatarWrapper}>
             {item.profile_photo ? (
-              <Image source={{ uri: item.profile_photo }} style={styles.avatarCircle} />
+              <Image
+                source={{ uri: item.profile_photo }}
+                style={styles.avatarCircle}
+              />
             ) : (
               <View style={styles.avatarCircle}>
                 <Ionicons name="business" size={22} color={Colors.dark} />
@@ -170,7 +182,10 @@ function SwipeableConversationRow({
             <Text
               style={[
                 styles.lastMessage,
-                item.unread_count > 0 && { color: Colors.dark, fontFamily: FontFamily.semiBold },
+                item.unread_count > 0 && {
+                  color: Colors.dark,
+                  fontFamily: FontFamily.semiBold,
+                },
               ]}
               numberOfLines={1}
             >
@@ -187,7 +202,9 @@ export default function Chats() {
   const { isGuest } = useAuth();
   const { showSuccess, showError, showModal } = useAppToast();
   const [search, setSearch] = useState("");
-  const [activeFolder, setActiveFolder] = useState<"inbox" | "archived">("inbox");
+  const [activeFolder, setActiveFolder] = useState<"inbox" | "archived">(
+    "inbox",
+  );
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -200,41 +217,39 @@ export default function Chats() {
     } catch (e) {
       console.log("Error loading conversations:", e);
     } finally {
-      if (!silent) setLoading(false);
+      setLoading(false);
       setRefreshing(false);
     }
   }, []);
-
-  useEffect(() => {
-    if (!isGuest) {
-      loadConversations();
-    }
-  }, [isGuest, loadConversations]);
 
   useFocusEffect(
     useCallback(() => {
       if (!isGuest) {
         loadConversations(true);
       }
-    }, [isGuest, loadConversations])
+    }, [isGuest, loadConversations]),
   );
 
   const allOperatorConversations = conversations.filter(
     (conversation) => conversation.role === "operator",
   );
   const operatorConversations = allOperatorConversations.filter(
-    (conversation) => Boolean(conversation.archived) === (activeFolder === "archived"),
+    (conversation) =>
+      Boolean(conversation.archived) === (activeFolder === "archived"),
   );
   const normalizedSearch = search.trim().toLowerCase();
   const filteredChats = operatorConversations.filter(
     (c) =>
       c.name.toLowerCase().includes(normalizedSearch) ||
-      (c.business_name && c.business_name.toLowerCase().includes(normalizedSearch))
+      (c.business_name &&
+        c.business_name.toLowerCase().includes(normalizedSearch)),
   );
 
   const handleOpenChat = (item: ConversationItem) => {
     setConversations((prev) =>
-      prev.map((c) => (c.user_id === item.user_id ? { ...c, unread_count: 0 } : c))
+      prev.map((c) =>
+        c.user_id === item.user_id ? { ...c, unread_count: 0 } : c,
+      ),
     );
     router.push({
       pathname: `/chat/${item.user_id}`,
@@ -256,7 +271,10 @@ export default function Chats() {
       );
       showSuccess("Conversation Archived", "You can find it in Archived.");
     } catch (error: any) {
-      showError("Archive Failed", error.response?.data?.message || "Could not archive this conversation.");
+      showError(
+        "Archive Failed",
+        error.response?.data?.message || "Could not archive this conversation.",
+      );
     }
   };
 
@@ -272,7 +290,10 @@ export default function Chats() {
       );
       showSuccess("Conversation Restored", "It is back in your inbox.");
     } catch (error: any) {
-      showError("Restore Failed", error.response?.data?.message || "Could not restore this conversation.");
+      showError(
+        "Restore Failed",
+        error.response?.data?.message || "Could not restore this conversation.",
+      );
     }
   };
 
@@ -290,11 +311,20 @@ export default function Chats() {
             try {
               await deleteConversation(item.user_id);
               setConversations((current) =>
-                current.filter((conversation) => conversation.user_id !== item.user_id),
+                current.filter(
+                  (conversation) => conversation.user_id !== item.user_id,
+                ),
               );
-              showSuccess("Conversation Removed", "The message history was kept.");
+              showSuccess(
+                "Conversation Removed",
+                "The message history was kept.",
+              );
             } catch (error: any) {
-              showError("Delete Failed", error.response?.data?.message || "Could not remove this conversation.");
+              showError(
+                "Delete Failed",
+                error.response?.data?.message ||
+                  "Could not remove this conversation.",
+              );
             }
           },
         },
@@ -309,12 +339,15 @@ export default function Chats() {
         <View style={styles.container}>
           <View style={styles.header}>
             <Text style={styles.title}>Messages</Text>
-            <Text style={styles.subtitle}>Direct host & operator communications</Text>
+            <Text style={styles.subtitle}>
+              Direct host & operator communications
+            </Text>
           </View>
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyTitle}>Direct Host Messaging</Text>
             <Text style={styles.emptySubtitle}>
-              Sign in to chat directly with verified operators and car rental hosts.
+              Sign in to chat directly with verified operators and car rental
+              hosts.
             </Text>
           </View>
         </View>
@@ -328,7 +361,9 @@ export default function Chats() {
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>Messages</Text>
-          <Text style={styles.subtitle}>Direct host & operator communications</Text>
+          <Text style={styles.subtitle}>
+            Direct host & operator communications
+          </Text>
         </View>
 
         {allOperatorConversations.length > 0 && (
@@ -346,17 +381,27 @@ export default function Chats() {
 
         {allOperatorConversations.length > 0 && (
           <View style={styles.folderTabs}>
-            {([
-              ["inbox", "Inbox"],
-              ["archived", "Archived"],
-            ] as const).map(([folder, label]) => (
+            {(
+              [
+                ["inbox", "Inbox"],
+                ["archived", "Archived"],
+              ] as const
+            ).map(([folder, label]) => (
               <TouchableOpacity
                 key={folder}
-                style={[styles.folderTab, activeFolder === folder && styles.folderTabActive]}
+                style={[
+                  styles.folderTab,
+                  activeFolder === folder && styles.folderTabActive,
+                ]}
                 onPress={() => setActiveFolder(folder)}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.folderTabText, activeFolder === folder && styles.folderTabTextActive]}>
+                <Text
+                  style={[
+                    styles.folderTabText,
+                    activeFolder === folder && styles.folderTabTextActive,
+                  ]}
+                >
                   {label}
                 </Text>
               </TouchableOpacity>
@@ -368,7 +413,8 @@ export default function Chats() {
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyTitle}>No Conversations Yet</Text>
             <Text style={styles.emptySubtitle}>
-              Contact a vehicle operator or send an inquiry, and your conversations will appear here.
+              Contact a vehicle operator or send an inquiry, and your
+              conversations will appear here.
             </Text>
           </View>
         ) : (
@@ -385,35 +431,35 @@ export default function Chats() {
                   loadConversations();
                 }}
                 colors={[Colors.primary]}
-                />
+              />
             }
             renderItem={({ item }) => (
-                <SwipeableConversationRow
-                  item={item}
-                  isArchived={activeFolder === "archived"}
-                  onPress={() => handleOpenChat(item)}
-                  onArchive={() => handleArchiveConversation(item)}
-                  onRestore={() => handleRestoreConversation(item)}
-                  onDelete={() => handleDeleteConversation(item)}
-                />
+              <SwipeableConversationRow
+                item={item}
+                isArchived={activeFolder === "archived"}
+                onPress={() => handleOpenChat(item)}
+                onArchive={() => handleArchiveConversation(item)}
+                onRestore={() => handleRestoreConversation(item)}
+                onDelete={() => handleDeleteConversation(item)}
+              />
             )}
             ListEmptyComponent={
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyTitle}>
-                    {normalizedSearch
-                      ? "No Operators Found"
-                      : activeFolder === "archived"
-                        ? "No Archived Conversations"
-                        : "No Conversations in Inbox"}
-                  </Text>
-                  <Text style={styles.emptySubtitle}>
-                    {normalizedSearch
-                      ? `No conversations match “${search.trim()}”.`
-                      : activeFolder === "archived"
-                        ? "Conversations you archive will appear here."
-                        : "Your archived conversations are still available in Archived."}
-                  </Text>
-                </View>
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyTitle}>
+                  {normalizedSearch
+                    ? "No Operators Found"
+                    : activeFolder === "archived"
+                      ? "No Archived Conversations"
+                      : "No Conversations in Inbox"}
+                </Text>
+                <Text style={styles.emptySubtitle}>
+                  {normalizedSearch
+                    ? `No conversations match “${search.trim()}”.`
+                    : activeFolder === "archived"
+                      ? "Conversations you archive will appear here."
+                      : "Your archived conversations are still available in Archived."}
+                </Text>
+              </View>
             }
           />
         )}

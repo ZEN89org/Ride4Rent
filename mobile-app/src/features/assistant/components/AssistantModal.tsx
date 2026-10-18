@@ -1,21 +1,8 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Colors } from "@/constants/colors";
@@ -55,64 +42,138 @@ const INITIAL_MESSAGE: MessageItem = {
     "Show available SUVs",
     "Ano ang reservation fee policy?",
   ],
-  timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+  timestamp: new Date().toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  }),
 };
 
-export default function AssistantModal({ visible, onClose, initialPrompt }: Props) {
-  const [messages, setMessages] = useState<MessageItem[]>([INITIAL_MESSAGE]);
+const userMessage = (text: string): MessageItem => ({
+  id: Date.now().toString(),
+  sender: "user",
+  text,
+  timestamp: new Date().toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  }),
+});
+const assistantMessage = (text: string): MessageItem => ({
+  id: (Date.now() + 1).toString(),
+  sender: "assistant",
+  text,
+  timestamp: new Date().toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  }),
+});
+
+export default function AssistantModal(props: Props) {
+  return <AssistantSession key={props.initialPrompt || "general"} {...props} />;
+}
+
+function AssistantSession({ visible, onClose, initialPrompt }: Props) {
+  const [messages, setMessages] = useState<MessageItem[]>(() =>
+    initialPrompt
+      ? [INITIAL_MESSAGE, userMessage(initialPrompt)]
+      : [INITIAL_MESSAGE],
+  );
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [requestLoading, setLoading] = useState(false);
+  const [initialPromptDone, setInitialPromptDone] = useState(false);
+  const loading =
+    requestLoading || Boolean(visible && initialPrompt && !initialPromptDone);
   const flatListRef = useRef<FlatList>(null);
 
-  useEffect(() => {
-    if (visible && initialPrompt) {
-      handleSend(initialPrompt);
-    }
-  }, [visible, initialPrompt]);
+  const handleSend = useCallback(
+    async (textToSend?: string) => {
+      const query = (textToSend || input).trim();
+      if (!query || loading) return;
 
-  const handleSend = async (textToSend?: string) => {
-    const query = (textToSend || input).trim();
-    if (!query || loading) return;
+      const userMsg: MessageItem = {
+        id: Date.now().toString(),
+        sender: "user",
+        text: query,
+        timestamp: new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      };
 
-    const userMsg: MessageItem = {
-      id: Date.now().toString(),
-      sender: "user",
-      text: query,
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    };
+      setMessages((prev) => [...prev, userMsg]);
+      setInput("");
+      setLoading(true);
 
-    setMessages((prev) => [...prev, userMsg]);
-    setInput("");
-    setLoading(true);
-
-    try {
-      const res = await sendAssistantMessage(query);
-      if (res && res.reply) {
-        const assistantMsg: MessageItem = {
+      try {
+        const res = await sendAssistantMessage(query);
+        if (res && res.reply) {
+          const assistantMsg: MessageItem = {
+            id: (Date.now() + 1).toString(),
+            sender: "assistant",
+            text: cleanAssistantText(res.reply),
+            vehicles: res.vehicles,
+            quickReplies: res.quick_replies?.map((qr) =>
+              cleanAssistantText(qr),
+            ),
+            timestamp: new Date().toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          };
+          setMessages((prev) => [...prev, assistantMsg]);
+        } else {
+          throw new Error("Invalid response");
+        }
+      } catch (err: any) {
+        console.warn("Assistant Error:", err?.response?.data || err?.message);
+        const errorMsg: MessageItem = {
           id: (Date.now() + 1).toString(),
           sender: "assistant",
-          text: cleanAssistantText(res.reply),
-          vehicles: res.vehicles,
-          quickReplies: res.quick_replies?.map((qr) => cleanAssistantText(qr)),
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          text: "I'm having trouble connecting to the server. Please check that the backend is running and try again.",
+          timestamp: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
         };
-        setMessages((prev) => [...prev, assistantMsg]);
-      } else {
-        throw new Error("Invalid response");
+        setMessages((prev) => [...prev, errorMsg]);
+      } finally {
+        setLoading(false);
       }
-    } catch (err: any) {
-      console.warn("Assistant Error:", err?.response?.data || err?.message);
-      const errorMsg: MessageItem = {
-        id: (Date.now() + 1).toString(),
-        sender: "assistant",
-        text: "I'm having trouble connecting to the server. Please check that the backend is running and try again.",
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      };
-      setMessages((prev) => [...prev, errorMsg]);
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    [input, loading],
+  );
+
+  useEffect(() => {
+    if (!visible || !initialPrompt || initialPromptDone) return;
+    let active = true;
+    sendAssistantMessage(initialPrompt)
+      .then((response) => {
+        if (!response?.reply) throw new Error("Invalid response");
+        if (active)
+          setMessages((previous) => [
+            ...previous,
+            {
+              ...assistantMessage(cleanAssistantText(response.reply)),
+              vehicles: response.vehicles,
+              quickReplies: response.quick_replies?.map(cleanAssistantText),
+            },
+          ]);
+      })
+      .catch(() => {
+        if (active)
+          setMessages((previous) => [
+            ...previous,
+            assistantMessage(
+              "I'm having trouble connecting to the server. Please try again.",
+            ),
+          ]);
+      })
+      .finally(() => {
+        if (active) setInitialPromptDone(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [visible, initialPrompt, initialPromptDone]);
 
   const handleVehiclePress = (vehicle: AssistantVehicle) => {
     onClose();
@@ -147,7 +208,9 @@ export default function AssistantModal({ visible, onClose, initialPrompt }: Prop
                 <Text style={styles.headerTitle}>Ride4Rent AI Assistant</Text>
                 <View style={styles.statusRow}>
                   <View style={styles.onlineDot} />
-                  <Text style={styles.headerStatus}>Online & Ready to Help</Text>
+                  <Text style={styles.headerStatus}>
+                    Online & Ready to Help
+                  </Text>
                 </View>
               </View>
             </View>
@@ -190,7 +253,9 @@ export default function AssistantModal({ visible, onClose, initialPrompt }: Prop
                 <View
                   style={[
                     styles.bubble,
-                    item.sender === "user" ? styles.userBubble : styles.assistantBubble,
+                    item.sender === "user"
+                      ? styles.userBubble
+                      : styles.assistantBubble,
                   ]}
                 >
                   <Text
@@ -218,7 +283,9 @@ export default function AssistantModal({ visible, onClose, initialPrompt }: Prop
                             source={
                               v.image_url
                                 ? { uri: v.image_url }
-                                : { uri: "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800" }
+                                : {
+                                    uri: "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800",
+                                  }
                             }
                             contentFit="cover"
                             style={styles.vehicleThumb}
@@ -252,7 +319,9 @@ export default function AssistantModal({ visible, onClose, initialPrompt }: Prop
                   <Text
                     style={[
                       styles.timeText,
-                      item.sender === "user" ? styles.userTime : styles.assistantTime,
+                      item.sender === "user"
+                        ? styles.userTime
+                        : styles.assistantTime,
                     ]}
                   >
                     {item.timestamp}
@@ -282,7 +351,7 @@ export default function AssistantModal({ visible, onClose, initialPrompt }: Prop
                       >
                         <Text style={styles.chipText}>{qr}</Text>
                       </TouchableOpacity>
-                    )
+                    ),
                   )}
                 </ScrollView>
               </View>
@@ -292,7 +361,9 @@ export default function AssistantModal({ visible, onClose, initialPrompt }: Prop
           {loading && (
             <View style={styles.loadingRow}>
               <ActivityIndicator size="small" color={Colors.primary} />
-              <Text style={styles.loadingText}>AI Assistant is thinking...</Text>
+              <Text style={styles.loadingText}>
+                AI Assistant is thinking...
+              </Text>
             </View>
           )}
 

@@ -87,3 +87,22 @@ export const getOperatorFleet = async (
     vehicles: response.data.data,
   };
 };
+
+export const updateVehicle = async (
+  id: number | string,
+  data: Partial<{
+    name: string;
+    daily_rate: number;
+    reservation_fee: number;
+    availability_status: "available" | "unavailable" | "maintenance";
+    description?: string;
+  }>
+): Promise<Vehicle> => {
+  const response = await api.put(`/operator/vehicles/${id}`, data);
+  return response.data.data;
+};
+
+export const deleteVehicle = async (id: number | string): Promise<boolean> => {
+  const response = await api.delete(`/operator/vehicles/${id}`);
+  return response.data.success;
+};

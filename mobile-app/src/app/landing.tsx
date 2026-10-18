@@ -13,7 +13,7 @@ export default function Landing() {
 
 const handleResetFirstLaunch = async () => {
   await resetFirstLaunch();
-  router.dismissAll();
+  if (router.canDismiss()) router.dismissAll();
   router.replace("/");
 };
 

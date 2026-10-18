@@ -22,7 +22,7 @@ class DemandPricingService
             $q->where('municipality', $municipality);
         })->where(function ($q) {
             $q->where('availability_status', 'available')
-              ->orWhereNull('availability_status');
+                ->orWhereNull('availability_status');
         })->count();
 
         $totalAreaVehicles = max(1, $totalAreaVehicles);
@@ -30,9 +30,9 @@ class DemandPricingService
         $activeBookingsCount = Booking::whereHas('vehicle.operator.operatorProfile', function ($q) use ($municipality) {
             $q->where('municipality', $municipality);
         })
-        ->whereIn('status', ['pending_verification', 'approved', 'ongoing'])
-        ->where('end_date', '>=', now()->toDateString())
-        ->count();
+            ->whereIn('status', Booking::ACTIVE_STATUSES)
+            ->where('end_date', '>=', now()->toDateString())
+            ->count();
 
         $occupancyRate = min(1.0, $activeBookingsCount / $totalAreaVehicles);
 
@@ -76,21 +76,21 @@ class DemandPricingService
         } elseif ($multiplier <= 0.95) {
             $demandLevel = 'Special Rate';
             $demandBadge = 'Best Value';
-            $description = "Competitive rate to attract fast bookings.";
+            $description = 'Competitive rate to attract fast bookings.';
         } else {
             $demandLevel = 'Normal';
             $demandBadge = 'Standard Rate';
-            $description = "Standard seasonal rate.";
+            $description = 'Standard seasonal rate.';
         }
 
         return [
             'base_price' => $basePrice,
             'demand_multiplier' => $multiplier,
             'dynamic_price' => $dynamicPrice,
-            'effective_price' => $vehicle->is_dynamic_pricing_enabled ? $dynamicPrice : (float) $vehicle->price_per_day,
+            'effective_price' => $vehicle->is_dynamic_pricing_enabled ? $dynamicPrice : (float) $vehicle->daily_rate,
             'demand_level' => $demandLevel,
             'demand_badge' => $demandBadge,
-            'occupancy_rate' => round($occupancyRate * 100, 1) . '%',
+            'occupancy_rate' => round($occupancyRate * 100, 1).'%',
             'is_dynamic_pricing_enabled' => (bool) $vehicle->is_dynamic_pricing_enabled,
             'reason' => $description,
         ];

@@ -11,11 +11,7 @@ import {
 } from "react-native";
 
 import { Colors } from "@/constants/colors";
-import {
-  FontFamily,
-  FontSize,
-  Spacing,
-} from "@/constants/theme";
+import { FontFamily, Spacing } from "@/constants/theme";
 import { resolveImageUrl } from "@/services/api";
 
 interface Vehicle {

@@ -5,11 +5,11 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Notification;
+use App\Models\PlatformSetting;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 
 class OperatorController extends Controller
 {
@@ -44,7 +44,7 @@ class OperatorController extends Controller
         $requestedMonth = $request->query('month'); // format: 'YYYY-MM'
 
         if ($requestedMonth && preg_match('/^\d{4}-\d{2}$/', $requestedMonth)) {
-            $cycleStart = Carbon::createFromFormat('Y-m-d', $requestedMonth . '-01', 'Asia/Manila')->startOfMonth();
+            $cycleStart = Carbon::createFromFormat('Y-m-d', $requestedMonth.'-01', 'Asia/Manila')->startOfMonth();
             $cycleEnd = $cycleStart->copy()->endOfMonth();
         } else {
             $cycleStart = $now->copy()->startOfMonth();
@@ -55,7 +55,7 @@ class OperatorController extends Controller
         $isCurrentMonth = ($requestedMonth === $now->format('Y-m'));
         $daysRemaining = $isCurrentMonth ? max(0, (int) $now->diffInDays($cycleEnd, false)) : 0;
 
-        $commissionPercent = (float) env('PLATFORM_COMMISSION_PERCENT', 10.0);
+        $commissionPercent = (float) PlatformSetting::get('platform_fee_percent', env('PLATFORM_COMMISSION_PERCENT', 10.0));
 
         // Fetch completed bookings for this operator within this month cycle
         $completedBookings = Booking::with(['vehicle', 'renter'])
@@ -63,10 +63,10 @@ class OperatorController extends Controller
             ->where('status', 'completed')
             ->where(function ($q) use ($cycleStart, $cycleEnd) {
                 $q->whereBetween('actual_end_time', [$cycleStart, $cycleEnd])
-                  ->orWhere(function ($sub) use ($cycleStart, $cycleEnd) {
-                      $sub->whereNull('actual_end_time')
-                          ->whereBetween('updated_at', [$cycleStart, $cycleEnd]);
-                  });
+                    ->orWhere(function ($sub) use ($cycleStart, $cycleEnd) {
+                        $sub->whereNull('actual_end_time')
+                            ->whereBetween('updated_at', [$cycleStart, $cycleEnd]);
+                    });
             })
             ->latest()
             ->get();
@@ -77,10 +77,10 @@ class OperatorController extends Controller
 
         foreach ($completedBookings as $b) {
             $basePrice = (float) $b->total_price;
-            $surcharges = (float)($b->fuel_charge ?? 0)
-                + (float)($b->damage_charge ?? 0)
-                + (float)($b->late_fee ?? 0)
-                + (float)($b->other_charges ?? 0);
+            $surcharges = (float) ($b->fuel_charge ?? 0)
+                + (float) ($b->damage_charge ?? 0)
+                + (float) ($b->late_fee ?? 0)
+                + (float) ($b->other_charges ?? 0);
 
             $bookingGross = $basePrice + $surcharges;
             $bookingCommission = round($bookingGross * ($commissionPercent / 100), 2);
@@ -89,7 +89,7 @@ class OperatorController extends Controller
             $grossRevenue += $bookingGross;
             $totalSurcharges += $surcharges;
 
-            $renterName = trim(($b->renter?->first_name ?? '') . ' ' . ($b->renter?->last_name ?? '')) ?: 'Customer';
+            $renterName = trim(($b->renter?->first_name ?? '').' '.($b->renter?->last_name ?? '')) ?: 'Customer';
             $vehicleName = $b->vehicle?->name ?? 'Vehicle';
 
             $completedDate = $b->actual_end_time
@@ -98,7 +98,7 @@ class OperatorController extends Controller
 
             $bookingsList[] = [
                 'id' => $b->id,
-                'booking_code' => '#' . $b->id,
+                'booking_code' => '#'.$b->id,
                 'vehicle_name' => $vehicleName,
                 'renter_name' => $renterName,
                 'start_date' => $b->start_date ? $b->start_date->format('Y-m-d') : null,
@@ -149,7 +149,7 @@ class OperatorController extends Controller
             ];
         }
 
-        if (!$hasCurrentInMonths) {
+        if (! $hasCurrentInMonths) {
             array_unshift($availableMonths, [
                 'month' => $now->format('Y-m'),
                 'label' => $now->format('F Y'),
@@ -186,7 +186,7 @@ class OperatorController extends Controller
         $user = $request->user()->load('operatorProfile');
         $profile = $user->operatorProfile;
 
-        if (!$profile) {
+        if (! $profile) {
             return response()->json([
                 'success' => false,
                 'message' => 'Operator profile not found.',
@@ -203,16 +203,16 @@ class OperatorController extends Controller
 
         $updates = [];
         if ($request->hasFile('business_permit_front')) {
-            $updates['business_permit_front'] = $request->file('business_permit_front')->store('operator_documents', 'public');
+            $updates['business_permit_front'] = $request->file('business_permit_front')->store('operator_documents', 'local');
         }
         if ($request->hasFile('business_permit_back')) {
-            $updates['business_permit_back'] = $request->file('business_permit_back')->store('operator_documents', 'public');
+            $updates['business_permit_back'] = $request->file('business_permit_back')->store('operator_documents', 'local');
         }
         if ($request->hasFile('government_id_front')) {
-            $updates['government_id_front'] = $request->file('government_id_front')->store('operator_documents', 'public');
+            $updates['government_id_front'] = $request->file('government_id_front')->store('operator_documents', 'local');
         }
         if ($request->hasFile('government_id_back')) {
-            $updates['government_id_back'] = $request->file('government_id_back')->store('operator_documents', 'public');
+            $updates['government_id_back'] = $request->file('government_id_back')->store('operator_documents', 'local');
         }
 
         $updates['status'] = 'pending';

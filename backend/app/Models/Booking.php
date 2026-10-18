@@ -10,6 +10,12 @@ class Booking extends Model
 {
     use HasFactory;
 
+    public const ACTIVE_STATUSES = [
+        'pending_verification', 'approved', 'awaiting_pickup',
+        'pickup_in_progress', 'ready_to_start', 'trip_in_progress',
+        'return_pending', 'ongoing',
+    ];
+
     protected $fillable = [
         'renter_id',
         'vehicle_id',
@@ -77,6 +83,9 @@ class Booking extends Model
         'extension_payment_method',
         'extension_payment_reference',
         'extension_requested_at',
+        'extension_notes',
+        'extension_paid_at',
+        'extension_paid_total',
     ];
 
     protected function casts(): array
@@ -86,6 +95,8 @@ class Booking extends Model
             'end_date' => 'date:Y-m-d',
             'extension_end_date' => 'date:Y-m-d',
             'extension_requested_at' => 'datetime',
+            'extension_paid_at' => 'datetime',
+            'extension_paid_total' => 'decimal:2',
             'expires_at' => 'datetime',
             'paid_at' => 'datetime',
             'refunded_at' => 'datetime',
@@ -123,13 +134,13 @@ class Booking extends Model
     {
         $op = $this->operator ?: ($this->vehicle?->operator);
         $profile = $op?->operatorProfile;
-        if (!$profile) {
+        if (! $profile) {
             return null;
         }
 
         return [
             'business_name' => $profile->business_name,
-            'account_name' => $profile->account_name ?: trim(($op->first_name ?? '') . ' ' . ($op->last_name ?? '')) ?: ($op->name ?? 'Host'),
+            'account_name' => $profile->account_name ?: trim(($op->first_name ?? '').' '.($op->last_name ?? '')) ?: ($op->name ?? 'Host'),
             'account_number' => $profile->account_number ?: ($profile->business_contact_number ?? $op->phone_number ?? ''),
             'accepted_payment_methods' => $profile->accepted_payment_methods ?: ['cash', 'gcash', 'maya'],
             'qr_code_url' => Vehicle::resolveStorageUrl($profile->qr_code),

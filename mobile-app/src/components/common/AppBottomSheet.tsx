@@ -1,4 +1,11 @@
-import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Animated,
   Dimensions,
@@ -67,16 +74,18 @@ export function AppBottomSheet({
 }: AppBottomSheetProps) {
   const insets = useSafeAreaInsets();
   const [mounted, setMounted] = useState(visible);
+  // A newly opened sheet must render before its entry animation can run.
+  if (visible && !mounted) setMounted(true);
 
-  const backdropOpacity = useRef(new Animated.Value(0)).current;
-  const sheetTranslateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
-  const sheetScale = useRef(new Animated.Value(0.94)).current;
-  const sheetOpacity = useRef(new Animated.Value(0)).current;
+  const backdropOpacity = useState(() => new Animated.Value(0))[0];
+  const sheetTranslateY = useState(() => new Animated.Value(SCREEN_HEIGHT))[0];
+  const sheetScale = useState(() => new Animated.Value(0.94))[0];
+  const sheetOpacity = useState(() => new Animated.Value(0))[0];
 
   const onClosedRef = useRef(onClosed);
-  onClosedRef.current = onClosed;
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useEffect(() => {
+    onClosedRef.current = onClosed;
+  }, [onClosed]);
 
   const closeWithAnimation = useCallback(() => {
     Animated.parallel([
@@ -117,7 +126,6 @@ export function AppBottomSheet({
 
   useEffect(() => {
     if (visible) {
-      setMounted(true);
       sheetTranslateY.setValue(SCREEN_HEIGHT);
       sheetScale.setValue(0.94);
       sheetOpacity.setValue(0);
@@ -155,13 +163,23 @@ export function AppBottomSheet({
     } else if (mounted) {
       closeWithAnimation();
     }
-  }, [visible, mounted, backdropOpacity, sheetTranslateY, sheetScale, sheetOpacity, position, closeWithAnimation]);
+  }, [
+    visible,
+    mounted,
+    backdropOpacity,
+    sheetTranslateY,
+    sheetScale,
+    sheetOpacity,
+    position,
+    closeWithAnimation,
+  ]);
 
   const panResponder = useMemo(
     () =>
       position === "bottom"
         ? PanResponder.create({
-            onMoveShouldSetPanResponder: (_, gestureState) => gestureState.dy > 5,
+            onMoveShouldSetPanResponder: (_, gestureState) =>
+              gestureState.dy > 5,
             onPanResponderMove: (_, gestureState) => {
               if (gestureState.dy > 0) {
                 sheetTranslateY.setValue(gestureState.dy);
@@ -169,7 +187,7 @@ export function AppBottomSheet({
             },
             onPanResponderRelease: (_, gestureState) => {
               if (gestureState.dy > 100 || gestureState.vy > 0.8) {
-                onCloseRef.current?.();
+                onClose();
               } else {
                 Animated.spring(sheetTranslateY, {
                   toValue: 0,
@@ -181,7 +199,7 @@ export function AppBottomSheet({
             },
           })
         : null,
-    [position, sheetTranslateY]
+    [position, sheetTranslateY, onClose],
   );
 
   if (!mounted) {
@@ -232,7 +250,10 @@ export function AppBottomSheet({
         >
           {/* Grab handle for bottom sheet with touch responder */}
           {showHandle && position === "bottom" ? (
-            <View style={styles.handleContainer} {...(panResponder ? panResponder.panHandlers : {})}>
+            <View
+              style={styles.handleContainer}
+              {...(panResponder ? panResponder.panHandlers : {})}
+            >
               <View style={styles.handle} />
             </View>
           ) : null}
@@ -246,7 +267,10 @@ export function AppBottomSheet({
 
   if (renderAsOverlay) {
     return (
-      <View style={[StyleSheet.absoluteFill, { zIndex: 9999, elevation: 9999 }]} pointerEvents="box-none">
+      <View
+        style={[StyleSheet.absoluteFill, { zIndex: 9999, elevation: 9999 }]}
+        pointerEvents="box-none"
+      >
         {sheetContent}
       </View>
     );

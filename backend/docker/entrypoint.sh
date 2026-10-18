@@ -54,9 +54,16 @@ if [ -f "database/data_dump.json" ] && [ "$SEED_PRODUCTION_DATA" = "true" ]; the
     php artisan db:seed --class="Database\\Seeders\\ProductionDataSeeder" --force || true
 fi
 
+# Restore historical public photos and populate their durable database backup.
+php artisan storage:recover-public || echo "WARNING: Public image recovery failed; check database connectivity and stored_files migration."
+chown -R www-data:www-data storage
+
 # Ensure strictly only mpm_prefork is active for PHP
 rm -f /etc/apache2/mods-enabled/mpm_event.* /etc/apache2/mods-enabled/mpm_worker.* 2>/dev/null || true
 a2enmod mpm_prefork 2>/dev/null || true
+
+# Run scheduled expirations and reminders even when no app is polling.
+php artisan schedule:work > storage/logs/scheduler.log 2>&1 &
 
 echo "Starting Apache on port ${PORT} (and 80/8080)..."
 exec apache2-foreground

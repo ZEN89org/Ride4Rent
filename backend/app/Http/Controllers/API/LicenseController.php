@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
+use App\Models\Notification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -17,7 +18,7 @@ class LicenseController extends Controller
                     $file = request()->file($attribute);
                     $ext = strtolower($file->getClientOriginalExtension() ?: '');
                     $mime = $file->getMimeType() ?: '';
-                    if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'heic']) && !str_starts_with($mime, 'image/')) {
+                    if (! in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'heic']) && ! str_starts_with($mime, 'image/')) {
                         $fail("The {$attribute} must be a valid image file.");
                     }
                 }
@@ -27,7 +28,7 @@ class LicenseController extends Controller
                     $file = request()->file($attribute);
                     $ext = strtolower($file->getClientOriginalExtension() ?: '');
                     $mime = $file->getMimeType() ?: '';
-                    if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'heic']) && !str_starts_with($mime, 'image/')) {
+                    if (! in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'heic']) && ! str_starts_with($mime, 'image/')) {
                         $fail("The {$attribute} must be a valid image file.");
                     }
                 }
@@ -44,12 +45,12 @@ class LicenseController extends Controller
         }
 
         if ($request->hasFile('front_image')) {
-            $frontPath = $request->file('front_image')->store('driver_licenses', 'public');
+            $frontPath = $request->file('front_image')->store('driver_licenses', 'local');
             $user->drivers_license_front = $frontPath;
         }
 
         if ($request->hasFile('back_image')) {
-            $backPath = $request->file('back_image')->store('driver_licenses', 'public');
+            $backPath = $request->file('back_image')->store('driver_licenses', 'local');
             $user->drivers_license_back = $backPath;
         }
 
@@ -67,9 +68,9 @@ class LicenseController extends Controller
         $user->save();
 
         // Create in-app notification for the renter
-        \App\Models\Notification::create([
+        Notification::create([
             'user_id' => $user->id,
-            'title' => "License Uploaded",
+            'title' => 'License Uploaded',
             'message' => "Your driver's license was uploaded for verification.",
             'type' => 'info',
             'action_url' => '/driver-license',
@@ -77,7 +78,7 @@ class LicenseController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => "Driver's license uploaded successfully. It will be verified by your host when booking.",
+            'message' => "Driver's license uploaded successfully. An administrator will review your documents.",
             'data' => new UserResource($user),
         ]);
     }

@@ -20,11 +20,21 @@ import AuthRequiredBottomSheet from "@/features/auth/components/AuthRequiredBott
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { getAvailableVehicles } from "@/features/operator/services/vehicleService";
 import { Vehicle } from "@/features/operator/types/vehicle";
-import NearVehicleCard, { NearVehicleItem } from "@/features/renter/components/home/NearVehicleCard";
+import NearVehicleCard, {
+  NearVehicleItem,
+} from "@/features/renter/components/home/NearVehicleCard";
 
 import { matchesVehicleSearch } from "@/utils/vehicleSearch";
 
-const CATEGORIES = ["All", "Sedan", "SUV", "Van", "Hatchback", "Automatic", "Manual"];
+const CATEGORIES = [
+  "All",
+  "Sedan",
+  "SUV",
+  "Van",
+  "Hatchback",
+  "Automatic",
+  "Manual",
+];
 const PRICE_SORTS = ["Default", "Price: Low to High", "Price: High to Low"];
 const ITEMS_PER_PAGE = 15;
 
@@ -34,39 +44,43 @@ export default function Search() {
   const { isFavorite, toggleFavorite } = useFavorites();
 
   const [showAuthSheet, setShowAuthSheet] = useState(false);
-  const [searchQuery, setSearchQuery] = useState(params.query || "");
+  const [searchState, setSearchState] = useState({
+    source: params.query,
+    value: params.query || "",
+  });
+  const searchQuery =
+    searchState.source === params.query
+      ? searchState.value
+      : params.query || "";
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [sortOption, setSortOption] = useState("Default");
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const flatListRef = React.useRef<FlatList>(null);
-
-  useEffect(() => {
-    if (params.query) {
-      setSearchQuery(params.query);
-    }
-  }, [params.query]);
-
-  useEffect(() => {
-    loadVehicles();
-  }, []);
-
-  useEffect(() => {
+  if (searchState.source !== params.query) {
+    setSearchState({ source: params.query, value: params.query || "" });
     setCurrentPage(1);
-  }, [searchQuery, selectedCategory, sortOption]);
-
-  const loadVehicles = async () => {
-    try {
-      setLoading(true);
-      const data = await getAvailableVehicles();
-      setVehicles(data);
-    } catch (e) {
-      console.error("Failed to load search vehicles", e);
-    } finally {
-      setLoading(false);
-    }
+  }
+  const setSearchQuery = (value: string) => {
+    setSearchState({ source: params.query, value });
+    setCurrentPage(1);
   };
+
+  useEffect(() => {
+    let active = true;
+    getAvailableVehicles()
+      .then((data) => {
+        if (active) setVehicles(data);
+      })
+      .catch((error) => console.error("Failed to load search vehicles", error))
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   let filteredVehicles = vehicles.filter((v) => {
     const matchesQuery = matchesVehicleSearch(v, searchQuery);
@@ -84,15 +98,19 @@ export default function Search() {
   });
 
   if (sortOption === "Price: Low to High") {
-    filteredVehicles = [...filteredVehicles].sort((a, b) => Number(a.price_per_day) - Number(b.price_per_day));
+    filteredVehicles = [...filteredVehicles].sort(
+      (a, b) => Number(a.price_per_day) - Number(b.price_per_day),
+    );
   } else if (sortOption === "Price: High to Low") {
-    filteredVehicles = [...filteredVehicles].sort((a, b) => Number(b.price_per_day) - Number(a.price_per_day));
+    filteredVehicles = [...filteredVehicles].sort(
+      (a, b) => Number(b.price_per_day) - Number(a.price_per_day),
+    );
   }
 
   const totalItems = filteredVehicles.length;
   const paginatedVehicles = filteredVehicles.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
+    currentPage * ITEMS_PER_PAGE,
   );
 
   const handleViewVehicle = (vehicle: NearVehicleItem) => {
@@ -112,7 +130,9 @@ export default function Search() {
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>Find Your Ride</Text>
-          <Text style={styles.subtitle}>Search available vehicles for your next trip.</Text>
+          <Text style={styles.subtitle}>
+            Search available vehicles for your next trip.
+          </Text>
         </View>
 
         {/* Modern Search Bar */}
@@ -127,8 +147,15 @@ export default function Search() {
             returnKeyType="search"
           />
           {searchQuery ? (
-            <TouchableOpacity onPress={() => setSearchQuery("")} activeOpacity={0.7}>
-              <Ionicons name="close-circle" size={18} color={Colors.secondary} />
+            <TouchableOpacity
+              onPress={() => setSearchQuery("")}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name="close-circle"
+                size={18}
+                color={Colors.secondary}
+              />
             </TouchableOpacity>
           ) : null}
         </View>
@@ -145,8 +172,14 @@ export default function Search() {
               const isSelected = selectedCategory === item;
               return (
                 <TouchableOpacity
-                  style={[styles.categoryPill, isSelected && styles.categoryPillActive]}
-                  onPress={() => setSelectedCategory(item)}
+                  style={[
+                    styles.categoryPill,
+                    isSelected && styles.categoryPillActive,
+                  ]}
+                  onPress={() => {
+                    setSelectedCategory(item);
+                    setCurrentPage(1);
+                  }}
                   activeOpacity={0.7}
                 >
                   <Text
@@ -166,14 +199,17 @@ export default function Search() {
         {/* Results Count & Quick Sort Filter */}
         <View style={styles.resultsHeader}>
           <Text style={styles.resultsCount}>
-            {filteredVehicles.length} {filteredVehicles.length === 1 ? "Vehicle" : "Vehicles"} Available
+            {filteredVehicles.length}{" "}
+            {filteredVehicles.length === 1 ? "Vehicle" : "Vehicles"} Available
           </Text>
 
           <TouchableOpacity
             style={styles.sortButton}
             onPress={() => {
-              const nextIndex = (PRICE_SORTS.indexOf(sortOption) + 1) % PRICE_SORTS.length;
+              const nextIndex =
+                (PRICE_SORTS.indexOf(sortOption) + 1) % PRICE_SORTS.length;
               setSortOption(PRICE_SORTS[nextIndex]);
+              setCurrentPage(1);
             }}
             activeOpacity={0.7}
           >
@@ -191,7 +227,8 @@ export default function Search() {
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyTitle}>No Vehicles Found</Text>
             <Text style={styles.emptySubtitle}>
-              Try searching with different terms or selecting another category filter.
+              Try searching with different terms or selecting another category
+              filter.
             </Text>
           </View>
         ) : (
@@ -209,7 +246,10 @@ export default function Search() {
                 itemName="vehicles"
                 onPageChange={(page) => {
                   setCurrentPage(page);
-                  flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+                  flatListRef.current?.scrollToOffset({
+                    offset: 0,
+                    animated: true,
+                  });
                 }}
               />
             }
@@ -219,9 +259,16 @@ export default function Search() {
                 name: item.name,
                 image: item.image_url
                   ? { uri: item.image_url }
-                  : { uri: "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=60" },
+                  : {
+                      uri: "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=60",
+                    },
                 pricePerDay: Number(item.price_per_day),
-                rating: (Number(item.rating_count || 0) > 0 && item.rating !== null && item.rating !== undefined) ? Number(item.rating) : 0,
+                rating:
+                  Number(item.rating_count || 0) > 0 &&
+                  item.rating !== null &&
+                  item.rating !== undefined
+                    ? Number(item.rating)
+                    : 0,
                 ratingCount: Number(item.rating_count || 0),
                 distance_km: item.distance_km,
                 seats: item.seats ?? undefined,

@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\AdminWebController;
+use App\Http\Controllers\PrivateDocumentController;
+use App\Services\PrivateDocumentService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
@@ -10,9 +12,12 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+Route::get('/documents/{path}', [PrivateDocumentController::class, 'show'])->where('path', '.*')->name('documents.show');
+
 // Fallback route to serve public storage files and auto-restore from PostgreSQL if the container redeployed
 Route::get('/storage/{path}', function (string $path) {
     $cleanPath = ltrim(preg_replace('#^/?storage/#', '', $path), '/');
+    abort_if(str_contains($cleanPath, '..') || str_contains($cleanPath, '\\') || PrivateDocumentService::isPrivate($cleanPath), 403);
     $disk = Storage::disk('public');
 
     if ($disk->exists($cleanPath)) {
@@ -36,7 +41,7 @@ Route::get('/storage/{path}', function (string $path) {
                 }
             }
         }
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
         // Ignore DB lookup errors and fall through to 404
     }
 

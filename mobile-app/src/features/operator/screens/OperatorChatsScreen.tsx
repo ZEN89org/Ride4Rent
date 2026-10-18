@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   FlatList,
   Image,
@@ -15,10 +15,7 @@ import {
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";
 import OperatorShell from "@/features/operator/components/navigation/OperatorShell";
-import {
-  ConversationItem,
-  getConversations,
-} from "@/services/messageService";
+import { ConversationItem, getConversations } from "@/services/messageService";
 
 const cleanMessagePreview = (msg?: string | null): string => {
   if (!msg) return "Started a conversation";
@@ -46,7 +43,10 @@ const cleanMessagePreview = (msg?: string | null): string => {
   if (cleaned.includes("EXTENSION PAYMENT RECEIPT")) {
     return "🧾 Extension Receipt Settled";
   }
-  if (cleaned.includes("PAYMENT RECEIPT") || cleaned.includes("RESERVATION PAYMENT RECEIPT")) {
+  if (
+    cleaned.includes("PAYMENT RECEIPT") ||
+    cleaned.includes("RESERVATION PAYMENT RECEIPT")
+  ) {
     return "🧾 Payment Receipt Settled";
   }
   return cleaned || "Replied to a message";
@@ -66,24 +66,22 @@ export default function OperatorChatsScreen() {
     } catch (e) {
       console.log("Error loading operator conversations", e);
     } finally {
-      if (!silent) setLoading(false);
+      setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
-  useEffect(() => {
-    loadOperatorChats();
-  }, [loadOperatorChats]);
-
   useFocusEffect(
     useCallback(() => {
       loadOperatorChats(true);
-    }, [loadOperatorChats])
+    }, [loadOperatorChats]),
   );
 
   const handleOpenThread = (item: ConversationItem) => {
     setConversations((prev) =>
-      prev.map((c) => (c.user_id === item.user_id ? { ...c, unread_count: 0 } : c))
+      prev.map((c) =>
+        c.user_id === item.user_id ? { ...c, unread_count: 0 } : c,
+      ),
     );
     router.push({
       pathname: `/chat/${item.user_id}`,
@@ -94,7 +92,7 @@ export default function OperatorChatsScreen() {
   const filteredConversations = conversations.filter(
     (c) =>
       c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.last_message.toLowerCase().includes(search.toLowerCase())
+      c.last_message.toLowerCase().includes(search.toLowerCase()),
   );
 
   return (
@@ -102,7 +100,9 @@ export default function OperatorChatsScreen() {
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>Customer Inquiries</Text>
-          <Text style={styles.subtitle}>Direct communications with interested renters</Text>
+          <Text style={styles.subtitle}>
+            Direct communications with interested renters
+          </Text>
         </View>
 
         {conversations.length > 0 && (
@@ -122,7 +122,8 @@ export default function OperatorChatsScreen() {
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>No Renter Messages Yet</Text>
             <Text style={styles.emptySubtitle}>
-              When renters visit your vehicle listings and send an inquiry, conversations will appear right here.
+              When renters visit your vehicle listings and send an inquiry,
+              conversations will appear right here.
             </Text>
           </View>
         ) : (
@@ -155,7 +156,10 @@ export default function OperatorChatsScreen() {
                 activeOpacity={0.7}
               >
                 {item.profile_photo ? (
-                  <Image source={{ uri: item.profile_photo }} style={styles.avatarCircle} />
+                  <Image
+                    source={{ uri: item.profile_photo }}
+                    style={styles.avatarCircle}
+                  />
                 ) : (
                   <View style={styles.avatarCircle}>
                     <Ionicons name="person" size={20} color={Colors.dark} />
@@ -164,13 +168,20 @@ export default function OperatorChatsScreen() {
 
                 <View style={styles.chatInfo}>
                   <View style={styles.chatHeader}>
-                    <Text style={styles.renterName}>{item.name || "Customer"}</Text>
-                    <Text style={styles.timeText}>{item.last_time || "Recent"}</Text>
+                    <Text style={styles.renterName}>
+                      {item.name || "Customer"}
+                    </Text>
+                    <Text style={styles.timeText}>
+                      {item.last_time || "Recent"}
+                    </Text>
                   </View>
                   <Text
                     style={[
                       styles.lastMsg,
-                      item.unread_count > 0 && { color: Colors.dark, fontFamily: FontFamily.semiBold },
+                      item.unread_count > 0 && {
+                        color: Colors.dark,
+                        fontFamily: FontFamily.semiBold,
+                      },
                     ]}
                     numberOfLines={1}
                   >

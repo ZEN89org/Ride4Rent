@@ -33,6 +33,13 @@ WORKDIR /var/www/html
 # Copy application code
 COPY . .
 
+# Keep recoverable historical public fleet/profile photos outside the volume mount.
+# Verification documents and chat attachments must never enter this snapshot.
+RUN mkdir -p resources/legacy-public && \
+    for folder in vehicles vehicle-images profile-photos payment_qr_codes; do \
+      if [ -d "storage/app/public/$folder" ]; then cp -a "storage/app/public/$folder" "resources/legacy-public/$folder"; fi; \
+    done
+
 # Set permissions for storage & bootstrap/cache
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache \
     && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache

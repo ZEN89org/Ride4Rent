@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useState, useCallback } from "react";
 import { AppToast } from "@/components/common/AppToast";
 import { AppModal, ModalButton } from "@/components/common/AppModal";
 
@@ -19,7 +19,7 @@ interface ToastContextValue {
     title: string,
     message?: string,
     buttons?: ModalButton[],
-    type?: "info" | "success" | "warning" | "error" | "confirm"
+    type?: "info" | "success" | "warning" | "error" | "confirm",
   ) => void;
   hideModal: () => void;
 }
@@ -33,9 +33,13 @@ const ToastContext = createContext<ToastContextValue>({
   hideModal: () => {},
 });
 
-export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const [visible, setVisible] = useState(false);
-  const [type, setType] = useState<"success" | "error" | "info" | "warning">("info");
+  const [type, setType] = useState<"success" | "error" | "info" | "warning">(
+    "info",
+  );
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState<string | undefined>(undefined);
 
@@ -49,13 +53,16 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const cleanMessage = (text?: string): string => {
     if (!text) return "";
-    return text.replace(/\s*\([^)]*\)/g, "").replace(/\s{2,}/g, " ").trim();
+    return text
+      .replace(/\s*\([^)]*\)/g, "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
   };
 
   const showToast = (
     toastType: "success" | "error" | "info" | "warning",
     toastTitle: string,
-    toastMsg?: string
+    toastMsg?: string,
   ) => {
     setType(toastType);
     setTitle(cleanMessage(toastTitle));
@@ -72,14 +79,17 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     modalTitle: string,
     modalMsg?: string,
     buttons?: ModalButton[],
-    modalType: "info" | "success" | "warning" | "error" | "confirm" = "info"
+    modalType: "info" | "success" | "warning" | "error" | "confirm" = "info",
   ) => {
     setModalConfig({
       visible: true,
       title: cleanMessage(modalTitle),
       message: modalMsg ? cleanMessage(modalMsg) : undefined,
       type: modalType,
-      buttons: buttons && buttons.length > 0 ? buttons : [{ text: "OK", style: "default" }],
+      buttons:
+        buttons && buttons.length > 0
+          ? buttons
+          : [{ text: "OK", style: "default" }],
     });
   };
 
@@ -87,9 +97,18 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setModalConfig((prev) => ({ ...prev, visible: false }));
   };
 
+  const dismissToast = useCallback(() => setVisible(false), []);
+
   return (
     <ToastContext.Provider
-      value={{ showSuccess, showError, showInfo, showWarning, showModal, hideModal }}
+      value={{
+        showSuccess,
+        showError,
+        showInfo,
+        showWarning,
+        showModal,
+        hideModal,
+      }}
     >
       {children}
       <AppToast
@@ -97,7 +116,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         type={type}
         title={title}
         message={message}
-        onDismiss={() => setVisible(false)}
+        onDismiss={dismissToast}
       />
       <AppModal
         visible={modalConfig.visible}
@@ -112,4 +131,3 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 };
 
 export const useAppToast = () => useContext(ToastContext);
-

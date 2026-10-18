@@ -67,7 +67,7 @@ export interface Booking {
   extended_end_date?: string;
   extension_price?: number;
   extension_fee?: number;
-  extension_status?: "pending" | "payment_required" | "approved" | "rejected";
+  extension_status?: "pending_verification" | "pending" | "payment_required" | "approved" | "rejected";
   extension_payment_method?: string;
   extension_payment_reference?: string;
   extension_requested_at?: string;
@@ -77,6 +77,8 @@ export interface Booking {
     qr_code_url?: string;
     payment_methods?: string[];
   };
+  updated_at?: string;
+  extension_notes?: string;
   created_at: string;
   vehicle?: any;
   operator?: any;
@@ -150,31 +152,45 @@ export const updateBookingStatus = async (
 
 export const startTrip = async (
   bookingId: number | string,
-  data: {
-    start_mileage: number;
-    start_fuel_level: number;
-    start_inspection_notes?: string;
-    start_inspection_photos?: string[];
-  }
+  data:
+    | {
+        start_mileage: number;
+        start_fuel_level: number;
+        start_inspection_notes?: string;
+        start_inspection_photos?: string[];
+      }
+    | FormData
 ): Promise<Booking> => {
-  const response = await api.post(`/bookings/${bookingId}/start-trip`, data);
+  const isFormData = typeof FormData !== "undefined" && data instanceof FormData;
+  const response = await api.post(
+    `/bookings/${bookingId}/start-trip`,
+    data,
+    isFormData ? { headers: { "Content-Type": "multipart/form-data" } } : undefined
+  );
   return response.data.data;
 };
 
 export const completeTrip = async (
   bookingId: number | string,
-  data: {
-    end_mileage: number;
-    end_fuel_level: number;
-    fuel_charge?: number;
-    damage_charge?: number;
-    late_fee?: number;
-    other_charges?: number;
-    end_inspection_notes?: string;
-    end_inspection_photos?: string[];
-  }
+  data:
+    | {
+        end_mileage: number;
+        end_fuel_level: number;
+        fuel_charge?: number;
+        damage_charge?: number;
+        late_fee?: number;
+        other_charges?: number;
+        end_inspection_notes?: string;
+        end_inspection_photos?: string[];
+      }
+    | FormData
 ): Promise<Booking> => {
-  const response = await api.post(`/bookings/${bookingId}/complete-trip`, data);
+  const isFormData = typeof FormData !== "undefined" && data instanceof FormData;
+  const response = await api.post(
+    `/bookings/${bookingId}/complete-trip`,
+    data,
+    isFormData ? { headers: { "Content-Type": "multipart/form-data" } } : undefined
+  );
   return response.data.data;
 };
 
@@ -209,6 +225,11 @@ export const getBookingLocation = async (
     current_city?: string;
     current_location_address?: string;
     current_speed?: number;
+    operator_latitude?: number;
+    operator_longitude?: number;
+    operator_address?: string;
+    operator_business_name?: string;
+    renter_name?: string;
     last_location_updated_at?: string;
     last_updated_human?: string;
   };
@@ -284,5 +305,10 @@ export const confirmOperatorPayment = async (
   data?: { payment_method?: string; payment_notes?: string }
 ): Promise<Booking> => {
   const response = await api.post(`/bookings/${bookingId}/confirm-payment`, data || {});
+  return response.data.data;
+};
+
+export const confirmExtensionPayment = async (bookingId: number | string): Promise<Booking> => {
+  const response = await api.post(`/bookings/${bookingId}/confirm-extension-payment`);
   return response.data.data;
 };

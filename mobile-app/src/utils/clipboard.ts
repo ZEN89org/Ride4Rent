@@ -1,4 +1,4 @@
-import { Platform, Share } from "react-native";
+import { Share } from "react-native";
 
 /**
  * Safely copies text to the device clipboard across all environments.

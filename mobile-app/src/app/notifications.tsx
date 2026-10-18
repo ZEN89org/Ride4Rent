@@ -1,18 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Animated,
-  FlatList,
-  Modal,
-  PanResponder,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { Animated, FlatList, PanResponder, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppBottomSheet } from "@/components/common/AppBottomSheet";
@@ -30,7 +19,7 @@ import {
   markAllNotificationsAsRead,
   markNotificationAsRead,
 } from "@/services/notificationService";
-import { testPushNotification } from "@/services/deviceNotificationService";
+
 
 interface GroupedNotifications {
   title: string;
@@ -51,12 +40,45 @@ interface SwipeableNotificationItemProps {
   };
 }
 
+function cleanRawJsonInText(text?: string | null): string {
+  if (!text) return "";
+  let cleaned = (text || "").replace(/\s+/g, " ").trim();
+  if (cleaned.includes("{") && cleaned.includes("}")) {
+    cleaned = cleaned.replace(/\{[^{}]*?["']?name["']?\s*:\s*["']?([^"',{}]+)["']?[^{}]*?\}/gi, "$1");
+    cleaned = cleaned.replace(/\{[^{}]*\}/g, "").trim();
+  }
+  // Deduplicate consecutive identical words like "Honda Honda" -> "Honda"
+  while (/\b(\w+)\s+\1\b/i.test(cleaned)) {
+    cleaned = cleaned.replace(/\b(\w+)\s+\1\b/gi, "$1");
+  }
+  return cleaned.replace(/\s{2,}/g, " ").trim();
+}
+
 function formatConciseNotification(
   rawTitle?: string | null,
-  rawMessage?: string | null
+  rawMessage?: string | null,
 ): { title: string; message: string } {
-  const trimmedTitle = (rawTitle || "").replace(/\s+/g, " ").trim();
-  const trimmedMsg = (rawMessage || "").replace(/\s+/g, " ").trim();
+  let trimmedTitle = cleanRawJsonInText(rawTitle);
+  const trimmedMsg = cleanRawJsonInText(rawMessage);
+
+  // If title is missing or blank, infer appropriate header from message
+  if (!trimmedTitle) {
+    const lowerM = trimmedMsg.toLowerCase();
+    if (lowerM.includes("don't miss your trip") || lowerM.includes("upcoming trip")) {
+      trimmedTitle = "Upcoming Trip Reminder";
+    } else if (lowerM.includes("don't miss your ride")) {
+      trimmedTitle = "Don't Miss Your Ride!";
+    } else if (lowerM.includes("complete your reservation")) {
+      trimmedTitle = "Complete Your Reservation";
+    } else if (lowerM.includes("still interested in")) {
+      trimmedTitle = "Still Interested in Your Ride?";
+    } else if (lowerM.includes("expiring soon")) {
+      trimmedTitle = "Reservation Expiring Soon";
+    } else {
+      trimmedTitle = "Notification";
+    }
+  }
+
   const rawLowerT = trimmedTitle.toLowerCase();
 
   // Preserve personalized pending booking & upcoming trip reminder notifications intact
@@ -80,8 +102,8 @@ function formatConciseNotification(
       .replace(/\s+/g, " ")
       .trim();
 
-  const t = clean(rawTitle);
-  const m = clean(rawMessage);
+  const t = clean(trimmedTitle);
+  const m = clean(trimmedMsg);
   const lowerT = t.toLowerCase();
   const lowerM = m.toLowerCase();
 
@@ -91,13 +113,19 @@ function formatConciseNotification(
       message: "New reservation request received.",
     };
   }
-  if (lowerT.includes("payment submitted") || lowerT.includes("gcash reservation paid")) {
+  if (
+    lowerT.includes("payment submitted") ||
+    lowerT.includes("gcash reservation paid")
+  ) {
     return {
       title: "Payment Submitted",
       message: "Renter submitted reservation payment for verification.",
     };
   }
-  if (lowerT.includes("reservation payment received") || lowerT.includes("payment received")) {
+  if (
+    lowerT.includes("reservation payment received") ||
+    lowerT.includes("payment received")
+  ) {
     return {
       title: "Payment Received",
       message: "Your reservation payment was received. Awaiting host approval.",
@@ -157,7 +185,8 @@ function formatConciseNotification(
   if (lowerT.includes("refund required")) {
     return {
       title: "Refund Required",
-      message: "Please process the reservation refund for the cancelled booking.",
+      message:
+        "Please process the reservation refund for the cancelled booking.",
     };
   }
   if (lowerT.includes("refund completed")) {
@@ -206,7 +235,10 @@ function formatConciseNotification(
       message: "Your trip extension request was sent to the host.",
     };
   }
-  if (lowerT.includes("extension agreed") || lowerT.includes("extension approved")) {
+  if (
+    lowerT.includes("extension agreed") ||
+    lowerT.includes("extension approved")
+  ) {
     if (lowerM.includes("you agreed")) {
       return {
         title: "Extension Approved",
@@ -215,7 +247,8 @@ function formatConciseNotification(
     }
     return {
       title: "Extension Approved",
-      message: "Your extension request was approved. Please settle the payment.",
+      message:
+        "Your extension request was approved. Please settle the payment.",
     };
   }
   if (lowerT.includes("extension declined")) {
@@ -224,7 +257,10 @@ function formatConciseNotification(
       message: "Your trip extension request was declined by the host.",
     };
   }
-  if (lowerT.includes("extension payment settled") || lowerT.includes("extension paid")) {
+  if (
+    lowerT.includes("extension payment settled") ||
+    lowerT.includes("extension paid")
+  ) {
     return {
       title: "Extension Paid",
       message: "Renter paid the trip extension fee.",
@@ -251,7 +287,8 @@ function formatConciseNotification(
   if (lowerT.includes("license") && lowerT.includes("rejected")) {
     return {
       title: "Driver's License Rejected",
-      message: "Your driver's license was not approved. Please upload a clear photo.",
+      message:
+        "Your driver's license was not approved. Please upload a clear photo.",
     };
   }
   if (lowerT.includes("operator account approved")) {
@@ -282,6 +319,59 @@ function formatConciseNotification(
   return { title: t, message: m };
 }
 
+function createNotificationSwipe(translateX: Animated.Value) {
+  const SWIPE_WIDTH = -140;
+
+  let isOpen = false;
+  const panResponder = PanResponder.create({
+    onMoveShouldSetPanResponder: (_, gestureState) => {
+      return Math.abs(gestureState.dx) > 10 && Math.abs(gestureState.dy) < 10;
+    },
+    onPanResponderMove: (_, gestureState) => {
+      if (gestureState.dx < 0) {
+        // Swiping left
+        const newX = isOpen
+          ? Math.max(SWIPE_WIDTH - 25, SWIPE_WIDTH + gestureState.dx)
+          : Math.max(SWIPE_WIDTH - 25, gestureState.dx);
+        translateX.setValue(newX);
+      } else if (isOpen && gestureState.dx > 0) {
+        // Swiping back right from open state
+        const newX = Math.min(0, SWIPE_WIDTH + gestureState.dx);
+        translateX.setValue(newX);
+      }
+    },
+    onPanResponderRelease: (_, gestureState) => {
+      if (gestureState.dx < -45 || (isOpen && gestureState.dx < 35)) {
+        // Snap open to reveal Archive and Delete buttons
+        Animated.spring(translateX, {
+          toValue: SWIPE_WIDTH,
+          useNativeDriver: true,
+          bounciness: 4,
+        }).start();
+        isOpen = true;
+      } else {
+        // Snap closed
+        Animated.spring(translateX, {
+          toValue: 0,
+          useNativeDriver: true,
+          bounciness: 4,
+        }).start();
+        isOpen = false;
+      }
+    },
+  });
+
+  const closeSwipe = () => {
+    Animated.spring(translateX, {
+      toValue: 0,
+      useNativeDriver: true,
+    }).start();
+    isOpen = false;
+  };
+
+  return { panResponder, closeSwipe, isSwipeOpen: () => isOpen };
+}
+
 function SwipeableNotificationItem({
   item,
   isLast,
@@ -291,63 +381,15 @@ function SwipeableNotificationItem({
   onDelete,
   iconCfg,
 }: SwipeableNotificationItemProps) {
-  const translateX = useRef(new Animated.Value(0)).current;
-  const isOpen = useRef(false);
+  const translateX = useState(() => new Animated.Value(0))[0];
 
-  const SWIPE_WIDTH = -140;
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return Math.abs(gestureState.dx) > 10 && Math.abs(gestureState.dy) < 10;
-      },
-      onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dx < 0) {
-          // Swiping left
-          const newX = isOpen.current
-            ? Math.max(SWIPE_WIDTH - 25, SWIPE_WIDTH + gestureState.dx)
-            : Math.max(SWIPE_WIDTH - 25, gestureState.dx);
-          translateX.setValue(newX);
-        } else if (isOpen.current && gestureState.dx > 0) {
-          // Swiping back right from open state
-          const newX = Math.min(0, SWIPE_WIDTH + gestureState.dx);
-          translateX.setValue(newX);
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dx < -45 || (isOpen.current && gestureState.dx < 35)) {
-          // Snap open to reveal Archive and Delete buttons
-          Animated.spring(translateX, {
-            toValue: SWIPE_WIDTH,
-            useNativeDriver: true,
-            bounciness: 4,
-          }).start();
-          isOpen.current = true;
-        } else {
-          // Snap closed
-          Animated.spring(translateX, {
-            toValue: 0,
-            useNativeDriver: true,
-            bounciness: 4,
-          }).start();
-          isOpen.current = false;
-        }
-      },
-    })
-  ).current;
-
-  const closeSwipe = () => {
-    Animated.spring(translateX, {
-      toValue: 0,
-      useNativeDriver: true,
-    }).start();
-    isOpen.current = false;
-  };
-
-  const { title: cleanTitle, message: cleanMessage } = formatConciseNotification(
-    item.title,
-    item.message
+  const { panResponder, closeSwipe, isSwipeOpen } = useMemo(
+    () => createNotificationSwipe(translateX),
+    [translateX],
   );
+
+  const { title: cleanTitle, message: cleanMessage } =
+    formatConciseNotification(item.title, item.message);
 
   return (
     <View style={styles.swipeContainer}>
@@ -380,7 +422,9 @@ function SwipeableNotificationItem({
           activeOpacity={0.85}
         >
           <Ionicons name="trash-outline" size={18} color={Colors.white} />
-          <Text style={[styles.actionText, { color: Colors.white }]}>Delete</Text>
+          <Text style={[styles.actionText, { color: Colors.white }]}>
+            Delete
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -396,7 +440,7 @@ function SwipeableNotificationItem({
         <TouchableOpacity
           style={styles.rowInnerTouch}
           onPress={() => {
-            if (isOpen.current) {
+            if (isSwipeOpen()) {
               closeSwipe();
             } else {
               onPress();
@@ -432,9 +476,7 @@ function SwipeableNotificationItem({
             </View>
 
             {/* Full Subtitle / Status Text */}
-            <Text style={styles.itemMessage}>
-              {cleanMessage}
-            </Text>
+            <Text style={styles.itemMessage}>{cleanMessage}</Text>
           </View>
 
           {/* Right Indicator for Unread */}
@@ -485,20 +527,19 @@ function isPriorityNotification(notif: AppNotification): boolean {
 
 export default function NotificationsScreen() {
   const { user, isGuest, refreshUser } = useAuth();
-  const { refreshUnreadCount, resetUnreadCount, decrementUnreadCount } = useNotificationCount();
+  const { refreshUnreadCount, resetUnreadCount, decrementUnreadCount } =
+    useNotificationCount();
   const { showModal, showSuccess, showInfo } = useAppToast();
-  const [notificationTab, setNotificationTab] = useState<"inbox" | "archived">("inbox");
+  const [notificationTab, setNotificationTab] = useState<"inbox" | "archived">(
+    "inbox",
+  );
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [archivedNotifications, setArchivedNotifications] = useState<AppNotification[]>([]);
+  const [archivedNotifications, setArchivedNotifications] = useState<
+    AppNotification[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [optionsMenuVisible, setOptionsMenuVisible] = useState(false);
-
-  useEffect(() => {
-    if (!isGuest) {
-      loadNotifications();
-    }
-  }, [isGuest]);
 
   const loadNotifications = async () => {
     try {
@@ -507,7 +548,9 @@ export default function NotificationsScreen() {
         getNotifications(),
         refreshUser?.().catch(() => null),
       ]);
-      const validList = Array.isArray(data) ? data.filter(isPriorityNotification) : [];
+      const validList = Array.isArray(data)
+        ? data.filter(isPriorityNotification)
+        : [];
       setNotifications(validList);
       refreshUnreadCount();
     } catch (e) {
@@ -517,6 +560,25 @@ export default function NotificationsScreen() {
       setRefreshing(false);
     }
   };
+
+  useEffect(() => {
+    if (isGuest) return;
+    let active = true;
+    getNotifications()
+      .then((data) => {
+        if (active)
+          setNotifications(
+            Array.isArray(data) ? data.filter(isPriorityNotification) : [],
+          );
+      })
+      .catch((error) => console.log("Error loading notifications:", error))
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isGuest]);
 
   const handleMarkAllRead = async () => {
     setOptionsMenuVisible(false);
@@ -552,13 +614,15 @@ export default function NotificationsScreen() {
           },
         },
       ],
-      "confirm"
+      "confirm",
     );
   };
 
   const handleDeleteOne = async (id: string) => {
     try {
-      const target = (notificationTab === "inbox" ? notifications : archivedNotifications).find((n) => n.id === id);
+      const target = (
+        notificationTab === "inbox" ? notifications : archivedNotifications
+      ).find((n) => n.id === id);
       await deleteNotification(id);
       if (notificationTab === "inbox") {
         setNotifications((prev) => prev.filter((n) => n.id !== id));
@@ -581,7 +645,10 @@ export default function NotificationsScreen() {
         decrementUnreadCount(1);
       }
       setNotifications((prev) => prev.filter((n) => n.id !== item.id));
-      setArchivedNotifications((prev) => [item, ...prev.filter((n) => n.id !== item.id)]);
+      setArchivedNotifications((prev) => [
+        item,
+        ...prev.filter((n) => n.id !== item.id),
+      ]);
       showSuccess("Archived", "Notification moved to archive.");
     } catch (e) {
       console.log("Error archiving notification:", e);
@@ -598,7 +665,7 @@ export default function NotificationsScreen() {
     if (!item.is_read) {
       markNotificationAsRead(item.id).catch(() => {});
       setNotifications((prev) =>
-        prev.map((n) => (n.id === item.id ? { ...n, is_read: true } : n))
+        prev.map((n) => (n.id === item.id ? { ...n, is_read: true } : n)),
       );
       decrementUnreadCount(1);
     }
@@ -667,7 +734,8 @@ export default function NotificationsScreen() {
   }, [notifications]);
 
   // Current active list depending on selected tab
-  const activeList = notificationTab === "inbox" ? notifications : archivedNotifications;
+  const activeList =
+    notificationTab === "inbox" ? notifications : archivedNotifications;
 
   // Group notifications by date (Today, Yesterday, Earlier)
   const groupedNotifications = useMemo<GroupedNotifications[]>(() => {
@@ -697,9 +765,12 @@ export default function NotificationsScreen() {
     });
 
     const groups: GroupedNotifications[] = [];
-    if (todayItems.length > 0) groups.push({ title: "Today", data: todayItems });
-    if (yesterdayItems.length > 0) groups.push({ title: "Yesterday", data: yesterdayItems });
-    if (earlierItems.length > 0) groups.push({ title: "Earlier", data: earlierItems });
+    if (todayItems.length > 0)
+      groups.push({ title: "Today", data: todayItems });
+    if (yesterdayItems.length > 0)
+      groups.push({ title: "Yesterday", data: yesterdayItems });
+    if (earlierItems.length > 0)
+      groups.push({ title: "Earlier", data: earlierItems });
 
     return groups;
   }, [activeList]);
@@ -708,37 +779,61 @@ export default function NotificationsScreen() {
     switch (type) {
       case "booking":
         return {
-          icon: <MaterialCommunityIcons name="car-key" size={22} color="#1A1A1A" />,
+          icon: (
+            <MaterialCommunityIcons name="car-key" size={22} color="#1A1A1A" />
+          ),
           bgColor: Colors.logoBackground,
           borderColor: "#FDE68A",
         };
       case "success":
         return {
-          icon: <Ionicons name="checkmark-circle-outline" size={22} color="#10B981" />,
+          icon: (
+            <Ionicons
+              name="checkmark-circle-outline"
+              size={22}
+              color="#10B981"
+            />
+          ),
           bgColor: "#ECFDF5",
           borderColor: "#A7F3D0",
         };
       case "warning":
         return {
-          icon: <Ionicons name="alert-circle-outline" size={22} color="#F59E0B" />,
+          icon: (
+            <Ionicons name="alert-circle-outline" size={22} color="#F59E0B" />
+          ),
           bgColor: "#FFFBEB",
           borderColor: "#FDE68A",
         };
       case "error":
         return {
-          icon: <Ionicons name="close-circle-outline" size={22} color={Colors.error} />,
+          icon: (
+            <Ionicons
+              name="close-circle-outline"
+              size={22}
+              color={Colors.error}
+            />
+          ),
           bgColor: "#FEF2F2",
           borderColor: "#FECACA",
         };
       case "chat":
         return {
-          icon: <Ionicons name="chatbubble-ellipses-outline" size={21} color="#1A1A1A" />,
+          icon: (
+            <Ionicons
+              name="chatbubble-ellipses-outline"
+              size={21}
+              color="#1A1A1A"
+            />
+          ),
           bgColor: Colors.logoBackground,
           borderColor: "#FDE68A",
         };
       default:
         return {
-          icon: <Ionicons name="notifications-outline" size={21} color="#1A1A1A" />,
+          icon: (
+            <Ionicons name="notifications-outline" size={21} color="#1A1A1A" />
+          ),
           bgColor: "#F3F4F6",
           borderColor: "#E5E7EB",
         };
@@ -749,7 +844,11 @@ export default function NotificationsScreen() {
     <SafeAreaView edges={["top", "bottom"]} style={styles.container}>
       {/* Sleek Minimal Header */}
       <View style={styles.headerBar}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+          activeOpacity={0.7}
+        >
           <Ionicons name="chevron-back" size={22} color={Colors.dark} />
         </TouchableOpacity>
 
@@ -762,7 +861,11 @@ export default function NotificationsScreen() {
               onPress={() => setOptionsMenuVisible(true)}
               activeOpacity={0.7}
             >
-              <Ionicons name="ellipsis-vertical" size={19} color={Colors.dark} />
+              <Ionicons
+                name="ellipsis-vertical"
+                size={19}
+                color={Colors.dark}
+              />
             </TouchableOpacity>
           ) : (
             <View style={styles.actionBtn} />
@@ -773,22 +876,41 @@ export default function NotificationsScreen() {
       {/* Inbox / Archived Tab Toggle Pill Bar */}
       <View style={styles.tabToggleBar}>
         <TouchableOpacity
-          style={[styles.tabToggleItem, notificationTab === "inbox" && styles.tabToggleItemActive]}
+          style={[
+            styles.tabToggleItem,
+            notificationTab === "inbox" && styles.tabToggleItemActive,
+          ]}
           onPress={() => setNotificationTab("inbox")}
           activeOpacity={0.8}
         >
-          <Text style={[styles.tabToggleText, notificationTab === "inbox" && styles.tabToggleTextActive]}>
+          <Text
+            style={[
+              styles.tabToggleText,
+              notificationTab === "inbox" && styles.tabToggleTextActive,
+            ]}
+          >
             Inbox {notifications.length > 0 ? `(${notifications.length})` : ""}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.tabToggleItem, notificationTab === "archived" && styles.tabToggleItemActive]}
+          style={[
+            styles.tabToggleItem,
+            notificationTab === "archived" && styles.tabToggleItemActive,
+          ]}
           onPress={() => setNotificationTab("archived")}
           activeOpacity={0.8}
         >
-          <Text style={[styles.tabToggleText, notificationTab === "archived" && styles.tabToggleTextActive]}>
-            Archived {archivedNotifications.length > 0 ? `(${archivedNotifications.length})` : ""}
+          <Text
+            style={[
+              styles.tabToggleText,
+              notificationTab === "archived" && styles.tabToggleTextActive,
+            ]}
+          >
+            Archived{" "}
+            {archivedNotifications.length > 0
+              ? `(${archivedNotifications.length})`
+              : ""}
           </Text>
         </TouchableOpacity>
       </View>
@@ -803,7 +925,9 @@ export default function NotificationsScreen() {
       ) : activeList.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyTitle}>
-            {notificationTab === "inbox" ? "No Notifications Yet" : "No Archived Notifications"}
+            {notificationTab === "inbox"
+              ? "No Notifications Yet"
+              : "No Archived Notifications"}
           </Text>
           <Text style={styles.emptySubtitle}>
             {notificationTab === "inbox"
@@ -874,12 +998,19 @@ export default function NotificationsScreen() {
               onPress={handleMarkAllRead}
               activeOpacity={0.7}
             >
-              <View style={[styles.menuOptionIconBox, { backgroundColor: "#ECFDF5" }]}>
+              <View
+                style={[
+                  styles.menuOptionIconBox,
+                  { backgroundColor: "#ECFDF5" },
+                ]}
+              >
                 <Ionicons name="checkmark-done" size={20} color="#10B981" />
               </View>
               <View style={styles.menuOptionTextBox}>
                 <Text style={styles.menuOptionTitle}>Mark all as read</Text>
-                <Text style={styles.menuOptionSubtitle}>Mark all unread notifications</Text>
+                <Text style={styles.menuOptionSubtitle}>
+                  Mark all unread notifications
+                </Text>
               </View>
             </TouchableOpacity>
           )}
@@ -889,12 +1020,18 @@ export default function NotificationsScreen() {
             onPress={handleClearAll}
             activeOpacity={0.7}
           >
-            <View style={[styles.menuOptionIconBox, { backgroundColor: "#FEF2F2" }]}>
+            <View
+              style={[styles.menuOptionIconBox, { backgroundColor: "#FEF2F2" }]}
+            >
               <Ionicons name="trash-outline" size={20} color={Colors.error} />
             </View>
             <View style={styles.menuOptionTextBox}>
-              <Text style={[styles.menuOptionTitle, { color: Colors.error }]}>Clear all</Text>
-              <Text style={styles.menuOptionSubtitle}>Remove notifications from list</Text>
+              <Text style={[styles.menuOptionTitle, { color: Colors.error }]}>
+                Clear all
+              </Text>
+              <Text style={styles.menuOptionSubtitle}>
+                Remove notifications from list
+              </Text>
             </View>
           </TouchableOpacity>
 

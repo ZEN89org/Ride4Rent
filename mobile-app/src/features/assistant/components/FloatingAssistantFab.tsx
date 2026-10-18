@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Animated,
   Dimensions,
@@ -23,25 +23,83 @@ const FAB_SIZE = 56;
 const SIDE_MARGIN = 16;
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
+function createAssistantPanResponder(
+  pan: Animated.ValueXY,
+  onPress: () => void,
+) {
+  let dragDistance = 0;
+  return PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: (_, gestureState) => {
+      return Math.hypot(gestureState.dx, gestureState.dy) > 4;
+    },
+    onPanResponderGrant: () => {
+      dragDistance = 0;
+      pan.setOffset({
+        x: (pan.x as any)._value,
+        y: (pan.y as any)._value,
+      });
+      pan.setValue({ x: 0, y: 0 });
+    },
+    onPanResponderMove: (_, gestureState) => {
+      dragDistance = Math.hypot(gestureState.dx, gestureState.dy);
+      pan.setValue({ x: gestureState.dx, y: gestureState.dy });
+    },
+    onPanResponderRelease: (_, gestureState) => {
+      pan.flattenOffset();
+      const dist = Math.hypot(gestureState.dx, gestureState.dy);
+
+      // If user tapped without dragging, trigger open
+      if (dist < 8 && dragDistance < 8) {
+        onPress();
+        return;
+      }
+
+      const curX = (pan.x as any)._value;
+      const curY = (pan.y as any)._value;
+
+      // Auto-dock to closest edge (Left or Right side of the screen)
+      const snapX =
+        curX + FAB_SIZE / 2 < SCREEN_WIDTH / 2
+          ? SIDE_MARGIN
+          : SCREEN_WIDTH - FAB_SIZE - SIDE_MARGIN;
+
+      // Keep vertical position within visible viewport (away from top notch & bottom tabs)
+      const clampedY = Math.min(
+        Math.max(60, curY),
+        SCREEN_HEIGHT - FAB_SIZE - 95,
+      );
+
+      Animated.spring(pan, {
+        toValue: { x: snapX, y: clampedY },
+        useNativeDriver: false,
+        friction: 6,
+        tension: 45,
+      }).start();
+    },
+  });
+}
+
 export default function FloatingAssistantFab({ onPress }: Props) {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseAnim = useState(() => new Animated.Value(1))[0];
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
 
   // Initial draggable position (docked on the right edge above tab bar)
   const initialX = SCREEN_WIDTH - FAB_SIZE - SIDE_MARGIN;
   const initialY = SCREEN_HEIGHT - 170;
 
-  const pan = useRef(new Animated.ValueXY({ x: initialX, y: initialY })).current;
-  const dragDistance = useRef(0);
+  const pan = useState(
+    () => new Animated.ValueXY({ x: initialX, y: initialY }),
+  )[0];
 
   useEffect(() => {
     const showSubscription = Keyboard.addListener(
       Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
-      () => setKeyboardVisible(true)
+      () => setKeyboardVisible(true),
     );
     const hideSubscription = Keyboard.addListener(
       Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
-      () => setKeyboardVisible(false)
+      () => setKeyboardVisible(false),
     );
 
     return () => {
@@ -64,7 +122,7 @@ export default function FloatingAssistantFab({ onPress }: Props) {
             duration: 1200,
             useNativeDriver: true,
           }),
-        ])
+        ]),
       );
 
       pulseLoop.start();
@@ -72,58 +130,13 @@ export default function FloatingAssistantFab({ onPress }: Props) {
         pulseLoop.stop();
         pulseAnim.setValue(1);
       };
-    }, [pulseAnim])
+    }, [pulseAnim]),
   );
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        return Math.hypot(gestureState.dx, gestureState.dy) > 4;
-      },
-      onPanResponderGrant: () => {
-        dragDistance.current = 0;
-        pan.setOffset({
-          x: (pan.x as any)._value,
-          y: (pan.y as any)._value,
-        });
-        pan.setValue({ x: 0, y: 0 });
-      },
-      onPanResponderMove: (_, gestureState) => {
-        dragDistance.current = Math.hypot(gestureState.dx, gestureState.dy);
-        pan.setValue({ x: gestureState.dx, y: gestureState.dy });
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        pan.flattenOffset();
-        const dist = Math.hypot(gestureState.dx, gestureState.dy);
-
-        // If user tapped without dragging, trigger open
-        if (dist < 8 && dragDistance.current < 8) {
-          onPress();
-          return;
-        }
-
-        const curX = (pan.x as any)._value;
-        const curY = (pan.y as any)._value;
-
-        // Auto-dock to closest edge (Left or Right side of the screen)
-        const snapX =
-          curX + FAB_SIZE / 2 < SCREEN_WIDTH / 2
-            ? SIDE_MARGIN
-            : SCREEN_WIDTH - FAB_SIZE - SIDE_MARGIN;
-
-        // Keep vertical position within visible viewport (away from top notch & bottom tabs)
-        const clampedY = Math.min(Math.max(60, curY), SCREEN_HEIGHT - FAB_SIZE - 95);
-
-        Animated.spring(pan, {
-          toValue: { x: snapX, y: clampedY },
-          useNativeDriver: false,
-          friction: 6,
-          tension: 45,
-        }).start();
-      },
-    })
-  ).current;
+  const panResponder = useMemo(
+    () => createAssistantPanResponder(pan, onPress),
+    [pan, onPress],
+  );
 
   if (isKeyboardVisible) {
     return null;

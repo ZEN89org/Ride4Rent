@@ -1,15 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useEffect, useRef } from "react";
-import {
-  Animated,
-  Modal,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import { Animated, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Colors } from "@/constants/colors";
-import { FontFamily, FontSize, Spacing } from "@/constants/theme";
+import { FontFamily, Spacing } from "@/constants/theme";
 
 export interface ToastProps {
   visible: boolean;
@@ -26,8 +19,25 @@ export function AppToast({
   message,
   onDismiss,
 }: ToastProps) {
-  const translateY = useRef(new Animated.Value(-100)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useState(() => new Animated.Value(-100))[0];
+  const opacity = useState(() => new Animated.Value(0))[0];
+
+  const handleDismiss = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(translateY, {
+        toValue: -100,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
+      if (finished) onDismiss();
+    });
+  }, [onDismiss, opacity, translateY]);
 
   useEffect(() => {
     if (visible) {
@@ -52,24 +62,7 @@ export function AppToast({
     } else {
       handleDismiss();
     }
-  }, [visible]);
-
-  const handleDismiss = () => {
-    Animated.parallel([
-      Animated.timing(translateY, {
-        toValue: -100,
-        duration: 250,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: 250,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      onDismiss();
-    });
-  };
+  }, [visible, handleDismiss, opacity, translateY]);
 
   if (!visible) return null;
 
@@ -82,7 +75,13 @@ export function AppToast({
       case "warning":
         return <Ionicons name="warning" size={22} color="#F59E0B" />;
       default:
-        return <Ionicons name="information-circle" size={22} color={Colors.primary} />;
+        return (
+          <Ionicons
+            name="information-circle"
+            size={22}
+            color={Colors.primary}
+          />
+        );
     }
   };
 

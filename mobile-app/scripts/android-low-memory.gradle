@@ -1,0 +1,30 @@
+// Opt-in settings: serialize Gradle tasks AND Ninja's C++ compile/link jobs.
+// Keeping this outside android/ preserves it across Expo prebuilds.
+gradle.beforeProject { project ->
+    ['com.android.application', 'com.android.library'].each { pluginId ->
+        project.pluginManager.withPlugin(pluginId) {
+            def android = project.extensions.getByName('android')
+            android.defaultConfig.externalNativeBuild.cmake.arguments.addAll([
+                '-DCMAKE_JOB_POOLS=ride4rent_native=1',
+                '-DCMAKE_JOB_POOL_COMPILE=ride4rent_native',
+                '-DCMAKE_JOB_POOL_LINK=ride4rent_native'
+            ])
+        }
+    }
+}
+
+gradle.projectsEvaluated {
+    gradle.rootProject.tasks.register('verifyRide4RentBuildLimits') {
+        doLast {
+            [':app', ':expo-modules-core', ':react-native-reanimated', ':react-native-worklets'].each { path ->
+                def project = gradle.rootProject.findProject(path)
+                if (project == null) throw new GradleException("Missing native project ${path}")
+                def args = project.extensions.getByName('android').defaultConfig.externalNativeBuild.cmake.arguments
+                if (!args.contains('-DCMAKE_JOB_POOL_COMPILE=ride4rent_native') || !args.contains('-DCMAKE_JOB_POOLS=ride4rent_native=1')) {
+                    throw new GradleException("Native concurrency limit missing for ${path}")
+                }
+                println "${path}: native compile/link pool limited to one job"
+            }
+        }
+    }
+}

@@ -1,7 +1,7 @@
 import { Platform } from "react-native";
 import { router } from "expo-router";
-import Constants, { ExecutionEnvironment } from "expo-constants";
-import { isRunningInExpoGo } from "expo";
+
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export const STORAGE_KEY_NOTIFS = "@settings_notifications";
@@ -319,10 +319,30 @@ export const scheduleBookingReminders = async (
     // Clear any stale reminders for this booking before scheduling fresh ones
     await cancelBookingReminders(booking.id);
 
+    const rawBrand = booking.vehicle?.brand;
+    const brandName =
+      typeof rawBrand === "string"
+        ? rawBrand.trim()
+        : typeof rawBrand === "object" && rawBrand?.name && typeof rawBrand.name === "string"
+        ? rawBrand.name.trim()
+        : "";
+
+    let rawVehicleName =
+      typeof booking.vehicle?.name === "string" ? booking.vehicle.name.trim() : "";
+
+    if (rawVehicleName.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(rawVehicleName);
+        rawVehicleName = parsed.name || parsed.model || "";
+      } catch {
+        // ignore
+      }
+    }
+
     const vehicleName =
-      [booking.vehicle?.brand, booking.vehicle?.name].filter(Boolean).join(" ").trim() ||
-      booking.vehicle?.name ||
-      "your selected vehicle";
+      brandName && !rawVehicleName.toLowerCase().includes(brandName.toLowerCase())
+        ? `${brandName} ${rawVehicleName}`.trim()
+        : rawVehicleName || brandName || "your selected vehicle";
     const resFee = Math.round(Number(booking.reservation_fee) || 500).toLocaleString();
     const tripDates = formatShortTripRange(booking.start_date, booking.end_date);
     const createdMs =

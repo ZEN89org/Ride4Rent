@@ -17,12 +17,14 @@ class CallController extends Controller
      */
     private function formatUser(?User $user, string $host): ?array
     {
-        if (!$user) return null;
+        if (! $user) {
+            return null;
+        }
         $photo = $user->profile_photo
-            ? (str_starts_with($user->profile_photo, 'http') ? $user->profile_photo : $host . '/storage/' . $user->profile_photo)
+            ? (str_starts_with($user->profile_photo, 'http') ? $user->profile_photo : $host.'/storage/'.$user->profile_photo)
             : null;
 
-        $displayName = trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: ($user->name ?? 'User');
+        $displayName = trim(($user->first_name ?? '').' '.($user->last_name ?? '')) ?: ($user->name ?? 'User');
 
         return [
             'id' => $user->id,
@@ -43,7 +45,7 @@ class CallController extends Controller
         $apiKey = config('services.livekit.api_key');
         $apiSecret = config('services.livekit.api_secret');
 
-        if (!$apiKey || !$apiSecret) {
+        if (! $apiKey || ! $apiSecret) {
             return null;
         }
 
@@ -70,10 +72,10 @@ class CallController extends Controller
 
         $base64UrlHeader = rtrim(strtr(base64_encode($header), '+/', '-_'), '=');
         $base64UrlPayload = rtrim(strtr(base64_encode($payload), '+/', '-_'), '=');
-        $signature = hash_hmac('sha256', $base64UrlHeader . '.' . $base64UrlPayload, $apiSecret, true);
+        $signature = hash_hmac('sha256', $base64UrlHeader.'.'.$base64UrlPayload, $apiSecret, true);
         $base64UrlSignature = rtrim(strtr(base64_encode($signature), '+/', '-_'), '=');
 
-        return $base64UrlHeader . '.' . $base64UrlPayload . '.' . $base64UrlSignature;
+        return $base64UrlHeader.'.'.$base64UrlPayload.'.'.$base64UrlSignature;
     }
 
     /**
@@ -83,7 +85,7 @@ class CallController extends Controller
     {
         $livekitToken = null;
         if ($currentUser && $call->channel_name) {
-            $displayName = trim(($currentUser->first_name ?? '') . ' ' . ($currentUser->last_name ?? '')) ?: ($currentUser->name ?? 'User');
+            $displayName = trim(($currentUser->first_name ?? '').' '.($currentUser->last_name ?? '')) ?: ($currentUser->name ?? 'User');
             $livekitToken = $this->generateLiveKitToken($call->channel_name, (string) $currentUser->id, $displayName);
         }
 
@@ -113,6 +115,9 @@ class CallController extends Controller
             'receiver_id' => ['required', 'exists:users,id'],
         ]);
 
+        if (! config('services.livekit.url') || ! config('services.livekit.api_key') || ! config('services.livekit.api_secret')) {
+            return response()->json(['message' => 'Voice calling is not configured on this server.'], 503);
+        }
         $caller = $request->user();
         $callerId = $caller->id;
         $receiverId = (int) $validated['receiver_id'];
@@ -133,7 +138,7 @@ class CallController extends Controller
                 'ended_at' => now(),
             ]);
 
-        $channelName = 'call_' . min($callerId, $receiverId) . '_' . max($callerId, $receiverId) . '_' . time();
+        $channelName = 'call_'.min($callerId, $receiverId).'_'.max($callerId, $receiverId).'_'.time();
 
         $call = Call::create([
             'caller_id' => $callerId,
@@ -142,15 +147,15 @@ class CallController extends Controller
             'channel_name' => $channelName,
         ]);
 
-        $callerName = trim(($caller->first_name ?? '') . ' ' . ($caller->last_name ?? '')) ?: ($caller->name ?? 'User');
+        $callerName = trim(($caller->first_name ?? '').' '.($caller->last_name ?? '')) ?: ($caller->name ?? 'User');
 
         // Dispatch incoming call notification to receiver
         Notification::create([
             'user_id' => $receiverId,
             'title' => 'Incoming Voice Call',
-            'message' => $callerName . ' is calling you...',
+            'message' => $callerName.' is calling you...',
             'type' => 'incoming_call',
-            'action_url' => '/chat/' . $callerId,
+            'action_url' => '/chat/'.$callerId,
             'is_read' => false,
         ]);
 
@@ -235,7 +240,7 @@ class CallController extends Controller
         $userId = $request->user()->id;
         $call = Call::with(['caller.operatorProfile', 'receiver.operatorProfile'])->find($id);
 
-        if (!$call) {
+        if (! $call) {
             return response()->json(['success' => false, 'message' => 'Call not found.'], 404);
         }
 
@@ -270,7 +275,7 @@ class CallController extends Controller
         $userId = $request->user()->id;
         $call = Call::with(['caller.operatorProfile', 'receiver.operatorProfile'])->find($id);
 
-        if (!$call) {
+        if (! $call) {
             return response()->json(['success' => false, 'message' => 'Call not found.'], 404);
         }
 
@@ -306,7 +311,7 @@ class CallController extends Controller
         $userId = $request->user()->id;
         $call = Call::with(['caller.operatorProfile', 'receiver.operatorProfile'])->find($id);
 
-        if (!$call) {
+        if (! $call) {
             return response()->json(['success' => false, 'message' => 'Call not found.'], 404);
         }
 
@@ -338,7 +343,7 @@ class CallController extends Controller
             Message::create([
                 'sender_id' => $call->caller_id,
                 'receiver_id' => $call->receiver_id,
-                'message' => '[CALL:{"type":"voice","duration":' . $duration . '}]',
+                'message' => '[CALL:{"type":"voice","duration":'.$duration.'}]',
                 'is_read' => false,
             ]);
         } else {

@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,24 +12,30 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import api from "@/services/api";
 import PrimaryButton from "@/components/common/PrimaryButton";
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";
 import { useAppToast } from "@/context/ToastContext";
 
 export default function SupportScreen() {
-  const { showWarning, showSuccess } = useAppToast();
+  const { showWarning } = useAppToast();
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
 
-  const handleSubmit = () => {
+  const [support, setSupport] = useState({ support_email: "support@ride4rent.ph", support_phone: "+63 917 123 4567" });
+  useEffect(() => { api.get("/platform-settings").then((response) => setSupport(response.data.data)).catch(() => {}); }, []);
+
+  const handleSubmit = async () => {
     if (!subject.trim() || !message.trim()) {
       showWarning("Missing Details", "Please provide a subject and message describing your inquiry.");
       return;
     }
-    showSuccess("Message Sent", "Thank you for reaching out! A support representative will respond shortly.");
-    setSubject("");
-    setMessage("");
+    try {
+      await Linking.openURL(`mailto:${support.support_email}?subject=${encodeURIComponent(subject.trim())}&body=${encodeURIComponent(message.trim())}`);
+    } catch {
+      showWarning("Email unavailable", `Please send your inquiry to ${support.support_email}.`);
+    }
   };
 
   return (
@@ -50,19 +57,19 @@ export default function SupportScreen() {
         {/* Support Direct Contacts */}
         <View style={styles.contactCard}>
           <Text style={styles.cardHeading}>Get in Touch</Text>
-          <Text style={styles.cardSub}>Our team is available 24/7 to assist with rentals, operators, and payments.</Text>
+          <Text style={styles.cardSub}>Contact our team for help with rentals, operators, and payments.</Text>
 
           <View style={styles.channelRow}>
             <Ionicons name="mail-outline" size={20} color={Colors.dark} />
-            <Text style={styles.channelText}>support@ride4rent.com</Text>
+            <Text style={styles.channelText}>{support.support_email}</Text>
           </View>
           <View style={styles.channelRow}>
             <Ionicons name="call-outline" size={20} color={Colors.dark} />
-            <Text style={styles.channelText}>+63 (02) 8123-4567</Text>
+            <Text style={styles.channelText}>{support.support_phone}</Text>
           </View>
           <View style={styles.channelRow}>
             <Ionicons name="location-outline" size={20} color={Colors.dark} />
-            <Text style={styles.channelText}>Metro Manila, Philippines</Text>
+            <Text style={styles.channelText}>Oriental Mindoro, Philippines</Text>
           </View>
         </View>
 
@@ -91,7 +98,7 @@ export default function SupportScreen() {
         />
 
         <View style={styles.buttonWrap}>
-          <PrimaryButton title="Submit Inquiry" onPress={handleSubmit} />
+          <PrimaryButton title="Open Email" onPress={handleSubmit} />
         </View>
       </ScrollView>
     </SafeAreaView>

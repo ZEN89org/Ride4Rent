@@ -382,10 +382,10 @@
                                                 <span class="block text-[10px] font-bold text-[#64748B] mb-1">Front (Name & Details)</span>
                                                 @if ($renter->drivers_license_front)
                                                     <img 
-                                                        src="{{ asset('storage/' . $renter->drivers_license_front) }}" 
+                                                        src="{{ \App\Services\PrivateDocumentService::url($renter->drivers_license_front) }}"
                                                         alt="Driver License Front" 
                                                         class="h-32 w-full object-cover rounded-lg cursor-pointer hover:opacity-90 transition border border-[#E2E8F0]"
-                                                        onclick="openImageModal('{{ asset('storage/' . $renter->drivers_license_front) }}', 'Front License - {{ addslashes(trim($renter->first_name . ' ' . $renter->last_name)) }}')"
+                                                        onclick="openImageModal('{{ \App\Services\PrivateDocumentService::url($renter->drivers_license_front) }}', 'Front License - {{ addslashes(trim($renter->first_name . ' ' . $renter->last_name)) }}')"
                                                     />
                                                 @else
                                                     <div class="h-32 flex items-center justify-center rounded-lg bg-[#F1F5F9] text-[#94A3B8] text-[11px]">No Photo</div>
@@ -397,10 +397,10 @@
                                                 <span class="block text-[10px] font-bold text-[#64748B] mb-1">Back (Restrictions)</span>
                                                 @if ($renter->drivers_license_back)
                                                     <img 
-                                                        src="{{ asset('storage/' . $renter->drivers_license_back) }}" 
+                                                        src="{{ \App\Services\PrivateDocumentService::url($renter->drivers_license_back) }}"
                                                         alt="Driver License Back" 
                                                         class="h-32 w-full object-cover rounded-lg cursor-pointer hover:opacity-90 transition border border-[#E2E8F0]"
-                                                        onclick="openImageModal('{{ asset('storage/' . $renter->drivers_license_back) }}', 'Back License - {{ addslashes(trim($renter->first_name . ' ' . $renter->last_name)) }}')"
+                                                        onclick="openImageModal('{{ \App\Services\PrivateDocumentService::url($renter->drivers_license_back) }}', 'Back License - {{ addslashes(trim($renter->first_name . ' ' . $renter->last_name)) }}')"
                                                     />
                                                 @else
                                                     <div class="h-32 flex items-center justify-center rounded-lg bg-[#F1F5F9] text-[#94A3B8] text-[11px]">No Photo</div>
@@ -512,7 +512,7 @@
                                                 @if ($operator->operatorProfile?->{$field})
                                                     <button 
                                                         type="button"
-                                                        onclick="openImageModal('{{ asset('storage/' . $operator->operatorProfile->{$field}) }}', '{{ addslashes($label) }} - {{ addslashes($operator->operatorProfile?->business_name ?: trim($operator->first_name . ' ' . $operator->last_name)) }}')" 
+                                                        onclick="openImageModal('{{ \App\Services\PrivateDocumentService::url($operator->operatorProfile->{$field}) }}', '{{ addslashes($label) }} - {{ addslashes($operator->operatorProfile?->business_name ?: trim($operator->first_name . ' ' . $operator->last_name)) }}')"
                                                         class="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 text-[11px] font-semibold text-[#0F172A] hover:border-[#FEC103] hover:bg-white flex items-center justify-between cursor-pointer w-full text-left transition"
                                                     >
                                                         <span class="flex items-center gap-1.5 truncate">

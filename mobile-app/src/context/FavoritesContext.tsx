@@ -21,19 +21,16 @@ export const FavoritesProvider: React.FC<{ children: React.ReactNode }> = ({
   const [favorites, setFavorites] = useState<string[]>([]);
 
   useEffect(() => {
-    loadFavorites();
+    let active = true;
+    AsyncStorage.getItem(FAVORITES_STORAGE_KEY)
+      .then((stored) => {
+        if (active && stored) setFavorites(JSON.parse(stored));
+      })
+      .catch((error) => console.error("Failed to load favorites", error));
+    return () => {
+      active = false;
+    };
   }, []);
-
-  const loadFavorites = async () => {
-    try {
-      const stored = await AsyncStorage.getItem(FAVORITES_STORAGE_KEY);
-      if (stored) {
-        setFavorites(JSON.parse(stored));
-      }
-    } catch (e) {
-      console.error("Failed to load favorites", e);
-    }
-  };
 
   const isFavorite = (id: string | number) => {
     return favorites.includes(String(id));
@@ -45,10 +42,11 @@ export const FavoritesProvider: React.FC<{ children: React.ReactNode }> = ({
       const updated = prev.includes(stringId)
         ? prev.filter((item) => item !== stringId)
         : [...prev, stringId];
-      
-      AsyncStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(updated)).catch(
-        (err) => console.error("Failed to save favorites", err)
-      );
+
+      AsyncStorage.setItem(
+        FAVORITES_STORAGE_KEY,
+        JSON.stringify(updated),
+      ).catch((err) => console.error("Failed to save favorites", err));
       return updated;
     });
   };

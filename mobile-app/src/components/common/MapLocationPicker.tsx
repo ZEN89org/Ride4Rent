@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -14,8 +14,16 @@ import { WebView, WebViewMessageEvent } from "react-native-webview";
 
 import PrimaryButton from "@/components/common/PrimaryButton";
 import { Colors } from "@/constants/colors";
-import { MUNICIPALITY_COORDINATES, ORIENTAL_MINDORO_LOCATIONS } from "@/constants/orientalMindoroLocations";
-import { FontFamily, FontSize, Radius, Spacing } from "@/constants/theme";
+import {
+  MUNICIPALITY_COORDINATES,
+  ORIENTAL_MINDORO_LOCATIONS,
+} from "@/constants/orientalMindoroLocations";
+import { FontFamily, Spacing } from "@/constants/theme";
+import {
+  isInServiceArea,
+  SERVICE_AREA_ERROR,
+  serviceAreaLockScript,
+} from "@/utils/serviceArea";
 
 export interface SelectedLocationResult {
   latitude: number;
@@ -40,7 +48,125 @@ const DEFAULT_ORIENTAL_MINDORO = {
   longitude: 121.4878, // Center of Oriental Mindoro (Pinamalayan)
 };
 
-export default function MapLocationPicker({
+const matchMunicipality = (rawCity?: string | null): string | undefined => {
+  if (!rawCity) return undefined;
+  const clean = rawCity
+    .toLowerCase()
+    .replace(/city|of/g, "")
+    .trim();
+  for (const loc of ORIENTAL_MINDORO_LOCATIONS) {
+    const nameClean = loc.name
+      .toLowerCase()
+      .replace(/city|of/g, "")
+      .trim();
+    if (clean.includes(nameClean) || nameClean.includes(clean)) {
+      return loc.name;
+    }
+  }
+  return undefined;
+};
+
+const matchBarangay = (
+  muniName: string,
+  rawBarangay?: string | null,
+): string | undefined => {
+  if (!rawBarangay) return undefined;
+  const muni = ORIENTAL_MINDORO_LOCATIONS.find((m) => m.name === muniName);
+  if (!muni) return undefined;
+  const clean = rawBarangay
+    .toLowerCase()
+    .replace(/barangay|brgy\.?/g, "")
+    .trim();
+  for (const b of muni.barangays) {
+    const bClean = b
+      .toLowerCase()
+      .replace(/barangay|brgy\.?/g, "")
+      .trim();
+    if (clean.includes(bClean) || bClean.includes(clean)) {
+      return b;
+    }
+  }
+  return undefined;
+};
+
+async function reverseGeocodeLocation(
+  lat: number,
+  lng: number,
+  initialMunicipality?: string | null,
+) {
+  let street = "";
+  let rawCity = "";
+  let rawDistrict = "";
+  let fullText = "";
+
+  const expoResults = await Location.reverseGeocodeAsync({
+    latitude: lat,
+    longitude: lng,
+  });
+  if (expoResults && expoResults.length > 0) {
+    const item = expoResults[0];
+    street = [item.streetNumber, item.street].filter(Boolean).join(" ");
+    rawCity = item.city || item.subregion || "";
+    rawDistrict = item.district || item.name || "";
+    fullText =
+      item.formattedAddress ||
+      `${street}, ${rawDistrict}, ${rawCity}`.replace(/^, |, $/g, "");
+  } else {
+    // Fallback to OpenStreetMap Nominatim
+    const resp = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+      { headers: { "User-Agent": "Ride4Rent-App" } },
+    );
+    const data = await resp.json();
+    if (data?.address) {
+      street = data.address.road || data.address.pedestrian || "";
+      rawCity =
+        data.address.city ||
+        data.address.town ||
+        data.address.municipality ||
+        "";
+      rawDistrict =
+        data.address.suburb ||
+        data.address.neighbourhood ||
+        data.address.village ||
+        "";
+      fullText = data.display_name || "";
+    }
+  }
+
+  const matchedMuni =
+    matchMunicipality(rawCity) || initialMunicipality || undefined;
+  let matchedBrgy: string | undefined = undefined;
+  if (matchedMuni) {
+    matchedBrgy = matchBarangay(matchedMuni, rawDistrict);
+  }
+
+  return {
+    street: street || (rawDistrict ? `Near ${rawDistrict}` : undefined),
+    barangay:
+      matchedBrgy ||
+      (rawDistrict
+        ? rawDistrict.replace(/Barangay|Brgy\.?/gi, "").trim()
+        : undefined),
+    municipality: matchedMuni,
+    formattedAddress: fullText,
+  };
+}
+
+export default function MapLocationPicker(props: MapLocationPickerProps) {
+  return props.visible ? (
+    <MapLocationPickerSession
+      key={JSON.stringify([
+        props.initialLatitude,
+        props.initialLongitude,
+        props.initialMunicipality,
+      ])}
+      {...props}
+    />
+  ) : null;
+}
+
+function MapLocationPickerSession({
   visible,
   onClose,
   initialLatitude,
@@ -50,13 +176,45 @@ export default function MapLocationPicker({
 }: MapLocationPickerProps) {
   const webViewRef = useRef<WebView>(null);
 
-  const muniCoords = initialMunicipality && MUNICIPALITY_COORDINATES[initialMunicipality]
-    ? MUNICIPALITY_COORDINATES[initialMunicipality]
-    : null;
-  const initialLat = initialLatitude || muniCoords?.latitude || DEFAULT_ORIENTAL_MINDORO.latitude;
-  const initialLng = initialLongitude || muniCoords?.longitude || DEFAULT_ORIENTAL_MINDORO.longitude;
+  const muniCoords =
+    initialMunicipality && MUNICIPALITY_COORDINATES[initialMunicipality]
+      ? MUNICIPALITY_COORDINATES[initialMunicipality]
+      : null;
+  const candidateLat =
+    initialLatitude ||
+    muniCoords?.latitude ||
+    DEFAULT_ORIENTAL_MINDORO.latitude;
+  const candidateLng =
+    initialLongitude ||
+    muniCoords?.longitude ||
+    DEFAULT_ORIENTAL_MINDORO.longitude;
+  const initialLat = isInServiceArea(candidateLat, candidateLng)
+    ? candidateLat
+    : DEFAULT_ORIENTAL_MINDORO.latitude;
+  const initialLng = isInServiceArea(candidateLat, candidateLng)
+    ? candidateLng
+    : DEFAULT_ORIENTAL_MINDORO.longitude;
+  const [outsideAttempt, setOutsideAttempt] = useState(false);
+  const [outsideBanner, setOutsideBanner] = useState(false);
+  const outsideBannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [currentCoords, setCurrentCoords] = useState<{ latitude: number; longitude: number }>({
+  const showOutsideError = () => {
+    setOutsideBanner(true);
+    if (outsideBannerTimer.current) clearTimeout(outsideBannerTimer.current);
+    outsideBannerTimer.current = setTimeout(() => setOutsideBanner(false), 3000);
+  };
+
+  useEffect(
+    () => () => {
+      if (outsideBannerTimer.current) clearTimeout(outsideBannerTimer.current);
+    },
+    [],
+  );
+
+  const [currentCoords, setCurrentCoords] = useState<{
+    latitude: number;
+    longitude: number;
+  }>({
     latitude: initialLat,
     longitude: initialLng,
   });
@@ -69,103 +227,63 @@ export default function MapLocationPicker({
   }>({});
 
   const [locating, setLocating] = useState(false);
-  const [geocoding, setGeocoding] = useState(false);
+  const [geocoding, setGeocoding] = useState(true);
+
+  const geocodeRequest = useRef(0);
+  const performReverseGeocode = async (lat: number, lng: number) => {
+    const requestId = ++geocodeRequest.current;
+    setGeocoding(true);
+    try {
+      const address = await reverseGeocodeLocation(
+        lat,
+        lng,
+        initialMunicipality,
+      );
+      if (requestId === geocodeRequest.current) setDetectedAddress(address);
+    } catch (error) {
+      console.log("Geocoding error:", error);
+    } finally {
+      if (requestId === geocodeRequest.current) setGeocoding(false);
+    }
+  };
 
   useEffect(() => {
-    if (visible) {
-      const muni = initialMunicipality && MUNICIPALITY_COORDINATES[initialMunicipality]
-        ? MUNICIPALITY_COORDINATES[initialMunicipality]
-        : null;
-      const lat = initialLatitude || muni?.latitude || DEFAULT_ORIENTAL_MINDORO.latitude;
-      const lng = initialLongitude || muni?.longitude || DEFAULT_ORIENTAL_MINDORO.longitude;
-      setCurrentCoords({ latitude: lat, longitude: lng });
-      performReverseGeocode(lat, lng);
-    }
-  }, [visible, initialLatitude, initialLongitude, initialMunicipality]);
-
-  const matchMunicipality = (rawCity?: string | null): string | undefined => {
-    if (!rawCity) return undefined;
-    const clean = rawCity.toLowerCase().replace(/city|of/g, "").trim();
-    for (const loc of ORIENTAL_MINDORO_LOCATIONS) {
-      const nameClean = loc.name.toLowerCase().replace(/city|of/g, "").trim();
-      if (clean.includes(nameClean) || nameClean.includes(clean)) {
-        return loc.name;
-      }
-    }
-    return undefined;
-  };
-
-  const matchBarangay = (muniName: string, rawBarangay?: string | null): string | undefined => {
-    if (!rawBarangay) return undefined;
-    const muni = ORIENTAL_MINDORO_LOCATIONS.find((m) => m.name === muniName);
-    if (!muni) return undefined;
-    const clean = rawBarangay.toLowerCase().replace(/barangay|brgy\.?/g, "").trim();
-    for (const b of muni.barangays) {
-      const bClean = b.toLowerCase().replace(/barangay|brgy\.?/g, "").trim();
-      if (clean.includes(bClean) || bClean.includes(clean)) {
-        return b;
-      }
-    }
-    return undefined;
-  };
-
-  const performReverseGeocode = async (lat: number, lng: number) => {
-    try {
-      setGeocoding(true);
-      let street = "";
-      let rawCity = "";
-      let rawDistrict = "";
-      let fullText = "";
-
-      const expoResults = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
-      if (expoResults && expoResults.length > 0) {
-        const item = expoResults[0];
-        street = [item.streetNumber, item.street].filter(Boolean).join(" ");
-        rawCity = item.city || item.subregion || "";
-        rawDistrict = item.district || item.name || "";
-        fullText = item.formattedAddress || `${street}, ${rawDistrict}, ${rawCity}`.replace(/^, |, $/g, "");
-      } else {
-        // Fallback to OpenStreetMap Nominatim
-        const resp = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
-          { headers: { "User-Agent": "Ride4Rent-App" } }
-        );
-        const data = await resp.json();
-        if (data?.address) {
-          street = data.address.road || data.address.pedestrian || "";
-          rawCity = data.address.city || data.address.town || data.address.municipality || "";
-          rawDistrict = data.address.suburb || data.address.neighbourhood || data.address.village || "";
-          fullText = data.display_name || "";
-        }
-      }
-
-      const matchedMuni = matchMunicipality(rawCity) || initialMunicipality || undefined;
-      let matchedBrgy: string | undefined = undefined;
-      if (matchedMuni) {
-        matchedBrgy = matchBarangay(matchedMuni, rawDistrict);
-      }
-
-      setDetectedAddress({
-        street: street || (rawDistrict ? `Near ${rawDistrict}` : undefined),
-        barangay: matchedBrgy || (rawDistrict ? rawDistrict.replace(/Barangay|Brgy\.?/gi, "").trim() : undefined),
-        municipality: matchedMuni,
-        formattedAddress: fullText,
+    let active = true;
+    const requestId = ++geocodeRequest.current;
+    reverseGeocodeLocation(initialLat, initialLng, initialMunicipality)
+      .then((address) => {
+        if (active && requestId === geocodeRequest.current)
+          setDetectedAddress(address);
+      })
+      .catch((error) => console.log("Geocoding error:", error))
+      .finally(() => {
+        if (active && requestId === geocodeRequest.current) setGeocoding(false);
       });
-    } catch (e) {
-      console.log("Geocoding error:", e);
-    } finally {
-      setGeocoding(false);
-    }
-  };
+    return () => {
+      active = false;
+    };
+  }, [initialLat, initialLng, initialMunicipality]);
 
   const handleMessage = (event: WebViewMessageEvent) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === "OUTSIDE_SERVICE_AREA") {
+        showOutsideError();
+        return;
+      }
       if (data.type === "location_change") {
         const lat = Number(data.latitude);
         const lng = Number(data.longitude);
         if (Number.isFinite(lat) && Number.isFinite(lng)) {
           setCurrentCoords({ latitude: lat, longitude: lng });
+          if (!isInServiceArea(lat, lng)) {
+            setOutsideAttempt(true);
+            geocodeRequest.current++;
+            setDetectedAddress({});
+            setGeocoding(false);
+            return;
+          }
+          setOutsideAttempt(false);
           performReverseGeocode(lat, lng);
         }
       }
@@ -179,12 +297,22 @@ export default function MapLocationPicker({
       setLocating(true);
       const perm = await Location.requestForegroundPermissionsAsync();
       if (!perm.granted) {
-        alert("Location permission is needed to pinpoint your current location.");
+        alert(
+          "Location permission is needed to pinpoint your current location.",
+        );
         return;
       }
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
       const lat = pos.coords.latitude;
       const lng = pos.coords.longitude;
+      if (!isInServiceArea(lat, lng)) {
+        setOutsideAttempt(true);
+        alert(SERVICE_AREA_ERROR);
+        return;
+      }
+      setOutsideAttempt(false);
       setCurrentCoords({ latitude: lat, longitude: lng });
 
       webViewRef.current?.injectJavaScript(`
@@ -203,6 +331,10 @@ export default function MapLocationPicker({
   };
 
   const handleConfirmLocation = () => {
+    if (!isInServiceArea(currentCoords.latitude, currentCoords.longitude)) {
+      alert(SERVICE_AREA_ERROR);
+      return;
+    }
     onConfirm({
       latitude: currentCoords.latitude,
       longitude: currentCoords.longitude,
@@ -214,7 +346,8 @@ export default function MapLocationPicker({
     onClose();
   };
 
-  const mapHtml = `
+  const mapHtml = useMemo(
+    () => `
 <!DOCTYPE html>
 <html>
 <head>
@@ -296,6 +429,15 @@ export default function MapLocationPicker({
       zoomControl: false,
       attributionControl: false
     }).setView([${initialLat}, ${initialLng}], 16);
+    ${serviceAreaLockScript("map")}
+
+    function notifyOutside() {
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: "OUTSIDE_SERVICE_AREA" }));
+      }
+    }
+    let lastValidCenter = [${initialLat}, ${initialLng}];
+    let isRecentering = false;
 
     const streetsLayer = L.tileLayer("https://tile.openstreetmap.org/{z}/{y}/{x}.png", {
       maxZoom: 19,
@@ -328,9 +470,22 @@ export default function MapLocationPicker({
 
     let moveTimeout = null;
     map.on("moveend", function() {
+      if (isRecentering) {
+        isRecentering = false;
+        return;
+      }
+      const center = map.getCenter();
+      if (window.r4rIsInServiceArea && !window.r4rIsInServiceArea(center.lat, center.lng)) {
+        notifyOutside();
+        if (lastValidCenter) {
+          isRecentering = true;
+          map.panTo(lastValidCenter, { animate: true });
+        }
+        return;
+      }
+      lastValidCenter = [center.lat, center.lng];
       clearTimeout(moveTimeout);
       moveTimeout = setTimeout(function() {
-        const center = map.getCenter();
         if (window.ReactNativeWebView) {
           window.ReactNativeWebView.postMessage(JSON.stringify({
             type: "location_change",
@@ -342,24 +497,37 @@ export default function MapLocationPicker({
     });
 
     map.on("click", function(e) {
+      if (window.r4rIsInServiceArea && !window.r4rIsInServiceArea(e.latlng.lat, e.latlng.lng)) {
+        notifyOutside();
+        return;
+      }
       map.panTo(e.latlng, { animate: true });
     });
   </script>
 </body>
 </html>
-  `;
+  `,
+    [initialLat, initialLng],
+  );
+  const mapSource = useMemo(() => ({ html: mapHtml }), [mapHtml]);
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <SafeAreaView edges={["top", "bottom"]} style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.headerBtn} activeOpacity={0.7}>
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.headerBtn}
+            activeOpacity={0.7}
+          >
             <Ionicons name="close" size={24} color={Colors.dark} />
           </TouchableOpacity>
           <View style={styles.headerTitleWrap}>
             <Text style={styles.headerTitle}>Pin Garage Location</Text>
-            <Text style={styles.headerSubtitle}>Drag the map to pinpoint your fleet's base</Text>
+            <Text style={styles.headerSubtitle}>
+              Drag the map to pinpoint your fleet&apos;s base
+            </Text>
           </View>
           <View style={styles.headerBtn} />
         </View>
@@ -369,7 +537,7 @@ export default function MapLocationPicker({
           <WebView
             ref={webViewRef}
             originWhitelist={["*"]}
-            source={{ html: mapHtml }}
+            source={mapSource}
             onMessage={handleMessage}
             style={styles.map}
             javaScriptEnabled={true}
@@ -389,38 +557,76 @@ export default function MapLocationPicker({
               <Ionicons name="locate" size={22} color={Colors.dark} />
             )}
           </TouchableOpacity>
+
+          {outsideBanner && (
+            <View
+              pointerEvents="none"
+              accessibilityRole="alert"
+              style={styles.outsideBanner}
+            >
+              <Ionicons name="alert-circle" size={17} color={Colors.white} />
+              <Text style={styles.outsideBannerText}>
+                Outside service area. Ride4Rent is only available in Oriental
+                Mindoro.
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Bottom Location Details Card */}
         <View style={styles.bottomCard}>
+          {outsideAttempt && (
+            <Text
+              accessibilityRole="alert"
+              style={{ color: "#B91C1C", marginBottom: 8 }}
+            >
+              Choose a location inside Oriental Mindoro to continue.
+            </Text>
+          )}
           <View style={styles.addressInfoRow}>
             <View style={styles.iconCircle}>
               <Ionicons name="location" size={22} color={Colors.primary} />
             </View>
             <View style={styles.addressTextContainer}>
               <Text style={styles.addressPrimary} numberOfLines={1}>
-                {detectedAddress.street || detectedAddress.barangay || "Locating base..."}
+                {detectedAddress.street ||
+                  detectedAddress.barangay ||
+                  "Locating base..."}
               </Text>
               <Text style={styles.addressSecondary} numberOfLines={2}>
-                {[
-                  detectedAddress.barangay ? `Brgy. ${detectedAddress.barangay}` : null,
-                  detectedAddress.municipality,
-                  "Oriental Mindoro",
-                ]
-                  .filter(Boolean)
-                  .join(", ") || "Move pin to set address"}
+                {!isInServiceArea(
+                  currentCoords.latitude,
+                  currentCoords.longitude,
+                )
+                  ? SERVICE_AREA_ERROR
+                  : [
+                      detectedAddress.barangay
+                        ? `Brgy. ${detectedAddress.barangay}`
+                        : null,
+                      detectedAddress.municipality,
+                      "Oriental Mindoro",
+                    ]
+                      .filter(Boolean)
+                      .join(", ") || "Move pin to set address"}
               </Text>
               <Text style={styles.coordsText}>
-                {currentCoords.latitude.toFixed(5)}, {currentCoords.longitude.toFixed(5)}
+                {currentCoords.latitude.toFixed(5)},{" "}
+                {currentCoords.longitude.toFixed(5)}
               </Text>
             </View>
-            {geocoding && <ActivityIndicator size="small" color={Colors.primary} />}
+            {geocoding && (
+              <ActivityIndicator size="small" color={Colors.primary} />
+            )}
           </View>
 
           <PrimaryButton
             title="Set This Location"
             onPress={handleConfirmLocation}
             style={styles.confirmBtn}
+            disabled={
+              outsideAttempt ||
+              !isInServiceArea(currentCoords.latitude, currentCoords.longitude)
+            }
           />
         </View>
       </SafeAreaView>
@@ -535,5 +741,30 @@ const styles = StyleSheet.create({
   },
   confirmBtn: {
     marginTop: 4,
+  },
+  outsideBanner: {
+    position: "absolute",
+    top: 14,
+    left: Spacing.md,
+    right: Spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#DC2626",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
+    borderRadius: 14,
+    elevation: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  outsideBannerText: {
+    flex: 1,
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+    color: Colors.white,
+    lineHeight: 16,
   },
 });

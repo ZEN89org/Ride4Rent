@@ -1,16 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
-import {
-  Modal,
-  Platform,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  View,
-} from "react-native";
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Colors } from "@/constants/colors";
-import { FontFamily, FontSize, Radius, Spacing } from "@/constants/theme";
+import { FontFamily } from "@/constants/theme";
 
 import { AppBottomSheet } from "./AppBottomSheet";
 

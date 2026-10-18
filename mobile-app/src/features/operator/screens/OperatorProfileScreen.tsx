@@ -1,6 +1,6 @@
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { router, useFocusEffect } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "expo-router";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -15,7 +15,7 @@ import * as ImagePicker from "expo-image-picker";
 
 import PrimaryButton from "@/components/common/PrimaryButton";
 import { Colors } from "@/constants/colors";
-import { FontFamily, FontSize, Spacing } from "@/constants/theme";
+import { FontFamily, Spacing } from "@/constants/theme";
 import { useAppToast } from "@/context/ToastContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import OperatorShell from "@/features/operator/components/navigation/OperatorShell";
@@ -32,33 +32,28 @@ export default function OperatorProfileScreen() {
   useFocusEffect(
     useCallback(() => {
       refreshUser?.().catch(() => {});
-    }, [refreshUser])
+    }, [refreshUser]),
   );
 
-  const [profileImage, setProfileImage] = useState<string | null>(
-    resolveImageUrl(user?.profile_photo) || null
-  );
+  const [profileImageDraft, setProfileImage] = useState<string | null>(null);
+  const profileImage =
+    profileImageDraft ?? resolveImageUrl(user?.profile_photo);
   const [uploading, setUploading] = useState(false);
 
   // Business and Payment Setup Fields
-  const [accountName, setAccountName] = useState(profile?.account_name || "");
-  const [accountNumber, setAccountNumber] = useState(profile?.account_number || "");
+  const [accountNameDraft, setAccountName] = useState<string | null>(null);
+  const accountName = accountNameDraft ?? profile?.account_name ?? "";
+  const [accountNumberDraft, setAccountNumber] = useState<string | null>(null);
+  const accountNumber = accountNumberDraft ?? profile?.account_number ?? "";
   const [paymentMethod, setPaymentMethod] = useState("gcash");
-  const [qrCodeImage, setQrCodeImage] = useState<string | null>(
-    resolveImageUrl(profile?.qr_code) || null
-  );
+  const [qrCodeDraft, setQrCodeImage] = useState<string | null>(null);
+  const qrCodeImage = qrCodeDraft ?? resolveImageUrl(profile?.qr_code);
   const [savingPayment, setSavingPayment] = useState(false);
-
-  useEffect(() => {
-    if (user?.profile_photo) setProfileImage(resolveImageUrl(user.profile_photo));
-    if (profile?.account_name) setAccountName(profile.account_name);
-    if (profile?.account_number) setAccountNumber(profile.account_number);
-    if (profile?.qr_code) setQrCodeImage(resolveImageUrl(profile.qr_code));
-  }, [user, profile]);
 
   const handlePickImage = async () => {
     try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permission =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
         showError("Permission Needed", "Please grant camera roll permissions.");
         return;
@@ -96,7 +91,8 @@ export default function OperatorProfileScreen() {
 
   const handlePickQrCode = async () => {
     try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permission =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
         showError("Permission Needed", "Please grant photo permissions.");
         return;
@@ -125,7 +121,7 @@ export default function OperatorProfileScreen() {
     if (!phoneRegex.test(cleanPhone)) {
       showError(
         "Invalid Number",
-        "Please input a valid 11-digit mobile number (e.g. 09171234567 or +639171234567)."
+        "Please input a valid 11-digit mobile number (e.g. 09171234567 or +639171234567).",
       );
       return;
     }
@@ -134,7 +130,8 @@ export default function OperatorProfileScreen() {
       setSavingPayment(true);
       const formData = new FormData();
       formData.append("account_number", cleanPhone);
-      if (accountName.trim()) formData.append("account_name", accountName.trim());
+      if (accountName.trim())
+        formData.append("account_name", accountName.trim());
       formData.append("accepted_payment_methods[]", paymentMethod);
 
       if (qrCodeImage && !qrCodeImage.startsWith("http")) {
@@ -156,18 +153,27 @@ export default function OperatorProfileScreen() {
         await updateUser(response.data.data);
       }
 
-      showSuccess("Payment Setup Saved", "Renters can now send reservation payments to this account.");
+      showSuccess(
+        "Payment Setup Saved",
+        "Renters can now send reservation payments to this account.",
+      );
     } catch (e: any) {
-      showError("Error", e.response?.data?.message || "Could not save payment setup.");
+      showError(
+        "Error",
+        e.response?.data?.message || "Could not save payment setup.",
+      );
     } finally {
       setSavingPayment(false);
     }
   };
 
-  const fullName = [user?.first_name, user?.last_name].filter(Boolean).join(" ");
-  const address = [profile?.street_address, profile?.barangay, profile?.municipality]
+  const fullName = [user?.first_name, user?.last_name]
     .filter(Boolean)
-    .join(", ") || "Address not provided";
+    .join(" ");
+  const address =
+    [profile?.street_address, profile?.barangay, profile?.municipality]
+      .filter(Boolean)
+      .join(", ") || "Address not provided";
 
   return (
     <OperatorShell activeRoute="profile">
@@ -182,7 +188,10 @@ export default function OperatorProfileScreen() {
         <View style={styles.avatarSection}>
           <View style={styles.avatarWrapper}>
             {profileImage ? (
-              <Image source={{ uri: profileImage }} style={styles.avatarImage} />
+              <Image
+                source={{ uri: profileImage }}
+                style={styles.avatarImage}
+              />
             ) : (
               <View style={styles.avatarCircle}>
                 <Ionicons name="business" size={32} color={Colors.dark} />
@@ -203,13 +212,17 @@ export default function OperatorProfileScreen() {
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.userName}>{profile?.business_name || fullName || "Host Workspace"}</Text>
+          <Text style={styles.userName}>
+            {profile?.business_name || fullName || "Host Workspace"}
+          </Text>
           <Text style={styles.userEmail}>{user?.email}</Text>
 
           {isOperatorPending ? (
             <View style={[styles.verifiedBadge, styles.pendingBadge]}>
               <Ionicons name="time" size={14} color="#D97706" />
-              <Text style={[styles.verifiedText, styles.pendingBadgeText]}>Application Under Review</Text>
+              <Text style={[styles.verifiedText, styles.pendingBadgeText]}>
+                Application Under Review
+              </Text>
             </View>
           ) : (
             <View style={styles.verifiedBadge}>
@@ -224,14 +237,26 @@ export default function OperatorProfileScreen() {
         <View style={styles.card}>
           <View style={styles.infoRow}>
             <Ionicons
-              name={isOperatorPending ? "time-outline" : "shield-checkmark-outline"}
+              name={
+                isOperatorPending ? "time-outline" : "shield-checkmark-outline"
+              }
               size={18}
               color={isOperatorPending ? "#D97706" : "#10B981"}
             />
             <View style={styles.infoTextWrap}>
               <Text style={styles.infoLabel}>Account Accreditation</Text>
-              <Text style={[styles.infoValue, isOperatorPending && { color: "#D97706", fontFamily: FontFamily.bold }]}>
-                {isOperatorPending ? "Pending Administrator Verification" : "Active & Verified"}
+              <Text
+                style={[
+                  styles.infoValue,
+                  isOperatorPending && {
+                    color: "#D97706",
+                    fontFamily: FontFamily.bold,
+                  },
+                ]}
+              >
+                {isOperatorPending
+                  ? "Pending Administrator Verification"
+                  : "Active & Verified"}
               </Text>
             </View>
           </View>
@@ -239,7 +264,11 @@ export default function OperatorProfileScreen() {
           <View style={styles.divider} />
 
           <View style={styles.infoRow}>
-            <Ionicons name="person-outline" size={18} color={Colors.secondary} />
+            <Ionicons
+              name="person-outline"
+              size={18}
+              color={Colors.secondary}
+            />
             <View style={styles.infoTextWrap}>
               <Text style={styles.infoLabel}>Authorized Representative</Text>
               <Text style={styles.infoValue}>{fullName}</Text>
@@ -252,14 +281,22 @@ export default function OperatorProfileScreen() {
             <Ionicons name="call-outline" size={18} color={Colors.secondary} />
             <View style={styles.infoTextWrap}>
               <Text style={styles.infoLabel}>Business Contact</Text>
-              <Text style={styles.infoValue}>{profile?.business_contact_number || user?.mobile_number || "Not set"}</Text>
+              <Text style={styles.infoValue}>
+                {profile?.business_contact_number ||
+                  user?.mobile_number ||
+                  "Not set"}
+              </Text>
             </View>
           </View>
 
           <View style={styles.divider} />
 
           <View style={styles.infoRow}>
-            <Ionicons name="location-outline" size={18} color={Colors.secondary} />
+            <Ionicons
+              name="location-outline"
+              size={18}
+              color={Colors.secondary}
+            />
             <View style={styles.infoTextWrap}>
               <Text style={styles.infoLabel}>Garage / Pickup Base</Text>
               <Text style={styles.infoValue}>{address}</Text>
@@ -271,7 +308,8 @@ export default function OperatorProfileScreen() {
         <Text style={styles.sectionHeading}>Rental Payment Setup</Text>
         <View style={styles.card}>
           <Text style={styles.cardSub}>
-            Set your payment account & optional QR code so renters know where to send reservation fees.
+            Set your payment account & optional QR code so renters know where to
+            send reservation fees.
           </Text>
 
           <Text style={styles.inputLabel}>Primary Payment Channel</Text>
@@ -315,7 +353,9 @@ export default function OperatorProfileScreen() {
             placeholder="e.g. Juan Dela Cruz"
           />
 
-          <Text style={styles.inputLabel}>Account / Phone Number (11-digits)</Text>
+          <Text style={styles.inputLabel}>
+            Account / Phone Number (11-digits)
+          </Text>
           <TextInput
             style={styles.input}
             value={accountNumber}
@@ -332,11 +372,21 @@ export default function OperatorProfileScreen() {
             activeOpacity={0.8}
           >
             {qrCodeImage ? (
-              <Image source={{ uri: qrCodeImage }} style={styles.qrImagePreview} resizeMode="contain" />
+              <Image
+                source={{ uri: qrCodeImage }}
+                style={styles.qrImagePreview}
+                resizeMode="contain"
+              />
             ) : (
               <View style={styles.qrPlaceholder}>
-                <Ionicons name="qr-code-outline" size={32} color={Colors.secondary} />
-                <Text style={styles.qrText}>Tap to select payment QR code image</Text>
+                <Ionicons
+                  name="qr-code-outline"
+                  size={32}
+                  color={Colors.secondary}
+                />
+                <Text style={styles.qrText}>
+                  Tap to select payment QR code image
+                </Text>
               </View>
             )}
           </TouchableOpacity>

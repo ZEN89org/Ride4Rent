@@ -11,13 +11,23 @@ import {
   initiateCall,
 } from "@/services/callService";
 import {
+  assertVoiceCallingAvailable,
+  setLiveKitSpeakerEnabled,
   connectToLiveKitRoom,
   disconnectLiveKitRoom,
   setLiveKitMicrophoneMuted,
 } from "@/services/livekitAudioService";
+import { useAppToast } from "@/context/ToastContext";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import React, { createContext, useContext, useEffect, useRef, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from "react";
 import {
   Animated,
   Modal,
@@ -26,7 +36,7 @@ import {
   Text,
   TouchableOpacity,
   Vibration,
-  View
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -52,21 +62,49 @@ export const formatCallTime = (seconds: number): string => {
   return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 };
 
-export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const { user } = useAuth();
   const [activeCall, setActiveCall] = useState<ActiveCallData | null>(null);
   const [callRole, setCallRole] = useState<"caller" | "receiver" | null>(null);
-  const [callDuration, setCallDuration] = useState(0);
+  const [callClock, setCallClock] = useState(() => Date.now());
+  const callDuration =
+    activeCall?.status === "accepted" && activeCall.started_at
+      ? Math.max(
+          0,
+          Math.floor(
+            (callClock - new Date(activeCall.started_at).getTime()) / 1000,
+          ),
+        )
+      : 0;
   const [isMuted, setIsMuted] = useState(false);
+  const { showError } = useAppToast();
   const [isSpeaker, setIsSpeaker] = useState(false);
   const [callStatusText, setCallStatusText] = useState("");
 
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const [callOwnerId, setCallOwnerId] = useState(user?.id);
+  if (callOwnerId !== user?.id) {
+    setCallOwnerId(user?.id);
+    setActiveCall(null);
+    setCallRole(null);
+    setCallStatusText("");
+  }
+
+  const pulseAnim = useState(() => new Animated.Value(1))[0];
   const isActionInProgressRef = useRef(false);
+  const callStatus = activeCall?.status;
+  const callId = activeCall?.id;
+  const livekitUrl = activeCall?.livekit_url;
+  const livekitToken = activeCall?.livekit_token;
+  const userId = user?.id;
+  const reportConnectionError = useEffectEvent((message: string) =>
+    showError("Call connection failed", message),
+  );
 
   // Pulse animation for ringing
   useEffect(() => {
-    if (activeCall && (activeCall.status === "calling" || activeCall.status === "ringing")) {
+    if (callStatus === "calling" || callStatus === "ringing") {
       const loop = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
@@ -79,18 +117,18 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             duration: 800,
             useNativeDriver: true,
           }),
-        ])
+        ]),
       );
       loop.start();
       return () => loop.stop();
     } else {
       pulseAnim.setValue(1);
     }
-  }, [activeCall?.status]);
+  }, [callStatus, pulseAnim]);
 
   // Vibrate phone when receiving an incoming call
   useEffect(() => {
-    if (activeCall && callRole === "receiver" && activeCall.status === "ringing") {
+    if (callRole === "receiver" && callStatus === "ringing") {
       Vibration.vibrate([0, 600, 1000], true);
       return () => {
         Vibration.cancel();
@@ -98,94 +136,84 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } else {
       Vibration.cancel();
     }
-  }, [activeCall?.status, callRole]);
+  }, [callStatus, callRole]);
 
-  // Duration timer when call is accepted
+  // Only the external timer updates the clock; duration is derived from the call.
   useEffect(() => {
-    let timer: any = null;
-    if (activeCall && activeCall.status === "accepted") {
-      const startTime = activeCall.started_at ? new Date(activeCall.started_at).getTime() : Date.now();
-      setCallDuration(Math.max(0, Math.floor((Date.now() - startTime) / 1000)));
+    if (callStatus !== "accepted") return;
+    const timer = setInterval(() => setCallClock(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [callStatus]);
 
-      timer = setInterval(() => {
-        setCallDuration(Math.max(0, Math.floor((Date.now() - startTime) / 1000)));
-      }, 1000);
-    } else {
-      setCallDuration(0);
-    }
-    return () => {
-      if (timer) clearInterval(timer);
-    };
-  }, [activeCall?.status, activeCall?.started_at]);
-
-  // Connect to LiveKit WebRTC audio room when call is accepted
+  // Keep audio connected until this call's identity, status, or credentials change.
   useEffect(() => {
-    if (
-      activeCall &&
-      activeCall.status === "accepted" &&
-      activeCall.livekit_url &&
-      activeCall.livekit_token
-    ) {
-      connectToLiveKitRoom(activeCall.livekit_url, activeCall.livekit_token);
-    } else if (!activeCall || activeCall.status !== "accepted") {
-      disconnectLiveKitRoom();
+    if (callId && callStatus === "accepted" && livekitUrl && livekitToken) {
+      let cancelled = false;
+      connectToLiveKitRoom(livekitUrl, livekitToken).catch((error) => {
+        if (cancelled) return;
+        reportConnectionError(error.message || "Could not connect call audio.");
+        endCall(callId).catch(() => {});
+        setActiveCall(null);
+        setCallRole(null);
+      });
+      return () => {
+        cancelled = true;
+        disconnectLiveKitRoom().catch(() => {});
+      };
     }
-    return () => {
-      disconnectLiveKitRoom();
-    };
-  }, [activeCall?.status, activeCall?.livekit_token, activeCall?.livekit_url]);
+    disconnectLiveKitRoom().catch(() => {});
+  }, [callId, callStatus, livekitUrl, livekitToken]);
 
-  // Background polling for incoming calls / status synchronization
+  const receiveRemoteCall = useEffectEvent(
+    (result: Awaited<ReturnType<typeof checkActiveCall>>) => {
+      if (result.call) {
+        const next = result.call;
+        setActiveCall((previous) =>
+          !previous ||
+          previous.id !== next.id ||
+          previous.status !== next.status
+            ? next
+            : previous,
+        );
+        setCallRole(result.role);
+        return;
+      }
+      if (
+        activeCall &&
+        activeCall.status !== "ended" &&
+        activeCall.status !== "declined"
+      ) {
+        setActiveCall(null);
+        setCallRole(null);
+        setCallStatusText("");
+      }
+    },
+  );
+
+  const pollIntervalMs = callId ? 1500 : 3500;
   useEffect(() => {
-    if (!user) {
-      setActiveCall(null);
-      setCallRole(null);
-      return;
-    }
-
+    if (!userId) return;
+    let active = true;
     const pollInterval = setInterval(async () => {
       if (isActionInProgressRef.current) return;
       try {
-        const res = await checkActiveCall();
-        if (res.call) {
-          setActiveCall((prev) => {
-            if (!prev) {
-              setCallRole(res.role);
-              return res.call;
-            }
-            // If status changed to accepted or ended
-            if (prev.status !== res.call!.status) {
-              return res.call;
-            }
-            return prev;
-          });
-          setCallRole(res.role);
-        } else {
-          // If a call was active and server returned null (e.g. ended by other party)
-          setActiveCall((prev) => {
-            if (prev && prev.status !== "ended" && prev.status !== "declined") {
-              setCallStatusText("Call Ended");
-              setTimeout(() => {
-                setActiveCall(null);
-                setCallRole(null);
-                setCallStatusText("");
-              }, 1200);
-            }
-            return prev;
-          });
-        }
-      } catch (e) {
-        // silent background check
+        const result = await checkActiveCall();
+        if (active) receiveRemoteCall(result);
+      } catch {
+        /* Retry on the next poll. */
       }
-    }, activeCall ? 1500 : 3500); // Poll faster (1.5s) during active call for instant sync
-
-    return () => clearInterval(pollInterval);
-  }, [user, activeCall?.id]);
+    }, pollIntervalMs);
+    return () => {
+      active = false;
+      clearInterval(pollInterval);
+    };
+  }, [userId, pollIntervalMs]);
 
   const startCall = async (targetUser: CallUser) => {
     if (!user || isActionInProgressRef.current) return;
     try {
       isActionInProgressRef.current = true;
+      assertVoiceCallingAvailable();
       setCallStatusText("Calling...");
       const newCall = await initiateCall(targetUser.id);
       setActiveCall(newCall);
@@ -193,7 +221,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsMuted(false);
       setIsSpeaker(false);
     } catch (e: any) {
-      console.log("Error starting call:", e?.response?.data?.message || e?.message || "Failed");
+      console.log(
+        "Error starting call:",
+        e?.response?.data?.message || e?.message || "Failed",
+      );
+      showError(
+        "Call failed",
+        e?.response?.data?.message || e?.message || "Could not start the call.",
+      );
       setCallStatusText("Call Failed");
       setTimeout(() => {
         setActiveCall(null);
@@ -209,13 +244,20 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!activeCall || isActionInProgressRef.current) return;
     try {
       isActionInProgressRef.current = true;
+      assertVoiceCallingAvailable();
       Vibration.cancel();
       setCallStatusText("Connecting...");
       const updated = await answerCall(activeCall.id);
       setActiveCall(updated);
       setCallStatusText("");
     } catch (e: any) {
-      console.log("Error answering call:", e?.response?.data?.message || e?.message || "Failed");
+      showError(
+        "Could not answer call",
+        e?.response?.data?.message ||
+          e?.message ||
+          "Call audio is unavailable.",
+      );
+      declineCall(activeCall.id).catch(() => {});
       setActiveCall(null);
       setCallRole(null);
     } finally {
@@ -270,11 +312,20 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const toggleMute = () => {
     setIsMuted((prev) => {
       const next = !prev;
-      setLiveKitMicrophoneMuted(next);
+      setLiveKitMicrophoneMuted(next).catch(() =>
+        showError("Microphone", "Could not change the microphone state."),
+      );
       return next;
     });
   };
-  const toggleSpeaker = () => setIsSpeaker((prev) => !prev);
+  const toggleSpeaker = async () => {
+    try {
+      await setLiveKitSpeakerEnabled(!isSpeaker);
+      setIsSpeaker(!isSpeaker);
+    } catch {
+      showError("Audio output", "Could not change the call speaker.");
+    }
+  };
 
   // Determine other user details based on role
   const otherUser =
@@ -283,7 +334,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       : activeCall?.caller;
 
   const displayName = otherUser?.business_name || otherUser?.name || "User";
-  const displayRole = otherUser?.role === "operator" ? "Vehicle Host" : "Renter";
+  const displayRole =
+    otherUser?.role === "operator" ? "Vehicle Host" : "Renter";
 
   return (
     <CallContext.Provider
@@ -319,16 +371,15 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             <SafeAreaView style={styles.callSafeArea}>
               {/* Header Status Bar */}
               <View style={styles.topHeader}>
-
                 {/* Main Call Status */}
                 <Text style={styles.statusLabel}>
                   {callStatusText
                     ? callStatusText
                     : activeCall.status === "accepted"
-                    ? formatCallTime(callDuration)
-                    : callRole === "receiver"
-                    ? "Incoming Voice Call..."
-                    : "Ringing..."}
+                      ? formatCallTime(callDuration)
+                      : callRole === "receiver"
+                        ? "Incoming Voice Call..."
+                        : "Ringing..."}
                 </Text>
               </View>
 
@@ -337,7 +388,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 <Animated.View
                   style={[
                     styles.avatarWrapper,
-                    (activeCall.status === "calling" || activeCall.status === "ringing") && {
+                    (activeCall.status === "calling" ||
+                      activeCall.status === "ringing") && {
                       transform: [{ scale: pulseAnim }],
                     },
                   ]}
@@ -406,7 +458,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
                           size={24}
                           color={isMuted ? Colors.dark : "#FFFFFF"}
                         />
-                        <Text style={[styles.controlLabel, isMuted && styles.controlLabelActive]}>
+                        <Text
+                          style={[
+                            styles.controlLabel,
+                            isMuted && styles.controlLabelActive,
+                          ]}
+                        >
                           {isMuted ? "Unmute" : "Mute"}
                         </Text>
                       </TouchableOpacity>
@@ -425,7 +482,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
                           size={24}
                           color={isSpeaker ? Colors.dark : "#FFFFFF"}
                         />
-                        <Text style={[styles.controlLabel, isSpeaker && styles.controlLabelActive]}>
+                        <Text
+                          style={[
+                            styles.controlLabel,
+                            isSpeaker && styles.controlLabelActive,
+                          ]}
+                        >
                           Speaker
                         </Text>
                       </TouchableOpacity>
@@ -437,7 +499,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
                       onPress={endCurrentCall}
                       activeOpacity={0.8}
                     >
-                      <Ionicons name="call" size={30} color="#FFFFFF" style={{ transform: [{ rotate: "135deg" }] }} />
+                      <Ionicons
+                        name="call"
+                        size={30}
+                        color="#FFFFFF"
+                        style={{ transform: [{ rotate: "135deg" }] }}
+                      />
                       <Text style={styles.btnLabel}>End Call</Text>
                     </TouchableOpacity>
                   </View>
@@ -449,7 +516,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
                       onPress={endCurrentCall}
                       activeOpacity={0.8}
                     >
-                      <Ionicons name="call" size={30} color="#FFFFFF" style={{ transform: [{ rotate: "135deg" }] }} />
+                      <Ionicons
+                        name="call"
+                        size={30}
+                        color="#FFFFFF"
+                        style={{ transform: [{ rotate: "135deg" }] }}
+                      />
                       <Text style={styles.btnLabel}>Cancel</Text>
                     </TouchableOpacity>
                   </View>

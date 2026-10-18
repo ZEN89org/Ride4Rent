@@ -2,6 +2,9 @@
 
 namespace App\Http\Resources;
 
+use App\Models\Booking;
+use App\Models\Vehicle;
+use App\Services\DemandPricingService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -35,9 +38,9 @@ class VehicleResource extends JsonResource
             'number_of_doors' => $this->number_of_doors,
             'mileage' => $this->mileage,
             'interior_color' => $this->interior_color,
-            'price_per_day' => (float) ($this->daily_rate ?: 1500),
+            'price_per_day' => (float) DemandPricingService::calculateVehicleDemand($this->resource)['effective_price'],
             'base_price_per_day' => (float) ($this->base_price_per_day ?: $this->daily_rate ?: 1500),
-            'demand_pricing' => \App\Services\DemandPricingService::calculateVehicleDemand($this->resource),
+            'demand_pricing' => DemandPricingService::calculateVehicleDemand($this->resource),
             'current_odometer' => (int) ($this->current_odometer ?: 0),
             'last_service_odometer' => (int) ($this->last_service_odometer ?: 0),
             'service_interval_km' => (int) ($this->service_interval_km ?: 5000),
@@ -63,20 +66,20 @@ class VehicleResource extends JsonResource
             'distance_km' => isset($this->distance_km) ? round($this->distance_km, 1) : null,
             'features' => $this->features ?? [],
             'description' => $this->description,
-            'image_url' => \App\Models\Vehicle::resolveStorageUrl(
+            'image_url' => Vehicle::resolveStorageUrl(
                 $this->cover_photo ?: ($this->images->first()?->image_path),
                 $request->getSchemeAndHttpHost()
             ),
             'images' => $this->images->map(function ($img) use ($request) {
                 return [
                     'id' => $img->id,
-                    'image_url' => \App\Models\Vehicle::resolveStorageUrl($img->image_path, $request->getSchemeAndHttpHost()),
+                    'image_url' => Vehicle::resolveStorageUrl($img->image_path, $request->getSchemeAndHttpHost()),
                     'is_cover' => (bool) $img->is_cover,
                     'sort_order' => (int) $img->sort_order,
                 ];
             })->values(),
             'availability_status' => $this->availability_status,
-            'is_rented' => \App\Models\Booking::where('vehicle_id', $this->id)
+            'is_rented' => Booking::where('vehicle_id', $this->id)
                 ->whereIn('status', [
                     'approved',
                     'awaiting_pickup',
@@ -94,7 +97,7 @@ class VehicleResource extends JsonResource
                 'name' => trim(($operator?->first_name ?? '').' '.($operator?->last_name ?? '')),
                 'email' => $operator?->email,
                 'mobile_number' => $operator?->mobile_number,
-                'profile_photo' => \App\Models\Vehicle::resolveStorageUrl($operator?->profile_photo, $request->getSchemeAndHttpHost()),
+                'profile_photo' => Vehicle::resolveStorageUrl($operator?->profile_photo, $request->getSchemeAndHttpHost()),
                 'business_name' => $profile?->business_name,
                 'business_email' => $profile?->business_email,
                 'business_contact_number' => $profile?->business_contact_number,
@@ -106,18 +109,19 @@ class VehicleResource extends JsonResource
                 'accepted_payment_methods' => $profile?->accepted_payment_methods,
                 'account_name' => $profile?->account_name,
                 'account_number' => $profile?->account_number,
-                'qr_code' => \App\Models\Vehicle::resolveStorageUrl($profile?->qr_code, $request->getSchemeAndHttpHost()),
+                'qr_code' => Vehicle::resolveStorageUrl($profile?->qr_code, $request->getSchemeAndHttpHost()),
             ],
             'reviews' => $this->relationLoaded('bookings')
                 ? $this->bookings
-                    ->whereNotNull('rating')
+                    ->where('is_review_hidden', false)->whereNotNull('rating')
                     ->map(function ($b) use ($request) {
                         $renter = $b->renter;
-                        $fullName = trim(($renter?->first_name ?? '') . ' ' . ($renter?->last_name ?? ''));
+                        $fullName = trim(($renter?->first_name ?? '').' '.($renter?->last_name ?? ''));
+
                         return [
                             'id' => $b->id,
                             'renter_name' => $fullName !== '' ? $fullName : 'Verified Renter',
-                            'renter_photo' => \App\Models\Vehicle::resolveStorageUrl($renter?->profile_photo, $request->getSchemeAndHttpHost()),
+                            'renter_photo' => Vehicle::resolveStorageUrl($renter?->profile_photo, $request->getSchemeAndHttpHost()),
                             'rating' => (int) $b->rating,
                             'review' => $b->review,
                             'created_at' => $b->updated_at ? $b->updated_at->diffForHumans() : 'Recently',

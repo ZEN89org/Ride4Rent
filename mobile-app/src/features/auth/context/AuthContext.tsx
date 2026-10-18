@@ -13,11 +13,14 @@ import {
   clearAuth,
   getToken,
   saveToken,
-  saveUser
+  saveUser,
 } from "@/features/auth/storage/authStorage";
 
 import * as authService from "@/features/auth/services/authService";
-import { normalizeApiImages, registerSessionExpiredHandler } from "@/services/api";
+import {
+  normalizeApiImages,
+  registerSessionExpiredHandler,
+} from "@/services/api";
 import { useAppToast } from "@/context/ToastContext";
 
 interface AuthContextType {
@@ -37,10 +40,9 @@ interface AuthContextType {
   refreshUser: () => Promise<any>;
 }
 
-export const AuthContext =
-  createContext<AuthContextType>(
-    {} as AuthContextType
-  );
+export const AuthContext = createContext<AuthContextType>(
+  {} as AuthContextType,
+);
 
 interface Props {
   children: ReactNode;
@@ -49,11 +51,9 @@ interface Props {
 export function AuthProvider({ children }: Props) {
   const [user, setUser] = useState<any>(null);
 
-  const [token, setToken] =
-    useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
 
-  const [loading, setLoading] =
-    useState(true);
+  const [loading, setLoading] = useState(true);
   const tokenRef = useRef<string | null>(null);
   const handlingExpiredSession = useRef(false);
   const { showModal } = useAppToast();
@@ -67,10 +67,7 @@ export function AuthProvider({ children }: Props) {
       handlingExpiredSession.current = true;
       try {
         const storedToken = await getToken();
-        if (
-          storedToken !== requestToken ||
-          tokenRef.current !== requestToken
-        ) {
+        if (storedToken !== requestToken || tokenRef.current !== requestToken) {
           handlingExpiredSession.current = false;
           return;
         }
@@ -84,7 +81,7 @@ export function AuthProvider({ children }: Props) {
           "Signed out",
           "Your account was signed in on another device, so you have been logged out here.",
           [{ text: "OK" }],
-          "warning"
+          "warning",
         );
       } catch (error) {
         handlingExpiredSession.current = false;
@@ -96,69 +93,61 @@ export function AuthProvider({ children }: Props) {
   useEffect(() => {
     let mounted = true;
 
-const initializeAuth = async () => {
-  try {
-    const storedToken = await getToken();
+    const initializeAuth = async () => {
+      try {
+        const storedToken = await getToken();
 
-    if (!storedToken) {
-      if (mounted) {
-        setToken(null);
-        setUser(null);
+        if (!storedToken) {
+          if (mounted) {
+            setToken(null);
+            setUser(null);
+          }
+
+          return;
+        }
+
+        setToken(storedToken);
+        tokenRef.current = storedToken;
+
+        try {
+          const response = await authService.getCurrentUser();
+
+          const currentUser = normalizeApiImages(
+            response?.data ?? response?.user,
+          );
+
+          if (!currentUser) {
+            throw new Error("Invalid user response.");
+          }
+
+          await saveUser(currentUser);
+
+          if (mounted) {
+            setUser(currentUser);
+          }
+        } catch (error) {
+          console.log("Stored authentication is invalid. Clearing session.");
+
+          await clearAuth();
+
+          if (mounted) {
+            setToken(null);
+            setUser(null);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load authentication:", error);
+
+        if (mounted) {
+          setToken(null);
+          setUser(null);
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
       }
-
-      return;
-    }
-
-    setToken(storedToken);
-    tokenRef.current = storedToken;
-
-    try {
-      const response =
-        await authService.getCurrentUser();
-
-      const currentUser = normalizeApiImages(
-        response?.data ?? response?.user
-      );
-
-      if (!currentUser) {
-        throw new Error(
-          "Invalid user response."
-        );
-      }
-
-      await saveUser(currentUser);
-
-      if (mounted) {
-        setUser(currentUser);
-      }
-    } catch (error) {
-      console.log(
-        "Stored authentication is invalid. Clearing session."
-      );
-
-      await clearAuth();
-
-      if (mounted) {
-        setToken(null);
-        setUser(null);
-      }
-    }
-  } catch (error) {
-    console.error(
-      "Failed to load authentication:",
-      error
-    );
-
-    if (mounted) {
-      setToken(null);
-      setUser(null);
-    }
-  } finally {
-    if (mounted) {
-      setLoading(false);
-    }
-  }
-};
+    };
 
     initializeAuth();
 
@@ -167,10 +156,7 @@ const initializeAuth = async () => {
     };
   }, []);
 
-  const login = async (
-    userData: any,
-    tokenData: string
-  ) => {
+  const login = async (userData: any, tokenData: string) => {
     handlingExpiredSession.current = false;
     const normalizedUser = normalizeApiImages(userData);
     await saveToken(tokenData);
@@ -211,15 +197,24 @@ const initializeAuth = async () => {
             prevUser &&
             prevUser.id === currentUser.id &&
             prevUser.account_status === currentUser.account_status &&
-            prevUser.license_verification_status === currentUser.license_verification_status &&
+            prevUser.license_verification_status ===
+              currentUser.license_verification_status &&
             prevUser.role === currentUser.role &&
             prevUser.first_name === currentUser.first_name &&
             prevUser.last_name === currentUser.last_name &&
             prevUser.profile_photo === currentUser.profile_photo &&
-            prevUser.drivers_license_front === currentUser.drivers_license_front &&
-            prevUser.drivers_license_back === currentUser.drivers_license_back &&
-            JSON.stringify(prevUser.operatorProfile || prevUser.operator_profile || {}) ===
-              JSON.stringify(currentUser.operatorProfile || currentUser.operator_profile || {})
+            prevUser.drivers_license_front ===
+              currentUser.drivers_license_front &&
+            prevUser.drivers_license_back ===
+              currentUser.drivers_license_back &&
+            JSON.stringify(
+              prevUser.operatorProfile || prevUser.operator_profile || {},
+            ) ===
+              JSON.stringify(
+                currentUser.operatorProfile ||
+                  currentUser.operator_profile ||
+                  {},
+              )
           ) {
             return prevUser;
           }
@@ -248,7 +243,12 @@ const initializeAuth = async () => {
     }, 10000);
 
     return () => clearInterval(intervalId);
-  }, [token, user?.account_status, user?.license_verification_status, refreshUser]);
+  }, [
+    token,
+    user?.account_status,
+    user?.license_verification_status,
+    refreshUser,
+  ]);
 
   // Sync latest user standing whenever app returns to foreground/active
   useEffect(() => {
@@ -263,30 +263,20 @@ const initializeAuth = async () => {
     return () => {
       subscription.remove();
     };
-  }, [token]);
+  }, [token, refreshUser]);
 
   const isAuthenticated = !!token;
   const isGuest = !token;
 
-  const isRenter =
-    isAuthenticated &&
-    user?.role === "customer";
+  const isRenter = isAuthenticated && user?.role === "customer";
 
-  const isOperator =
-    isAuthenticated &&
-    user?.role === "operator";
+  const isOperator = isAuthenticated && user?.role === "operator";
 
-  const isOperatorPending =
-    isOperator &&
-    user?.account_status === "pending";
+  const isOperatorPending = isOperator && user?.account_status === "pending";
 
-  const isOperatorActive =
-    isOperator &&
-    user?.account_status === "active";
+  const isOperatorActive = isOperator && user?.account_status === "active";
 
-  const isOperatorRejected =
-    isOperator &&
-    user?.account_status === "rejected";
+  const isOperatorRejected = isOperator && user?.account_status === "rejected";
 
   return (
     <AuthContext.Provider

@@ -1,4 +1,4 @@
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useRef, useState } from "react";
@@ -14,11 +14,7 @@ import AuthRequiredBottomSheet from "@/features/auth/components/AuthRequiredBott
 import NearVehicleCard from "@/features/renter/components/home/NearVehicleCard";
 
 import { Colors } from "@/constants/colors";
-import {
-  FontFamily,
-  FontSize,
-  Spacing,
-} from "@/constants/theme";
+import { FontFamily, Spacing } from "@/constants/theme";
 
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import {
@@ -32,6 +28,7 @@ import { router, useFocusEffect, useNavigation } from "expo-router";
 
 import { VehicleCardSkeleton } from "@/components/common/Skeleton";
 import { getSavedLocation, saveLocation } from "@/storage/locationStorage";
+import { isInServiceArea, SERVICE_AREA_ERROR } from "@/utils/serviceArea";
 
 import { matchesVehicleSearch } from "@/utils/vehicleSearch";
 
@@ -98,6 +95,7 @@ export default function AvailableVehicles({ searchQuery = "", onViewMore }: Avai
               if (permission.granted) {
                 const location = await Location.getCurrentPositionAsync({});
                 const { latitude, longitude } = location.coords;
+                if (!isInServiceArea(latitude, longitude)) throw new Error(SERVICE_AREA_ERROR);
 
                 try {
                   const geo = await Location.reverseGeocodeAsync({ latitude, longitude });

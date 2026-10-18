@@ -46,8 +46,8 @@ return [
     ],
 
     'livekit' => [
-        'url' => env('LIVEKIT_URL', 'wss://ride4rent-myp79763.livekit.cloud'),
-        'api_key' => env('LIVEKIT_API_KEY', 'APIqshKFPjtk5Qd'),
-        'api_secret' => env('LIVEKIT_API_SECRET', 'cjQxINU8NSCVGRdjOsn6opw9cbz81Gu448StRYMtsTC'),
+        'url' => env('LIVEKIT_URL'),
+        'api_key' => env('LIVEKIT_API_KEY'),
+        'api_secret' => env('LIVEKIT_API_SECRET'),
     ],
 ];

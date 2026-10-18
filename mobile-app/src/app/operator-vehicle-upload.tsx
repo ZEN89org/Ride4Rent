@@ -2,7 +2,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { router } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Image,
   Modal,
@@ -93,7 +93,7 @@ export default function OperatorVehicleUpload() {
   const [currentStep, setCurrentStep] = useState(1);
   const [form, setForm] = useState<VehicleFormData>(initialForm);
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>(
-    getDefaultAmenitiesForType("Sedan")
+    getDefaultAmenitiesForType("Sedan"),
   );
   const [images, setImages] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -117,7 +117,8 @@ export default function OperatorVehicleUpload() {
     .join(", ");
 
   const hasRentalPaymentSetup = Boolean(
-    operatorProfile?.account_number && String(operatorProfile.account_number).trim()
+    operatorProfile?.account_number &&
+      String(operatorProfile.account_number).trim(),
   );
 
   useEffect(() => {
@@ -131,7 +132,7 @@ export default function OperatorVehicleUpload() {
             onPress: () => router.replace("/operator-profile" as any),
           },
         ],
-        "warning"
+        "warning",
       );
     }
   }, [hasRentalPaymentSetup, showModal]);
@@ -147,18 +148,25 @@ export default function OperatorVehicleUpload() {
       return form.custom_brand;
     }
     if (!options || !options[key]) return "Select";
-    return options[key].find((item) => String(item.id) === value)?.name ?? "Select";
+    return (
+      options[key].find((item) => String(item.id) === value)?.name ?? "Select"
+    );
   };
 
-  const currentVehicleTypeName = selectedName("vehicle_types", form.vehicle_type_id);
-  const isMotorcycle = currentVehicleTypeName.toLowerCase().includes("motorcycle");
+  const currentVehicleTypeName = selectedName(
+    "vehicle_types",
+    form.vehicle_type_id,
+  );
+  const isMotorcycle = currentVehicleTypeName
+    .toLowerCase()
+    .includes("motorcycle");
   const availableAmenities = getAmenitiesForType(currentVehicleTypeName);
 
   const toggleAmenity = (amenityId: string) => {
     setSelectedAmenities((prev) =>
       prev.includes(amenityId)
         ? prev.filter((id) => id !== amenityId)
-        : [...prev, amenityId]
+        : [...prev, amenityId],
     );
   };
 
@@ -196,14 +204,16 @@ export default function OperatorVehicleUpload() {
           ...current,
           vehicle_type_id: String(value.id),
           number_of_doors: "0",
-          seating_capacity: current.seating_capacity === "5" ? "2" : current.seating_capacity,
+          seating_capacity:
+            current.seating_capacity === "5" ? "2" : current.seating_capacity,
         }));
       } else if (form.number_of_doors === "0") {
         setForm((current) => ({
           ...current,
           vehicle_type_id: String(value.id),
           number_of_doors: "4",
-          seating_capacity: current.seating_capacity === "2" ? "5" : current.seating_capacity,
+          seating_capacity:
+            current.seating_capacity === "2" ? "5" : current.seating_capacity,
         }));
       }
     }
@@ -228,7 +238,7 @@ export default function OperatorVehicleUpload() {
     setCustomBrandText("");
   };
 
-  const filteredOptions = useMemo((): VehicleOption[] => {
+  const filteredOptions = ((): VehicleOption[] => {
     if (!picker || !options || !options[picker]) return [];
     let list = options[picker];
 
@@ -247,12 +257,12 @@ export default function OperatorVehicleUpload() {
       ];
       if (isMotorcycle) {
         list = list.filter((item) =>
-          motoKeywords.some((kw) => item.name.toLowerCase().includes(kw))
+          motoKeywords.some((kw) => item.name.toLowerCase().includes(kw)),
         );
       } else {
         list = list.filter(
           (item) =>
-            !motoKeywords.some((kw) => item.name.toLowerCase().includes(kw))
+            !motoKeywords.some((kw) => item.name.toLowerCase().includes(kw)),
         );
       }
     }
@@ -263,7 +273,7 @@ export default function OperatorVehicleUpload() {
     }
 
     return list;
-  }, [picker, options, isMotorcycle, pickerSearch]);
+  })();
 
   const pickImages = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -272,7 +282,7 @@ export default function OperatorVehicleUpload() {
         "Permission Required",
         "Please allow photo access to add vehicle images.",
         [{ text: "OK", style: "default" }],
-        "warning"
+        "warning",
       );
       return;
     }
@@ -308,15 +318,24 @@ export default function OperatorVehicleUpload() {
   const handleNextStep = () => {
     if (currentStep === 1) {
       if (images.length === 0) {
-        showWarning("Photos Required", "Please upload at least 1 photo of your vehicle.");
+        showWarning(
+          "Photos Required",
+          "Please upload at least 1 photo of your vehicle.",
+        );
         return;
       }
       if (!form.name.trim()) {
-        showWarning("Listing Name Required", "Please enter a vehicle listing name.");
+        showWarning(
+          "Listing Name Required",
+          "Please enter a vehicle listing name.",
+        );
         return;
       }
       if (!form.brand_id && !form.custom_brand) {
-        showWarning("Brand Required", "Please select or enter the vehicle brand.");
+        showWarning(
+          "Brand Required",
+          "Please select or enter the vehicle brand.",
+        );
         return;
       }
       if (!form.model.trim()) {
@@ -324,13 +343,19 @@ export default function OperatorVehicleUpload() {
         return;
       }
       if (!form.plate_number.trim()) {
-        showWarning("Plate Number Required", "Please enter the vehicle plate number.");
+        showWarning(
+          "Plate Number Required",
+          "Please enter the vehicle plate number.",
+        );
         return;
       }
       setCurrentStep(2);
     } else if (currentStep === 2) {
       if (!form.daily_rate.trim()) {
-        showWarning("Daily Rate Required", "Please set the daily rental rate in PHP.");
+        showWarning(
+          "Daily Rate Required",
+          "Please set the daily rental rate in PHP.",
+        );
         return;
       }
       setCurrentStep(3);
@@ -343,7 +368,7 @@ export default function OperatorVehicleUpload() {
         "Listing Locked",
         "Your operator application is currently under review by our administrators. You cannot publish vehicles until your account is approved.",
         [{ text: "Understood", style: "default" }],
-        "warning"
+        "warning",
       );
       return;
     }
@@ -354,15 +379,25 @@ export default function OperatorVehicleUpload() {
         "Please set up your GCash rental payment details in your profile before listing a vehicle.",
         [
           { text: "Cancel", style: "cancel" },
-          { text: "Set Up Now", onPress: () => router.push("/operator-profile" as any) },
+          {
+            text: "Set Up Now",
+            onPress: () => router.push("/operator-profile" as any),
+          },
         ],
-        "warning"
+        "warning",
       );
       return;
     }
 
-    if (!form.name.trim() || !form.model.trim() || !form.plate_number.trim() || !form.daily_rate.trim()) {
-      setError("Vehicle name, model, plate number, and daily rate are required.");
+    if (
+      !form.name.trim() ||
+      !form.model.trim() ||
+      !form.plate_number.trim() ||
+      !form.daily_rate.trim()
+    ) {
+      setError(
+        "Vehicle name, model, plate number, and daily rate are required.",
+      );
       return;
     }
 
@@ -391,9 +426,16 @@ export default function OperatorVehicleUpload() {
       if (operatorProfile?.latitude && operatorProfile?.longitude) {
         uploadLat = String(operatorProfile.latitude);
         uploadLng = String(operatorProfile.longitude);
-      } else if (operatorProfile?.municipality && MUNICIPALITY_COORDINATES[operatorProfile.municipality]) {
-        uploadLat = String(MUNICIPALITY_COORDINATES[operatorProfile.municipality].latitude);
-        uploadLng = String(MUNICIPALITY_COORDINATES[operatorProfile.municipality].longitude);
+      } else if (
+        operatorProfile?.municipality &&
+        MUNICIPALITY_COORDINATES[operatorProfile.municipality]
+      ) {
+        uploadLat = String(
+          MUNICIPALITY_COORDINATES[operatorProfile.municipality].latitude,
+        );
+        uploadLng = String(
+          MUNICIPALITY_COORDINATES[operatorProfile.municipality].longitude,
+        );
       } else {
         try {
           const permission = await Location.requestForegroundPermissionsAsync();
@@ -416,7 +458,9 @@ export default function OperatorVehicleUpload() {
 
       router.replace("/operator-vehicles");
     } catch (requestError: any) {
-      setError(requestError?.response?.data?.message ?? "Unable to list this vehicle.");
+      setError(
+        requestError?.response?.data?.message ?? "Unable to list this vehicle.",
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -452,9 +496,13 @@ export default function OperatorVehicleUpload() {
               <Ionicons name="time" size={20} color={Colors.dark} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.pendingWarningTitle}>Operator Application Under Review</Text>
+              <Text style={styles.pendingWarningTitle}>
+                Operator Application Under Review
+              </Text>
               <Text style={styles.pendingWarningText}>
-                You are currently in Preview Mode. You can test and configure vehicle specs, but fleet publishing will unlock once Admin completes your verification.
+                You are currently in Preview Mode. You can test and configure
+                vehicle specs, but fleet publishing will unlock once Admin
+                completes your verification.
               </Text>
             </View>
           </View>
@@ -466,16 +514,21 @@ export default function OperatorVehicleUpload() {
               <Ionicons name="card" size={20} color={Colors.dark} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.paymentWarningTitle}>Payment Setup Required</Text>
+              <Text style={styles.paymentWarningTitle}>
+                Payment Setup Required
+              </Text>
               <Text style={styles.paymentWarningText}>
-                You must configure your GCash rental payment details in your profile so renters know where to send reservation fees.
+                You must configure your GCash rental payment details in your
+                profile so renters know where to send reservation fees.
               </Text>
               <TouchableOpacity
                 style={styles.paymentSetupActionBtn}
                 onPress={() => router.push("/operator-profile" as any)}
                 activeOpacity={0.85}
               >
-                <Text style={styles.paymentSetupActionBtnText}>Set Up Payment Now</Text>
+                <Text style={styles.paymentSetupActionBtnText}>
+                  Set Up Payment Now
+                </Text>
                 <Ionicons name="arrow-forward" size={13} color={Colors.white} />
               </TouchableOpacity>
             </View>
@@ -549,7 +602,11 @@ export default function OperatorVehicleUpload() {
                     ]}
                   >
                     {isPast ? (
-                      <Ionicons name="checkmark" size={10} color={Colors.white} />
+                      <Ionicons
+                        name="checkmark"
+                        size={10}
+                        color={Colors.white}
+                      />
                     ) : (
                       <Text
                         style={[
@@ -586,7 +643,11 @@ export default function OperatorVehicleUpload() {
             <View style={styles.formCard}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderIcon}>
-                  <MaterialCommunityIcons name="camera-outline" size={19} color={Colors.dark} />
+                  <MaterialCommunityIcons
+                    name="camera-outline"
+                    size={19}
+                    color={Colors.dark}
+                  />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cardTitle}>Vehicle Photos</Text>
@@ -606,22 +667,37 @@ export default function OperatorVehicleUpload() {
                   activeOpacity={0.8}
                 >
                   <View style={styles.emptyUploaderIconCircle}>
-                    <MaterialCommunityIcons name="cloud-upload-outline" size={28} color={Colors.dark} />
+                    <MaterialCommunityIcons
+                      name="cloud-upload-outline"
+                      size={28}
+                      color={Colors.dark}
+                    />
                   </View>
-                  <Text style={styles.emptyUploaderTitle}>Upload Vehicle Photos</Text>
+                  <Text style={styles.emptyUploaderTitle}>
+                    Upload Vehicle Photos
+                  </Text>
                   <Text style={styles.emptyUploaderSub}>
                     Tap to select from gallery (up to 8 high-res photos)
                   </Text>
                   <View style={styles.choosePhotosBtn}>
-                    <Ionicons name="images-outline" size={15} color={Colors.dark} />
-                    <Text style={styles.choosePhotosBtnText}>Select Photos</Text>
+                    <Ionicons
+                      name="images-outline"
+                      size={15}
+                      color={Colors.dark}
+                    />
+                    <Text style={styles.choosePhotosBtnText}>
+                      Select Photos
+                    </Text>
                   </View>
                 </TouchableOpacity>
               ) : (
                 <View style={styles.photosContainer}>
                   {/* Primary Cover Photo Preview */}
                   <View style={styles.coverPhotoWrap}>
-                    <Image source={{ uri: images[0] }} style={styles.coverPhotoImage} />
+                    <Image
+                      source={{ uri: images[0] }}
+                      style={styles.coverPhotoImage}
+                    />
                     <View style={styles.coverTagBadge}>
                       <Ionicons name="star" size={11} color={Colors.dark} />
                       <Text style={styles.coverTagText}>Cover Photo</Text>
@@ -644,20 +720,29 @@ export default function OperatorVehicleUpload() {
                     {images.slice(1).map((uri, index) => {
                       const realIndex = index + 1;
                       return (
-                        <View key={`${uri}-${realIndex}`} style={styles.thumbCard}>
+                        <View
+                          key={`${uri}-${realIndex}`}
+                          style={styles.thumbCard}
+                        >
                           <Image source={{ uri }} style={styles.thumbImage} />
                           <TouchableOpacity
                             style={styles.thumbDeleteBtn}
                             onPress={() => removeImage(realIndex)}
                             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                           >
-                            <Ionicons name="close" size={12} color={Colors.white} />
+                            <Ionicons
+                              name="close"
+                              size={12}
+                              color={Colors.white}
+                            />
                           </TouchableOpacity>
                           <TouchableOpacity
                             style={styles.setCoverPill}
                             onPress={() => setCoverImage(realIndex)}
                           >
-                            <Text style={styles.setCoverPillText}>Set Cover</Text>
+                            <Text style={styles.setCoverPillText}>
+                              Set Cover
+                            </Text>
                           </TouchableOpacity>
                         </View>
                       );
@@ -682,7 +767,11 @@ export default function OperatorVehicleUpload() {
             <View style={styles.formCard}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderIcon}>
-                  <MaterialCommunityIcons name="car-multiple" size={19} color={Colors.dark} />
+                  <MaterialCommunityIcons
+                    name="car-multiple"
+                    size={19}
+                    color={Colors.dark}
+                  />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cardTitle}>Category & Brand</Text>
@@ -716,7 +805,11 @@ export default function OperatorVehicleUpload() {
             <View style={styles.formCard}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderIcon}>
-                  <MaterialCommunityIcons name="car-info" size={19} color={Colors.dark} />
+                  <MaterialCommunityIcons
+                    name="car-info"
+                    size={19}
+                    color={Colors.dark}
+                  />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cardTitle}>Vehicle Identity</Text>
@@ -750,7 +843,9 @@ export default function OperatorVehicleUpload() {
                   <FormField
                     label="Year Model"
                     value={form.year_model}
-                    onChangeText={(val) => update("year_model", val.replace(/\D/g, ""))}
+                    onChangeText={(val) =>
+                      update("year_model", val.replace(/\D/g, ""))
+                    }
                     placeholder="2024"
                     keyboardType="numeric"
                     required
@@ -761,7 +856,9 @@ export default function OperatorVehicleUpload() {
               <FormField
                 label="Plate Number / MV File"
                 value={form.plate_number}
-                onChangeText={(val) => update("plate_number", val.toUpperCase())}
+                onChangeText={(val) =>
+                  update("plate_number", val.toUpperCase())
+                }
                 placeholder="e.g. ABC 1234 or MV-12345"
                 autoCapitalize="characters"
                 required
@@ -787,10 +884,16 @@ export default function OperatorVehicleUpload() {
             <View style={styles.formCard}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderIcon}>
-                  <MaterialCommunityIcons name="car-shift-pattern" size={20} color={Colors.dark} />
+                  <MaterialCommunityIcons
+                    name="car-shift-pattern"
+                    size={20}
+                    color={Colors.dark}
+                  />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.cardTitle}>Mechanical & Transmission</Text>
+                  <Text style={styles.cardTitle}>
+                    Mechanical & Transmission
+                  </Text>
                   <Text style={styles.cardSubtitle}>
                     Drivetrain, fuel setup, and chassis
                   </Text>
@@ -808,7 +911,10 @@ export default function OperatorVehicleUpload() {
                 <View style={styles.col}>
                   <DropdownField
                     label="Transmission"
-                    value={selectedName("transmission_types", form.transmission_type_id)}
+                    value={selectedName(
+                      "transmission_types",
+                      form.transmission_type_id,
+                    )}
                     onPress={() => setPicker("transmission_types")}
                     required
                   />
@@ -827,7 +933,11 @@ export default function OperatorVehicleUpload() {
             <View style={styles.formCard}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderIcon}>
-                  <MaterialCommunityIcons name="car-seat" size={20} color={Colors.dark} />
+                  <MaterialCommunityIcons
+                    name="car-seat"
+                    size={20}
+                    color={Colors.dark}
+                  />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cardTitle}>Capacity & Mileage</Text>
@@ -842,7 +952,9 @@ export default function OperatorVehicleUpload() {
                   <FormField
                     label="Seating Capacity"
                     value={form.seating_capacity}
-                    onChangeText={(val) => update("seating_capacity", val.replace(/\D/g, ""))}
+                    onChangeText={(val) =>
+                      update("seating_capacity", val.replace(/\D/g, ""))
+                    }
                     placeholder={isMotorcycle ? "2" : "5"}
                     keyboardType="numeric"
                     required
@@ -852,7 +964,9 @@ export default function OperatorVehicleUpload() {
                   <FormField
                     label="Doors"
                     value={form.number_of_doors}
-                    onChangeText={(val) => update("number_of_doors", val.replace(/\D/g, ""))}
+                    onChangeText={(val) =>
+                      update("number_of_doors", val.replace(/\D/g, ""))
+                    }
                     placeholder={isMotorcycle ? "0" : "4"}
                     keyboardType="numeric"
                   />
@@ -862,7 +976,9 @@ export default function OperatorVehicleUpload() {
               <FormField
                 label="Current Mileage"
                 value={form.mileage}
-                onChangeText={(val) => update("mileage", val.replace(/\D/g, ""))}
+                onChangeText={(val) =>
+                  update("mileage", val.replace(/\D/g, ""))
+                }
                 placeholder="15000"
                 keyboardType="numeric"
                 suffix="km"
@@ -894,10 +1010,16 @@ export default function OperatorVehicleUpload() {
             <View style={styles.formCard}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderIcon}>
-                  <MaterialCommunityIcons name="cash-multiple" size={19} color={Colors.dark} />
+                  <MaterialCommunityIcons
+                    name="cash-multiple"
+                    size={19}
+                    color={Colors.dark}
+                  />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.cardTitle}>Rental Rates & Booking Terms</Text>
+                  <Text style={styles.cardTitle}>
+                    Rental Rates & Booking Terms
+                  </Text>
                   <Text style={styles.cardSubtitle}>
                     Daily fees and renter eligibility requirements
                   </Text>
@@ -907,7 +1029,9 @@ export default function OperatorVehicleUpload() {
               <FormField
                 label="Daily Rental Rate"
                 value={form.daily_rate}
-                onChangeText={(val) => update("daily_rate", val.replace(/[^\d.]/g, ""))}
+                onChangeText={(val) =>
+                  update("daily_rate", val.replace(/[^\d.]/g, ""))
+                }
                 placeholder="1500"
                 keyboardType="decimal-pad"
                 prefix="₱"
@@ -918,7 +1042,9 @@ export default function OperatorVehicleUpload() {
               <FormField
                 label="Advance Reservation Fee"
                 value={form.reservation_fee}
-                onChangeText={(val) => update("reservation_fee", val.replace(/[^\d.]/g, ""))}
+                onChangeText={(val) =>
+                  update("reservation_fee", val.replace(/[^\d.]/g, ""))
+                }
                 placeholder="500"
                 keyboardType="decimal-pad"
                 prefix="₱"
@@ -930,7 +1056,9 @@ export default function OperatorVehicleUpload() {
                   <FormField
                     label="Min. Driver Age"
                     value={form.min_driver_age}
-                    onChangeText={(val) => update("min_driver_age", val.replace(/\D/g, ""))}
+                    onChangeText={(val) =>
+                      update("min_driver_age", val.replace(/\D/g, ""))
+                    }
                     placeholder="21"
                     keyboardType="numeric"
                   />
@@ -939,7 +1067,9 @@ export default function OperatorVehicleUpload() {
                   <FormField
                     label="Min. Experience"
                     value={form.min_driving_experience}
-                    onChangeText={(val) => update("min_driving_experience", val.replace(/\D/g, ""))}
+                    onChangeText={(val) =>
+                      update("min_driving_experience", val.replace(/\D/g, ""))
+                    }
                     placeholder="1"
                     keyboardType="numeric"
                     suffix="yrs"
@@ -977,12 +1107,18 @@ export default function OperatorVehicleUpload() {
             <View style={styles.formCard}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderIcon}>
-                  <MaterialCommunityIcons name="car-electric" size={19} color={Colors.dark} />
+                  <MaterialCommunityIcons
+                    name="car-electric"
+                    size={19}
+                    color={Colors.dark}
+                  />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cardTitle}>Highlights & Amenities</Text>
                   <Text style={styles.cardSubtitle}>
-                    Select features included in this {currentVehicleTypeName || "vehicle"} ({selectedAmenities.length} selected)
+                    Select features included in this{" "}
+                    {currentVehicleTypeName || "vehicle"} (
+                    {selectedAmenities.length} selected)
                   </Text>
                 </View>
               </View>
@@ -993,11 +1129,19 @@ export default function OperatorVehicleUpload() {
                   return (
                     <TouchableOpacity
                       key={amenity.id}
-                      style={[styles.amenityChip, isSelected && styles.amenityChipSelected]}
+                      style={[
+                        styles.amenityChip,
+                        isSelected && styles.amenityChipSelected,
+                      ]}
                       onPress={() => toggleAmenity(amenity.id)}
                       activeOpacity={0.75}
                     >
-                      <View style={[styles.amenityIconWrap, isSelected && styles.amenityIconWrapSelected]}>
+                      <View
+                        style={[
+                          styles.amenityIconWrap,
+                          isSelected && styles.amenityIconWrapSelected,
+                        ]}
+                      >
                         {amenity.iconType === "mci" ? (
                           <MaterialCommunityIcons
                             name={amenity.icon as any}
@@ -1013,13 +1157,20 @@ export default function OperatorVehicleUpload() {
                         )}
                       </View>
                       <Text
-                        style={[styles.amenityLabel, isSelected && styles.amenityLabelSelected]}
+                        style={[
+                          styles.amenityLabel,
+                          isSelected && styles.amenityLabelSelected,
+                        ]}
                         numberOfLines={2}
                       >
                         {amenity.label}
                       </Text>
                       {isSelected ? (
-                        <Ionicons name="checkmark-circle" size={16} color={Colors.primary} />
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={16}
+                          color={Colors.primary}
+                        />
                       ) : (
                         <View style={styles.amenityUncheckedCircle} />
                       )}
@@ -1033,7 +1184,11 @@ export default function OperatorVehicleUpload() {
             <View style={styles.formCard}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderIcon}>
-                  <Ionicons name="document-text-outline" size={18} color={Colors.dark} />
+                  <Ionicons
+                    name="document-text-outline"
+                    size={18}
+                    color={Colors.dark}
+                  />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cardTitle}>Vehicle Description</Text>
@@ -1061,7 +1216,11 @@ export default function OperatorVehicleUpload() {
             <View style={styles.formCard}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderIcon}>
-                  <Ionicons name="location-outline" size={20} color={Colors.dark} />
+                  <Ionicons
+                    name="location-outline"
+                    size={20}
+                    color={Colors.dark}
+                  />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cardTitle}>Pickup Base & Location</Text>
@@ -1080,7 +1239,8 @@ export default function OperatorVehicleUpload() {
                     {pickupAddress || "Registered Garage Base"}
                   </Text>
                   <Text style={styles.locationHint}>
-                    Renters will receive this exact address with map directions upon booking confirmation.
+                    Renters will receive this exact address with map directions
+                    upon booking confirmation.
                   </Text>
                 </View>
               </View>
@@ -1090,7 +1250,11 @@ export default function OperatorVehicleUpload() {
             <View style={styles.formCard}>
               <View style={styles.cardHeader}>
                 <View style={styles.cardHeaderIcon}>
-                  <MaterialCommunityIcons name="shield-car" size={19} color={Colors.dark} />
+                  <MaterialCommunityIcons
+                    name="shield-car"
+                    size={19}
+                    color={Colors.dark}
+                  />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cardTitle}>Rental Policies</Text>
@@ -1101,16 +1265,34 @@ export default function OperatorVehicleUpload() {
               </View>
 
               <View style={styles.policyRow}>
-                <MaterialCommunityIcons name="gas-station" size={16} color={Colors.secondary} />
-                <Text style={styles.policyText}>Fuel: Return with same fuel level as dispatched</Text>
+                <MaterialCommunityIcons
+                  name="gas-station"
+                  size={16}
+                  color={Colors.secondary}
+                />
+                <Text style={styles.policyText}>
+                  Fuel: Return with same fuel level as dispatched
+                </Text>
               </View>
               <View style={styles.policyRow}>
-                <Ionicons name="time-outline" size={16} color={Colors.secondary} />
-                <Text style={styles.policyText}>Late Return: Contact operator 2 hours in advance</Text>
+                <Ionicons
+                  name="time-outline"
+                  size={16}
+                  color={Colors.secondary}
+                />
+                <Text style={styles.policyText}>
+                  Late Return: Contact operator 2 hours in advance
+                </Text>
               </View>
               <View style={styles.policyRow}>
-                <Ionicons name="ban-outline" size={16} color={Colors.secondary} />
-                <Text style={styles.policyText}>Cleanliness: Strictly no smoking inside the vehicle</Text>
+                <Ionicons
+                  name="ban-outline"
+                  size={16}
+                  color={Colors.secondary}
+                />
+                <Text style={styles.policyText}>
+                  Cleanliness: Strictly no smoking inside the vehicle
+                </Text>
               </View>
             </View>
 
@@ -1181,7 +1363,9 @@ export default function OperatorVehicleUpload() {
 
             {picker === "vehicle_brands" && showCustomBrandInput ? (
               <View style={styles.customBrandWrap}>
-                <Text style={styles.customBrandLabel}>Enter Other Brand Name</Text>
+                <Text style={styles.customBrandLabel}>
+                  Enter Other Brand Name
+                </Text>
                 <View style={styles.inputContainer}>
                   <TextInput
                     value={customBrandText}
@@ -1212,7 +1396,11 @@ export default function OperatorVehicleUpload() {
                 {/* Search Bar for Brand or long lists */}
                 {picker === "vehicle_brands" && (
                   <View style={styles.searchBox}>
-                    <Ionicons name="search" size={16} color={Colors.secondary} />
+                    <Ionicons
+                      name="search"
+                      size={16}
+                      color={Colors.secondary}
+                    />
                     <TextInput
                       value={pickerSearch}
                       onChangeText={setPickerSearch}
@@ -1222,13 +1410,20 @@ export default function OperatorVehicleUpload() {
                     />
                     {pickerSearch.length > 0 && (
                       <TouchableOpacity onPress={() => setPickerSearch("")}>
-                        <Ionicons name="close-circle" size={16} color={Colors.secondary} />
+                        <Ionicons
+                          name="close-circle"
+                          size={16}
+                          color={Colors.secondary}
+                        />
                       </TouchableOpacity>
                     )}
                   </View>
                 )}
 
-                <ScrollView style={{ maxHeight: 330 }} showsVerticalScrollIndicator={false}>
+                <ScrollView
+                  style={{ maxHeight: 330 }}
+                  showsVerticalScrollIndicator={false}
+                >
                   {filteredOptions.map((option) => (
                     <TouchableOpacity
                       key={option.id}
@@ -1236,7 +1431,11 @@ export default function OperatorVehicleUpload() {
                       onPress={() => selectOption(picker!, option)}
                     >
                       <Text style={styles.optionItemText}>{option.name}</Text>
-                      <Ionicons name="chevron-forward" size={16} color="#CBD5E1" />
+                      <Ionicons
+                        name="chevron-forward"
+                        size={16}
+                        color="#CBD5E1"
+                      />
                     </TouchableOpacity>
                   ))}
 
@@ -1246,8 +1445,14 @@ export default function OperatorVehicleUpload() {
                       style={styles.customOption}
                       onPress={() => setShowCustomBrandInput(true)}
                     >
-                      <Ionicons name="add-circle" size={20} color={Colors.primary} />
-                      <Text style={styles.customOptionText}>+ Add Other Brand (Type Manually)</Text>
+                      <Ionicons
+                        name="add-circle"
+                        size={20}
+                        color={Colors.primary}
+                      />
+                      <Text style={styles.customOptionText}>
+                        + Add Other Brand (Type Manually)
+                      </Text>
                     </TouchableOpacity>
                   )}
                 </ScrollView>
@@ -1326,7 +1531,9 @@ function FormField({
         {suffix ? <Text style={styles.suffixText}>{suffix}</Text> : null}
       </View>
       {error ? <Text style={styles.fieldErrorText}>{error}</Text> : null}
-      {helperText && !error ? <Text style={styles.fieldHelperText}>{helperText}</Text> : null}
+      {helperText && !error ? (
+        <Text style={styles.fieldHelperText}>{helperText}</Text>
+      ) : null}
     </View>
   );
 }
@@ -1339,7 +1546,13 @@ type DropdownFieldProps = {
   error?: string;
 };
 
-function DropdownField({ label, value, onPress, required, error }: DropdownFieldProps) {
+function DropdownField({
+  label,
+  value,
+  onPress,
+  required,
+  error,
+}: DropdownFieldProps) {
   const isSelected = value && value !== "Select";
   return (
     <View style={styles.field}>
@@ -1354,7 +1567,10 @@ function DropdownField({ label, value, onPress, required, error }: DropdownField
       >
         <Text
           numberOfLines={1}
-          style={[styles.dropdownValueText, !isSelected && styles.placeholderText]}
+          style={[
+            styles.dropdownValueText,
+            !isSelected && styles.placeholderText,
+          ]}
         >
           {value || "Select"}
         </Text>

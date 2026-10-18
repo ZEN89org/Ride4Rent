@@ -4,12 +4,16 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\VehicleResource;
+use App\Models\Booking;
+use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehicleImage;
+use App\Services\ServiceArea;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 
 class VehicleController extends Controller
 {
@@ -37,14 +41,14 @@ class VehicleController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = Vehicle::with([
-                'operator.operatorProfile',
-                'vehicleType',
-                'brand',
-                'bodyType',
-                'transmissionType',
-                'fuelType',
-                'images',
-            ])
+            'operator.operatorProfile',
+            'vehicleType',
+            'brand',
+            'bodyType',
+            'transmissionType',
+            'fuelType',
+            'images',
+        ])
             ->where('is_active', true)
             ->where('availability_status', 'available')
             ->where(function ($q) {
@@ -61,26 +65,26 @@ class VehicleController extends Controller
                 $likeTerm = "%{$term}%";
                 $query->where(function ($q) use ($likeTerm) {
                     $q->where('name', 'LIKE', $likeTerm)
-                      ->orWhere('model', 'LIKE', $likeTerm)
-                      ->orWhere('year_model', 'LIKE', $likeTerm)
-                      ->orWhere('description', 'LIKE', $likeTerm)
-                      ->orWhere('pickup_address', 'LIKE', $likeTerm)
-                      ->orWhereHas('brand', fn ($b) => $b->where('name', 'LIKE', $likeTerm))
-                      ->orWhereHas('vehicleType', fn ($vt) => $vt->where('name', 'LIKE', $likeTerm))
-                      ->orWhereHas('bodyType', fn ($bt) => $bt->where('name', 'LIKE', $likeTerm))
-                      ->orWhereHas('transmissionType', fn ($tt) => $tt->where('name', 'LIKE', $likeTerm))
-                      ->orWhereHas('fuelType', fn ($ft) => $ft->where('name', 'LIKE', $likeTerm))
-                      ->orWhereHas('operator', function ($op) use ($likeTerm) {
-                          $op->where('first_name', 'LIKE', $likeTerm)
-                             ->orWhere('last_name', 'LIKE', $likeTerm)
-                             ->orWhere(DB::raw("CONCAT(first_name, ' ', last_name)"), 'LIKE', $likeTerm)
-                             ->orWhereHas('operatorProfile', function ($opp) use ($likeTerm) {
-                                 $opp->where('business_name', 'LIKE', $likeTerm)
-                                     ->orWhere('street_address', 'LIKE', $likeTerm)
-                                     ->orWhere('barangay', 'LIKE', $likeTerm)
-                                     ->orWhere('municipality', 'LIKE', $likeTerm);
-                             });
-                      });
+                        ->orWhere('model', 'LIKE', $likeTerm)
+                        ->orWhere('year_model', 'LIKE', $likeTerm)
+                        ->orWhere('description', 'LIKE', $likeTerm)
+                        ->orWhere('pickup_address', 'LIKE', $likeTerm)
+                        ->orWhereHas('brand', fn ($b) => $b->where('name', 'LIKE', $likeTerm))
+                        ->orWhereHas('vehicleType', fn ($vt) => $vt->where('name', 'LIKE', $likeTerm))
+                        ->orWhereHas('bodyType', fn ($bt) => $bt->where('name', 'LIKE', $likeTerm))
+                        ->orWhereHas('transmissionType', fn ($tt) => $tt->where('name', 'LIKE', $likeTerm))
+                        ->orWhereHas('fuelType', fn ($ft) => $ft->where('name', 'LIKE', $likeTerm))
+                        ->orWhereHas('operator', function ($op) use ($likeTerm) {
+                            $op->where('first_name', 'LIKE', $likeTerm)
+                                ->orWhere('last_name', 'LIKE', $likeTerm)
+                                ->orWhere(DB::raw("CONCAT(first_name, ' ', last_name)"), 'LIKE', $likeTerm)
+                                ->orWhereHas('operatorProfile', function ($opp) use ($likeTerm) {
+                                    $opp->where('business_name', 'LIKE', $likeTerm)
+                                        ->orWhere('street_address', 'LIKE', $likeTerm)
+                                        ->orWhere('barangay', 'LIKE', $likeTerm)
+                                        ->orWhere('municipality', 'LIKE', $likeTerm);
+                                });
+                        });
                 });
             }
         }
@@ -116,6 +120,7 @@ class VehicleController extends Controller
                         cos($latFrom) * cos($latTo) * pow(sin($lonDelta / 2), 2)));
 
                     $vehicle->distance_km = $angle * $earthRadius;
+
                     return $vehicle;
                 })
                 ->filter(fn (Vehicle $vehicle) => $vehicle->distance_km <= $radius)
@@ -140,7 +145,7 @@ class VehicleController extends Controller
             'fuelType',
             'images',
             'bookings' => function ($query) {
-                $query->whereNotNull('rating')
+                $query->where('is_review_hidden', false)->whereNotNull('rating')
                     ->with('renter')
                     ->latest('updated_at')
                     ->take(20);
@@ -155,7 +160,7 @@ class VehicleController extends Controller
 
     public function byOperator($id): JsonResponse
     {
-        if (!is_numeric($id)) {
+        if (! is_numeric($id)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid operator identifier.',
@@ -164,9 +169,9 @@ class VehicleController extends Controller
 
         $id = (int) $id;
 
-        $operatorUser = \App\Models\User::with('operatorProfile')->find($id);
+        $operatorUser = User::with('operatorProfile')->find($id);
 
-        if (!$operatorUser) {
+        if (! $operatorUser) {
             return response()->json([
                 'success' => false,
                 'message' => 'Operator not found.',
@@ -174,14 +179,14 @@ class VehicleController extends Controller
         }
 
         $vehicles = Vehicle::with([
-                'operator.operatorProfile',
-                'vehicleType',
-                'brand',
-                'bodyType',
-                'transmissionType',
-                'fuelType',
-                'images',
-            ])
+            'operator.operatorProfile',
+            'vehicleType',
+            'brand',
+            'bodyType',
+            'transmissionType',
+            'fuelType',
+            'images',
+        ])
             ->where('operator_id', $id)
             ->where('is_active', true)
             ->latest()
@@ -224,13 +229,13 @@ class VehicleController extends Controller
     public function myVehicles(Request $request): JsonResponse
     {
         $vehicles = Vehicle::with([
-                'vehicleType',
-                'brand',
-                'bodyType',
-                'transmissionType',
-                'fuelType',
-                'images',
-            ])
+            'vehicleType',
+            'brand',
+            'bodyType',
+            'transmissionType',
+            'fuelType',
+            'images',
+        ])
             ->where('operator_id', $request->user()->id)
             ->latest()
             ->get();
@@ -255,7 +260,7 @@ class VehicleController extends Controller
         $profile = $operator->operatorProfile;
 
         // Validation: Operator must have setup payment accounts before uploading vehicle
-        if (!$profile || empty(trim($profile->account_number ?? ''))) {
+        if (! $profile || empty(trim($profile->account_number ?? ''))) {
             return response()->json([
                 'success' => false,
                 'message' => 'Please set up your payment account details in your business profile before listing a vehicle.',
@@ -293,10 +298,10 @@ class VehicleController extends Controller
 
         // Handle custom brand if provided
         $brandId = $validated['brand_id'] ?? null;
-        if (!empty($validated['custom_brand'])) {
+        if (! empty($validated['custom_brand'])) {
             $brandName = trim($validated['custom_brand']);
             $brandSlug = str($brandName)->slug()->value();
-            
+
             $brand = DB::table('vehicle_brands')->where('slug', $brandSlug)->first();
             if ($brand) {
                 $brandId = $brand->id;
@@ -311,7 +316,7 @@ class VehicleController extends Controller
             }
         }
 
-        if (!$brandId) {
+        if (! $brandId) {
             return response()->json([
                 'success' => false,
                 'message' => 'Please select a brand or enter a custom brand name.',
@@ -346,11 +351,12 @@ class VehicleController extends Controller
         $pickupLng = isset($validated['pickup_longitude']) && is_numeric($validated['pickup_longitude'])
             ? (float) $validated['pickup_longitude']
             : $coords['longitude'];
+        ServiceArea::validatePickup($pickupLat, $pickupLng);
 
         $defaultAddress = $profile
             ? trim(($profile->street_address ? $profile->street_address.', ' : '').($profile->barangay ? $profile->barangay.', ' : '').($profile->municipality ?? 'Pinamalayan, Oriental Mindoro'), ', ')
             : 'Pinamalayan, Oriental Mindoro';
-        $pickupAddress = !empty($validated['pickup_address']) ? $validated['pickup_address'] : $defaultAddress;
+        $pickupAddress = ! empty($validated['pickup_address']) ? $validated['pickup_address'] : $defaultAddress;
 
         $vehicle = Vehicle::create([
             'operator_id' => $operator->id,
@@ -448,6 +454,17 @@ class VehicleController extends Controller
             'images.*' => ['image', 'max:10240'],
         ]);
 
+        if (array_key_exists('pickup_latitude', $validated) || array_key_exists('pickup_longitude', $validated)) {
+            $pickupLat = $validated['pickup_latitude'] ?? $vehicle->pickup_latitude;
+            $pickupLng = $validated['pickup_longitude'] ?? $vehicle->pickup_longitude;
+            if ($pickupLat === null || $pickupLng === null) {
+                throw ValidationException::withMessages(['pickup_latitude' => 'Both pickup coordinates are required.']);
+            }
+            ServiceArea::validatePickup((float) $pickupLat, (float) $pickupLng);
+            $validated['pickup_latitude'] = $pickupLat;
+            $validated['pickup_longitude'] = $pickupLng;
+        }
+
         if (isset($validated['features']) && is_string($validated['features'])) {
             $decoded = json_decode($validated['features'], true);
             if (json_last_error() === JSON_ERROR_NONE) {
@@ -463,7 +480,7 @@ class VehicleController extends Controller
         }
 
         if (isset($validated['availability_status']) && $validated['availability_status'] === 'available') {
-            $activeCount = \App\Models\Booking::where('vehicle_id', $vehicle->id)
+            $activeCount = Booking::where('vehicle_id', $vehicle->id)
                 ->whereIn('status', [
                     'approved',
                     'awaiting_pickup',

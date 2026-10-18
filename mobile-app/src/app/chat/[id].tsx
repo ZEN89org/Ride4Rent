@@ -2,22 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Dimensions,
-  FlatList,
-  KeyboardAvoidingView,
-  Linking,
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { ActivityIndicator, Dimensions, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppBottomSheet } from "@/components/common/AppBottomSheet";
@@ -39,7 +25,7 @@ const GCASH_LOGO = require("../../../assets/img/gcash.jpg");
 
 const isSameMessage = (
   left: ChatThreadMessage,
-  right: ChatThreadMessage
+  right: ChatThreadMessage,
 ): boolean =>
   left.id === right.id &&
   left.sender === right.sender &&
@@ -51,7 +37,11 @@ const isSameMessage = (
 
 const isSameShallowValue = (left: unknown, right: unknown): boolean => {
   if (Object.is(left, right)) return true;
-  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+  if (
+    !Array.isArray(left) ||
+    !Array.isArray(right) ||
+    left.length !== right.length
+  ) {
     return false;
   }
   return left.every((value, index) => Object.is(value, right[index]));
@@ -59,7 +49,7 @@ const isSameShallowValue = (left: unknown, right: unknown): boolean => {
 
 const isSameShallowObject = <T extends object>(
   left: T | null | undefined,
-  right: T | null | undefined
+  right: T | null | undefined,
 ): boolean => {
   if (left === right) return true;
   if (!left || !right) return false;
@@ -70,14 +60,15 @@ const isSameShallowObject = <T extends object>(
     leftEntries.every(([key, value]) =>
       rightEntries.some(
         ([rightKey, rightValue]) =>
-          key === rightKey && isSameShallowValue(value, rightValue)
-      )
+          key === rightKey && isSameShallowValue(value, rightValue),
+      ),
     )
   );
 };
 
 const parseReplyData = (text?: string | null) => {
-  if (!text || !text.startsWith("[REPLY:")) return { reply: null, cleanText: text || "" };
+  if (!text || !text.startsWith("[REPLY:"))
+    return { reply: null, cleanText: text || "" };
   const match = text.match(/^\[REPLY:(\{[\s\S]*?\})\]\s*([\s\S]*)$/);
   if (!match) {
     const looseMatch = text.match(/^\[REPLY:[\s\S]*?\]\s*([\s\S]*)$/);
@@ -92,7 +83,9 @@ const parseReplyData = (text?: string | null) => {
     const reply = JSON.parse(jsonStr) as { snippet: string; author?: string };
     return { reply, cleanText };
   } catch {
-    const snippetMatch = jsonStr.match(/['"]snippet['"]\s*:\s*['"]([^'"]+)['"]/i);
+    const snippetMatch = jsonStr.match(
+      /['"]snippet['"]\s*:\s*['"]([^'"]+)['"]/i,
+    );
     const authorMatch = jsonStr.match(/['"]author['"]\s*:\s*['"]([^'"]+)['"]/i);
     if (snippetMatch || authorMatch) {
       return {
@@ -147,18 +140,43 @@ const parseReceiptData = (text?: string | null): ReceiptData | null => {
 
     if (/^vehicle:\s*(.+)$/i.test(clean)) {
       data.vehicle = clean.replace(/^vehicle:\s*/i, "").trim();
-    } else if (/^(schedule|trip\s+dates|extended\s+return\s+date):\s*(.+)$/i.test(clean)) {
-      data.schedule = clean.replace(/^(schedule|trip\s+dates|extended\s+return\s+date):\s*/i, "").trim();
+    } else if (
+      /^(schedule|trip\s+dates|extended\s+return\s+date):\s*(.+)$/i.test(clean)
+    ) {
+      data.schedule = clean
+        .replace(/^(schedule|trip\s+dates|extended\s+return\s+date):\s*/i, "")
+        .trim();
     } else if (/^(payment\s+)?method:\s*(.+)$/i.test(clean)) {
       data.method = clean.replace(/^(payment\s+)?method:\s*/i, "").trim();
-    } else if (/^(gcash\s+ref|reference|reference\s+no|ref\s*no):\s*(.+)$/i.test(clean)) {
-      data.reference = clean.replace(/^(gcash\s+ref|reference|reference\s+no|ref\s*no):\s*/i, "").trim();
-    } else if (/^(amount\s+paid|reservation\s+fee\s+paid|amount):\s*(.+)$/i.test(clean)) {
-      data.amount = clean.replace(/^(amount\s+paid|reservation\s+fee\s+paid|amount):\s*/i, "").trim();
-    } else if (/^(recipient|host|account\s+name|paid\s+to):\s*(.+)$/i.test(clean)) {
-      data.recipient = clean.replace(/^(recipient|host|account\s+name|paid\s+to):\s*/i, "").trim();
-    } else if (/^(phone|contact|mobile|gcash\s+no|gcash\s+number):\s*(.+)$/i.test(clean)) {
-      data.phone = clean.replace(/^(phone|contact|mobile|gcash\s+no|gcash\s+number):\s*/i, "").trim();
+    } else if (
+      /^(gcash\s+ref|reference|reference\s+no|ref\s*no):\s*(.+)$/i.test(clean)
+    ) {
+      data.reference = clean
+        .replace(/^(gcash\s+ref|reference|reference\s+no|ref\s*no):\s*/i, "")
+        .trim();
+    } else if (
+      /^(submitted\s+amount|amount\s+paid|reservation\s+fee\s+paid|amount):\s*(.+)$/i.test(
+        clean,
+      )
+    ) {
+      data.amount = clean
+        .replace(
+          /^(submitted\s+amount|amount\s+paid|reservation\s+fee\s+paid|amount):\s*/i,
+          "",
+        )
+        .trim();
+    } else if (
+      /^(recipient|host|account\s+name|paid\s+to):\s*(.+)$/i.test(clean)
+    ) {
+      data.recipient = clean
+        .replace(/^(recipient|host|account\s+name|paid\s+to):\s*/i, "")
+        .trim();
+    } else if (
+      /^(phone|contact|mobile|gcash\s+no|gcash\s+number):\s*(.+)$/i.test(clean)
+    ) {
+      data.phone = clean
+        .replace(/^(phone|contact|mobile|gcash\s+no|gcash\s+number):\s*/i, "")
+        .trim();
     } else if (/^status:\s*(.+)$/i.test(clean)) {
       data.status = clean.replace(/^status:\s*/i, "").trim();
     } else if (clean.toLowerCase().includes("awaiting host verification")) {
@@ -181,9 +199,9 @@ const maskSingleWord = (word: string): string => {
 };
 
 const maskName = (name?: string): string => {
-  if (!name) return "Z*N J.";
+  if (!name) return "Not provided";
   const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "Z*N J.";
+  if (parts.length === 0) return "Not provided";
   if (parts.length === 1) {
     return maskSingleWord(parts[0]);
   }
@@ -197,21 +215,34 @@ const maskName = (name?: string): string => {
 };
 
 const maskPhone = (phone?: string): string => {
-  if (!phone) return "+63 9•••••8900";
+  if (!phone) return "Not provided";
   const clean = phone.replace(/[^0-9]/g, "");
   if (clean.length >= 10) {
     const last4 = clean.slice(-4);
     return `+63 9•••••${last4}`;
   }
-  return "+63 9•••••8900";
+  return "Not provided";
 };
 
 const formatReceiptDateTime = (dateStr?: string): string => {
-  if (!dateStr) return "Oct 11, 2026 9:28 PM";
+  if (!dateStr) return "Date unavailable";
   try {
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr;
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const months = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
     const m = months[d.getMonth()];
     const day = d.getDate();
     const year = d.getFullYear();
@@ -303,7 +334,9 @@ export default function ChatThreadScreen() {
   const { startCall } = useCall();
 
   const [chatUser, setChatUser] = useState<any>(null);
-  const [bookingContext, setBookingContext] = useState<BookingContext | null>(null);
+  const [bookingContext, setBookingContext] = useState<BookingContext | null>(
+    null,
+  );
   const [showBookingBanner, setShowBookingBanner] = useState<boolean>(true);
   const [messages, setMessages] = useState<ChatThreadMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
@@ -311,13 +344,20 @@ export default function ChatThreadScreen() {
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [sending, setSending] = useState(false);
-  const [selectedViewerImage, setSelectedViewerImage] = useState<string | null>(null);
+  const [selectedViewerImage, setSelectedViewerImage] = useState<string | null>(
+    null,
+  );
 
   // Message Actions State (Horizontal Action Bar, Reply, Copy, Delete)
-  const [selectedMessageForAction, setSelectedMessageForAction] = useState<ChatThreadMessage | null>(null);
-  const [replyingToMessage, setReplyingToMessage] = useState<ChatThreadMessage | null>(null);
-  const [messageToDelete, setMessageToDelete] = useState<ChatThreadMessage | null>(null);
-  const [deletedForMeIds, setDeletedForMeIds] = useState<Set<string>>(new Set());
+  const [selectedMessageForAction, setSelectedMessageForAction] =
+    useState<ChatThreadMessage | null>(null);
+  const [replyingToMessage, setReplyingToMessage] =
+    useState<ChatThreadMessage | null>(null);
+  const [messageToDelete, setMessageToDelete] =
+    useState<ChatThreadMessage | null>(null);
+  const [deletedForMeIds, setDeletedForMeIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [showCopiedToast, setShowCopiedToast] = useState(false);
 
   const flatListRef = useRef<FlatList>(null);
@@ -325,76 +365,31 @@ export default function ChatThreadScreen() {
   const isSendingRef = useRef(false);
   const shouldScrollToEndRef = useRef(true);
 
-  useEffect(() => {
-    if (!id) return;
-    loadThread();
-
-    // Poll every 3 seconds for new incoming messages
-    const interval = setInterval(loadThreadSilent, 3000);
-    return () => clearInterval(interval);
-  }, [id, deletedForMeIds]);
-
-  const loadThread = async () => {
-    try {
-      setLoading(true);
-      shouldScrollToEndRef.current = true;
-      const res = await getChatThread(id, { limit: 40 });
-      setChatUser(res.other_user);
-      setBookingContext(res.booking_context || null);
-      setHasMore(Boolean(res.has_more));
-      const raw = res.messages || [];
-      setMessages(raw.filter((m) => !deletedForMeIds.has(m.id)));
-    } catch (e) {
-      console.log("Error loading chat thread:", e);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleLoadEarlier = async () => {
-    if (loadingEarlier || !hasMore || messages.length === 0) return;
-    const earliestMessage = messages.find((m) => !m.id.startsWith("temp_"));
-    if (!earliestMessage) return;
-
-    try {
-      setLoadingEarlier(true);
-      shouldScrollToEndRef.current = false;
-      const res = await getChatThread(id, {
-        before_id: earliestMessage.id,
-        limit: 40,
-      });
-      setHasMore(Boolean(res.has_more));
-      if (res.messages && res.messages.length > 0) {
-        const olderFiltered = res.messages.filter((m) => !deletedForMeIds.has(m.id));
-        setMessages((prev) => {
-          const existingIds = new Set(prev.map((m) => m.id));
-          const newOlder = olderFiltered.filter((m) => !existingIds.has(m.id));
-          return [...newOlder, ...prev];
-        });
-      }
-    } catch (e) {
-      console.log("Error loading earlier messages:", e);
-    } finally {
-      setLoadingEarlier(false);
-    }
-  };
-
-  const loadThreadSilent = async () => {
+  const loadThreadSilent = async (isActive: () => boolean = () => true) => {
     if (sending || isSendingRef.current) return;
     try {
       const res = await getChatThread(id, { limit: 40 });
+      if (!isActive()) return;
       if (res.other_user) {
         setChatUser((previous: any) =>
-          isSameShallowObject(previous, res.other_user) ? previous : res.other_user
+          isSameShallowObject(previous, res.other_user)
+            ? previous
+            : res.other_user,
         );
       }
       setBookingContext((previous) => {
         const next = res.booking_context || null;
         if (!previous || !next) return previous === next ? previous : next;
-        const { operator_payment_info: previousPaymentInfo, ...previousFields } = previous;
+        const {
+          operator_payment_info: previousPaymentInfo,
+          ...previousFields
+        } = previous;
         const { operator_payment_info: nextPaymentInfo, ...nextFields } = next;
         const sameContext = isSameShallowObject(previousFields, nextFields);
-        const samePaymentInfo = isSameShallowObject(previousPaymentInfo, nextPaymentInfo);
+        const samePaymentInfo = isSameShallowObject(
+          previousPaymentInfo,
+          nextPaymentInfo,
+        );
         return sameContext && samePaymentInfo ? previous : next;
       });
       if (Array.isArray(res.messages)) {
@@ -422,11 +417,19 @@ export default function ChatThreadScreen() {
             return !isNaN(createdMs) && nowMs - createdMs < 30000;
           });
 
-          const nextMessages = [...olderHistory, ...filtered, ...pendingUnsynced];
-          const previousById = new Map(prev.map((message) => [message.id, message]));
+          const nextMessages = [
+            ...olderHistory,
+            ...filtered,
+            ...pendingUnsynced,
+          ];
+          const previousById = new Map(
+            prev.map((message) => [message.id, message]),
+          );
           const stableMessages = nextMessages.map((message) => {
             const previous = previousById.get(message.id);
-            return previous && isSameMessage(previous, message) ? previous : message;
+            return previous && isSameMessage(previous, message)
+              ? previous
+              : message;
           });
           if (
             stableMessages.length === prev.length &&
@@ -442,8 +445,72 @@ export default function ChatThreadScreen() {
     }
   };
 
+  const pollThread = useEffectEvent((isActive: () => boolean) =>
+    loadThreadSilent(isActive),
+  );
+
+  useEffect(() => {
+    if (!id) return;
+    let active = true;
+    getChatThread(id, { limit: 40 })
+      .then((res) => {
+        if (!active) return;
+        shouldScrollToEndRef.current = true;
+        setChatUser(res.other_user);
+        setBookingContext(res.booking_context || null);
+        setHasMore(Boolean(res.has_more));
+        setMessages(
+          (res.messages || []).filter(
+            (message) => !deletedForMeIds.has(message.id),
+          ),
+        );
+      })
+      .catch((error) => console.log("Error loading chat thread:", error))
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    // Poll every 3 seconds for new incoming messages
+    const interval = setInterval(() => pollThread(() => active), 3000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [id, deletedForMeIds]);
+
+  const handleLoadEarlier = async () => {
+    if (loadingEarlier || !hasMore || messages.length === 0) return;
+    const earliestMessage = messages.find((m) => !m.id.startsWith("temp_"));
+    if (!earliestMessage) return;
+
+    try {
+      setLoadingEarlier(true);
+      shouldScrollToEndRef.current = false;
+      const res = await getChatThread(id, {
+        before_id: earliestMessage.id,
+        limit: 40,
+      });
+      setHasMore(Boolean(res.has_more));
+      if (res.messages && res.messages.length > 0) {
+        const olderFiltered = res.messages.filter(
+          (m) => !deletedForMeIds.has(m.id),
+        );
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map((m) => m.id));
+          const newOlder = olderFiltered.filter((m) => !existingIds.has(m.id));
+          return [...newOlder, ...prev];
+        });
+      }
+    } catch (e) {
+      console.log("Error loading earlier messages:", e);
+    } finally {
+      setLoadingEarlier(false);
+    }
+  };
+
   const handleSendMessage = async (customText?: string, base64Img?: string) => {
-    const rawTextToSend = customText !== undefined ? customText : inputMessage.trim();
+    const rawTextToSend =
+      customText !== undefined ? customText : inputMessage.trim();
     if (!rawTextToSend && !base64Img) return;
     if (sending || isSendingRef.current) return;
 
@@ -454,7 +521,9 @@ export default function ChatThreadScreen() {
     let textToSend = rawTextToSend;
     if (replyingToMessage) {
       const { cleanText: snippetText } = parseReplyData(replyingToMessage.text);
-      const replySnippet = (snippetText || (replyingToMessage.image_url ? "📷 Photo" : "")).slice(0, 240);
+      const replySnippet = (
+        snippetText || (replyingToMessage.image_url ? "📷 Photo" : "")
+      ).slice(0, 240);
       const replyHeader = `[REPLY:{"snippet":"${replySnippet.replace(/"/g, "'").replace(/\n/g, " ")}"}]\n`;
       textToSend = replyHeader + rawTextToSend;
       setReplyingToMessage(null);
@@ -467,7 +536,10 @@ export default function ChatThreadScreen() {
       sender: "user",
       text: textToSend,
       image_url: base64Img ? `data:image/jpeg;base64,${base64Img}` : null,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      time: new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
       created_at: new Date().toISOString(),
       is_read: false,
     };
@@ -484,10 +556,13 @@ export default function ChatThreadScreen() {
       });
 
       setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? { ...res, is_read: false } : m))
+        prev.map((m) => (m.id === tempId ? { ...res, is_read: false } : m)),
       );
     } catch (e: any) {
-      showError("Message Error", e.response?.data?.message || "Failed to send message.");
+      showError(
+        "Message Error",
+        e.response?.data?.message || "Failed to send message.",
+      );
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
     } finally {
       setSending(false);
@@ -498,14 +573,18 @@ export default function ChatThreadScreen() {
   // Multiple Image Selection (Messenger Inspiration)
   const handlePickImage = async () => {
     try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permissionResult =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permissionResult.granted) {
-        showError("Permission Required", "Please grant photo library permissions to send images.");
+        showError(
+          "Permission Required",
+          "Please grant photo library permissions to send images.",
+        );
         return;
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
+        mediaTypes: ["images"],
         allowsMultipleSelection: true,
         selectionLimit: 10,
         quality: 0.7,
@@ -520,7 +599,9 @@ export default function ChatThreadScreen() {
     }
   };
 
-  const handleSendMultipleImages = async (assets: ImagePicker.ImagePickerAsset[]) => {
+  const handleSendMultipleImages = async (
+    assets: ImagePicker.ImagePickerAsset[],
+  ) => {
     if (!assets || assets.length === 0) return;
     shouldScrollToEndRef.current = true;
     const textToSend = inputMessage.trim();
@@ -538,7 +619,10 @@ export default function ChatThreadScreen() {
         sender: "user",
         text: caption,
         image_url: `data:image/jpeg;base64,${asset.base64}`,
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
         created_at: new Date().toISOString(),
       };
 
@@ -563,9 +647,13 @@ export default function ChatThreadScreen() {
 
   const handleTakePhoto = async () => {
     try {
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+      const permissionResult =
+        await ImagePicker.requestCameraPermissionsAsync();
       if (!permissionResult.granted) {
-        showError("Permission Required", "Please grant camera permissions to capture photos.");
+        showError(
+          "Permission Required",
+          "Please grant camera permissions to capture photos.",
+        );
         return;
       }
 
@@ -599,7 +687,8 @@ export default function ChatThreadScreen() {
     const target = selectedMessageForAction;
     setSelectedMessageForAction(null);
     const { cleanText } = parseReplyData(target.text);
-    const textToCopy = cleanText || target.text || (target.image_url ? "Photo link" : "");
+    const textToCopy =
+      cleanText || target.text || (target.image_url ? "Photo link" : "");
     if (textToCopy) {
       await copyToClipboard(textToCopy);
     }
@@ -614,7 +703,10 @@ export default function ChatThreadScreen() {
     const target = selectedMessageForAction;
     setSelectedMessageForAction(null);
     if (parseReceiptData(target.text)) {
-      showError("Protected Receipt", "Official payment receipts cannot be deleted as transaction proof.");
+      showError(
+        "Protected Receipt",
+        "Official payment receipts cannot be deleted as transaction proof.",
+      );
       return;
     }
     setMessageToDelete(target);
@@ -623,7 +715,10 @@ export default function ChatThreadScreen() {
   const handleConfirmDeleteForMe = () => {
     if (!messageToDelete) return;
     if (parseReceiptData(messageToDelete.text)) {
-      showError("Protected Receipt", "Official payment receipts cannot be deleted as transaction proof.");
+      showError(
+        "Protected Receipt",
+        "Official payment receipts cannot be deleted as transaction proof.",
+      );
       setMessageToDelete(null);
       return;
     }
@@ -636,7 +731,10 @@ export default function ChatThreadScreen() {
   const handleConfirmDeleteForEveryone = async () => {
     if (!messageToDelete) return;
     if (parseReceiptData(messageToDelete.text)) {
-      showError("Protected Receipt", "Official payment receipts cannot be deleted as transaction proof.");
+      showError(
+        "Protected Receipt",
+        "Official payment receipts cannot be deleted as transaction proof.",
+      );
       setMessageToDelete(null);
       return;
     }
@@ -660,22 +758,28 @@ export default function ChatThreadScreen() {
     name ||
     (user?.role === "operator" ? "Customer" : "Vehicle Host");
 
-  const operatorPhone = chatUser?.business_contact_number || chatUser?.mobile_number;
+  const operatorPhone =
+    chatUser?.business_contact_number || chatUser?.mobile_number;
   const paymentInfo = bookingContext?.operator_payment_info;
 
   // The recipient of rental payments on official receipts is ALWAYS the Operator / Host's REAL name
   const resolvedOperatorName = (() => {
     if (user?.role === "operator") {
-      const real = `${user?.first_name || ""} ${user?.last_name || ""}`.trim() || user?.name;
+      const real =
+        `${user?.first_name || ""} ${user?.last_name || ""}`.trim() ||
+        user?.name;
       return real || "Vehicle Host";
     }
-    const realChatUser = `${chatUser?.first_name || ""} ${chatUser?.last_name || ""}`.trim() || chatUser?.name;
+    const realChatUser =
+      `${chatUser?.first_name || ""} ${chatUser?.last_name || ""}`.trim() ||
+      chatUser?.name;
     return realChatUser || "Vehicle Host";
   })();
 
   const resolvedOperatorPhone = (() => {
     if (user?.role === "operator") {
-      const opProfile = (user as any)?.operatorProfile || (user as any)?.operator_profile;
+      const opProfile =
+        (user as any)?.operatorProfile || (user as any)?.operator_profile;
       return (
         opProfile?.account_number ||
         (user as any)?.phone_number ||
@@ -690,683 +794,871 @@ export default function ChatThreadScreen() {
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.container}>
       <View style={styles.chatContent}>
-      {/* Modern Messenger-Inspired Header */}
-      <View style={styles.headerBar}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="arrow-back" size={22} color={Colors.dark} />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.headerCenter}
-          onPress={() => chatUser?.role === "operator" && router.push(`/operator/${id}` as any)}
-          activeOpacity={chatUser?.role === "operator" ? 0.75 : 1}
-        >
-          {/* Avatar with Online Badge */}
-          <View style={styles.avatarWrapper}>
-            {chatUser?.profile_photo ? (
-              <Image source={{ uri: chatUser.profile_photo }} style={styles.headerAvatar} contentFit="cover" />
-            ) : (
-              <View style={styles.avatarFallback}>
-                <Text style={styles.avatarInitial}>
-                  {(displayName || "U")[0]?.toUpperCase()}
-                </Text>
-              </View>
-            )}
-            <View style={styles.onlineBadge} />
-          </View>
-
-          <View style={styles.headerTextWrap}>
-            <Text style={styles.headerTitle} numberOfLines={1}>
-              {displayName}
-            </Text>
-            <View style={styles.statusRow}>
-              <Text style={styles.headerSubtitle} numberOfLines={1}>
-                {chatUser?.role === "operator" ? "Operator" : "Active now"}
-              </Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-
-        {/* Right Header Actions */}
-        <View style={styles.headerActionsRow}>
+        {/* Modern Messenger-Inspired Header */}
+        <View style={styles.headerBar}>
           <TouchableOpacity
-            style={styles.headerIconBtn}
-            onPress={() => {
-              if (chatUser) {
-                startCall(chatUser);
-              } else if (id) {
-                startCall({
-                  id: parseInt(id, 10),
-                  name: displayName,
-                  role: user?.role === "operator" ? "renter" : "operator",
-                });
-              }
-            }}
+            style={styles.backButton}
+            onPress={() => router.back()}
             activeOpacity={0.7}
           >
-            <Ionicons name="call" size={18} color={Colors.dark} />
+            <Ionicons name="arrow-back" size={22} color={Colors.dark} />
           </TouchableOpacity>
-        </View>
-      </View>
 
-      {/* Active Booking & Payment Context Card (collapsible - only shown when pending payment and unpaid) */}
-      {bookingContext &&
-        bookingContext.status === "pending_payment" &&
-        bookingContext.payment_status === "unpaid" && (
-        <View style={styles.contextBanner}>
           <TouchableOpacity
-            style={styles.contextHeader}
-            onPress={() => setShowBookingBanner(!showBookingBanner)}
-            activeOpacity={0.8}
+            style={styles.headerCenter}
+            onPress={() =>
+              chatUser?.role === "operator" &&
+              router.push(`/operator/${id}` as any)
+            }
+            activeOpacity={chatUser?.role === "operator" ? 0.75 : 1}
           >
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1 }}>
-              <Ionicons name="car-sport" size={17} color="#854D0E" />
-              <Text style={styles.contextTitle} numberOfLines={1}>
-                {bookingContext.vehicle_name}
-              </Text>
+            {/* Avatar with Online Badge */}
+            <View style={styles.avatarWrapper}>
+              {chatUser?.profile_photo ? (
+                <Image
+                  source={{ uri: chatUser.profile_photo }}
+                  style={styles.headerAvatar}
+                  contentFit="cover"
+                />
+              ) : (
+                <View style={styles.avatarFallback}>
+                  <Text style={styles.avatarInitial}>
+                    {(displayName || "U")[0]?.toUpperCase()}
+                  </Text>
+                </View>
+              )}
+              <View style={styles.onlineBadge} />
             </View>
-            <Ionicons
-              name={showBookingBanner ? "chevron-up" : "chevron-down"}
-              size={18}
-              color="#854D0E"
-            />
+
+            <View style={styles.headerTextWrap}>
+              <Text style={styles.headerTitle} numberOfLines={1}>
+                {displayName}
+              </Text>
+              <View style={styles.statusRow}>
+                <Text style={styles.headerSubtitle} numberOfLines={1}>
+                  {chatUser?.role === "operator" ? "Operator" : "Active now"}
+                </Text>
+              </View>
+            </View>
           </TouchableOpacity>
 
-          {showBookingBanner && (
-            <View style={styles.contextBody}>
-              <View style={styles.amountsRow}>
-                <View style={styles.amountItem}>
-                  <Text style={styles.amountLabel}>Total Rental</Text>
-                  <Text style={styles.amountVal}>₱{bookingContext.total_price.toLocaleString()}</Text>
-                </View>
-                <View style={styles.amountDivider} />
-                <View style={styles.amountItem}>
-                  <Text style={styles.amountLabel}>Downpayment</Text>
-                  <Text style={[styles.amountVal, { color: "#16A34A" }]}>
-                    ₱{bookingContext.reservation_fee.toLocaleString()}
+          {/* Right Header Actions */}
+          <View style={styles.headerActionsRow}>
+            <TouchableOpacity
+              style={styles.headerIconBtn}
+              onPress={() => {
+                if (chatUser) {
+                  startCall(chatUser);
+                } else if (id) {
+                  startCall({
+                    id: parseInt(id, 10),
+                    name: displayName,
+                    role: user?.role === "operator" ? "renter" : "operator",
+                  });
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="call" size={18} color={Colors.dark} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Active Booking & Payment Context Card (collapsible - only shown when pending payment and unpaid) */}
+        {bookingContext &&
+          bookingContext.status === "pending_payment" &&
+          bookingContext.payment_status === "unpaid" && (
+            <View style={styles.contextBanner}>
+              <TouchableOpacity
+                style={styles.contextHeader}
+                onPress={() => setShowBookingBanner(!showBookingBanner)}
+                activeOpacity={0.8}
+              >
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                    flex: 1,
+                  }}
+                >
+                  <Ionicons name="car-sport" size={17} color="#854D0E" />
+                  <Text style={styles.contextTitle} numberOfLines={1}>
+                    {bookingContext.vehicle_name}
                   </Text>
                 </View>
-                <View style={styles.amountDivider} />
-                <View style={styles.amountItem}>
-                  <Text style={styles.amountLabel}>Balance Due</Text>
-                  <Text style={[styles.amountVal, { color: "#DC2626" }]}>
-                    ₱{bookingContext.balance_due.toLocaleString()}
-                  </Text>
-                </View>
-              </View>
+                <Ionicons
+                  name={showBookingBanner ? "chevron-up" : "chevron-down"}
+                  size={18}
+                  color="#854D0E"
+                />
+              </TouchableOpacity>
 
-              {paymentInfo && (
-                <View style={styles.paymentInfoCard}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 4 }}>
-                    <Ionicons name="shield-checkmark" size={14} color="#166534" />
-                    <Text style={styles.paymentInfoTitle}>
-                      Host Payment Details ({paymentInfo.business_name || "Verified"})
-                    </Text>
-                  </View>
-
-                  {paymentInfo.account_name && (
-                    <View style={styles.infoRow}>
-                      <Text style={styles.infoLabel}>Account Name:</Text>
-                      <Text style={styles.infoValue}>{paymentInfo.account_name}</Text>
-                    </View>
-                  )}
-                  {paymentInfo.account_number && (
-                    <View style={styles.infoRow}>
-                      <Text style={styles.infoLabel}>GCash / Bank No:</Text>
-                      <Text style={[styles.infoValue, { fontFamily: FontFamily.bold }]}>
-                        {paymentInfo.account_number}
+              {showBookingBanner && (
+                <View style={styles.contextBody}>
+                  <View style={styles.amountsRow}>
+                    <View style={styles.amountItem}>
+                      <Text style={styles.amountLabel}>Total Rental</Text>
+                      <Text style={styles.amountVal}>
+                        ₱{bookingContext.total_price.toLocaleString()}
                       </Text>
                     </View>
-                  )}
+                    <View style={styles.amountDivider} />
+                    <View style={styles.amountItem}>
+                      <Text style={styles.amountLabel}>Downpayment</Text>
+                      <Text style={[styles.amountVal, { color: "#16A34A" }]}>
+                        ₱{bookingContext.reservation_fee.toLocaleString()}
+                      </Text>
+                    </View>
+                    <View style={styles.amountDivider} />
+                    <View style={styles.amountItem}>
+                      <Text style={styles.amountLabel}>Balance Due</Text>
+                      <Text style={[styles.amountVal, { color: "#DC2626" }]}>
+                        ₱{bookingContext.balance_due.toLocaleString()}
+                      </Text>
+                    </View>
+                  </View>
 
-                  {paymentInfo.qr_code_url ? (
-                    <TouchableOpacity
-                      style={styles.qrRow}
-                      onPress={() => setSelectedViewerImage(paymentInfo.qr_code_url || null)}
-                      activeOpacity={0.8}
-                    >
-                      <Image source={{ uri: paymentInfo.qr_code_url }} style={styles.qrThumb} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.infoLabel, { fontFamily: FontFamily.medium }]}>
-                          Payment QR Code attached
-                        </Text>
-                        <Text style={{ fontSize: 10, color: Colors.secondary }}>
-                          Tap to view & scan QR
+                  {paymentInfo && (
+                    <View style={styles.paymentInfoCard}>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 5,
+                          marginBottom: 4,
+                        }}
+                      >
+                        <Ionicons
+                          name="shield-checkmark"
+                          size={14}
+                          color="#166534"
+                        />
+                        <Text style={styles.paymentInfoTitle}>
+                          Host Payment Details (
+                          {paymentInfo.business_name || "Verified"})
                         </Text>
                       </View>
-                      <Ionicons name="expand-outline" size={16} color="#0F172A" />
-                    </TouchableOpacity>
-                  ) : null}
+
+                      {paymentInfo.account_name && (
+                        <View style={styles.infoRow}>
+                          <Text style={styles.infoLabel}>Account Name:</Text>
+                          <Text style={styles.infoValue}>
+                            {paymentInfo.account_name}
+                          </Text>
+                        </View>
+                      )}
+                      {paymentInfo.account_number && (
+                        <View style={styles.infoRow}>
+                          <Text style={styles.infoLabel}>GCash / Bank No:</Text>
+                          <Text
+                            style={[
+                              styles.infoValue,
+                              { fontFamily: FontFamily.bold },
+                            ]}
+                          >
+                            {paymentInfo.account_number}
+                          </Text>
+                        </View>
+                      )}
+
+                      {paymentInfo.qr_code_url ? (
+                        <TouchableOpacity
+                          style={styles.qrRow}
+                          onPress={() =>
+                            setSelectedViewerImage(
+                              paymentInfo.qr_code_url || null,
+                            )
+                          }
+                          activeOpacity={0.8}
+                        >
+                          <Image
+                            source={{ uri: paymentInfo.qr_code_url }}
+                            style={styles.qrThumb}
+                          />
+                          <View style={{ flex: 1 }}>
+                            <Text
+                              style={[
+                                styles.infoLabel,
+                                { fontFamily: FontFamily.medium },
+                              ]}
+                            >
+                              Payment QR Code attached
+                            </Text>
+                            <Text
+                              style={{ fontSize: 10, color: Colors.secondary }}
+                            >
+                              Tap to view & scan QR
+                            </Text>
+                          </View>
+                          <Ionicons
+                            name="expand-outline"
+                            size={16}
+                            color="#0F172A"
+                          />
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                  )}
                 </View>
               )}
             </View>
           )}
-        </View>
-      )}
 
-      <KeyboardAvoidingView
-        style={styles.keyboardContainer}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
-      >
-        {loading ? (
-          <View style={styles.loadingWrap}>
-            <ActivityIndicator size="small" color={Colors.primary} />
-            <Text style={styles.loadingText}>Loading conversation...</Text>
-          </View>
-        ) : (
-          <FlatList
-            ref={flatListRef}
-            data={messages}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.messagesList}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            initialNumToRender={12}
-            maxToRenderPerBatch={8}
-            updateCellsBatchingPeriod={50}
-            windowSize={7}
-            removeClippedSubviews={Platform.OS === "android"}
-            onContentSizeChange={() => {
-              if (shouldScrollToEndRef.current) {
-                flatListRef.current?.scrollToEnd({ animated: true });
-              }
-            }}
-            ListHeaderComponent={
-              hasMore ? (
-                <View style={styles.loadMoreWrap}>
-                  {loadingEarlier ? (
-                    <ActivityIndicator size="small" color={Colors.primary} />
-                  ) : (
-                    <TouchableOpacity
-                      style={styles.loadMoreBtn}
-                      onPress={handleLoadEarlier}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons name="time-outline" size={14} color="#64748B" />
-                      <Text style={styles.loadMoreText}>Load earlier messages</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              ) : null
-            }
-            ListEmptyComponent={
-              !sending && messages.length === 0 ? (
-                <View style={styles.emptyWrap}>
-                  <Text style={styles.emptyTitle}>Start a Conversation</Text>
-                  <Text style={styles.emptySub}>
-                    Discuss payment details, send receipts orphotos, and coordinate rental pickup!
-                  </Text>
-                </View>
-              ) : null
-            }
-            renderItem={({ item }) => {
-              const isUser = item.sender === "user";
-              const parsed = parseReplyData(item.text);
-              const receipt = parseReceiptData(parsed.cleanText);
-              const callLog = parseCallData(parsed.cleanText || item.text);
-              const hasImage = Boolean(item.image_url);
-              const hasText = Boolean(parsed.cleanText);
-              const isImageOnly = hasImage && !hasText && !parsed.reply && !receipt && !callLog;
-
-              return (
-                <View
-                  style={[
-                    styles.messageBubbleWrap,
-                    isUser ? styles.userBubbleWrap : styles.operatorBubbleWrap,
-                  ]}
-                >
-                  <TouchableOpacity
-                    style={[
-                      styles.messageBubble,
-                      receipt
-                        ? styles.receiptBubble
-                        : isImageOnly
-                        ? styles.imageOnlyBubble
-                        : callLog
-                        ? styles.callLogBubble
-                        : isUser
-                        ? styles.userBubble
-                        : styles.operatorBubble,
-                      parsed.reply ? styles.replyBubbleWrap : null,
-                    ]}
-                    onLongPress={() => {
-                      if (receipt || callLog) return;
-                      setSelectedMessageForAction(item);
-                    }}
-                    delayLongPress={220}
-                    activeOpacity={receipt || isImageOnly || callLog ? 1 : 0.92}
-                  >
-                    {/* Quoted Reply Preview inside bubble (No author label, just the message snippet) */}
-                    {parsed.reply ? (
-                      <View
-                        style={[
-                          styles.quotedReplyBubble,
-                          isUser ? styles.quotedReplyBubbleUser : styles.quotedReplyBubbleOperator,
-                        ]}
-                      >
-                        <View style={[styles.quotedBar, isUser ? styles.quotedBarUser : styles.quotedBarOperator]} />
-                        <View style={{ flex: 1, paddingVertical: 2, paddingRight: 4 }}>
-                          <Text
-                            style={[
-                              styles.quotedSnippet,
-                              isUser ? styles.quotedSnippetUser : styles.quotedSnippetOperator,
-                            ]}
-                            numberOfLines={4}
-                          >
-                            {parsed.reply.snippet}
-                          </Text>
-                        </View>
-                      </View>
-                    ) : null}
-
-                    {/* Image Attachment in Chat (Natural aspect ratio, no bubble container when standalone) */}
-                    {item.image_url ? (
-                      <ChatImage
-                        uri={item.image_url}
-                        isAlone={isImageOnly}
-                        onPress={() => setSelectedViewerImage(item.image_url || null)}
-                        onLongPress={() => setSelectedMessageForAction(item)}
-                      />
-                    ) : null}
-
-                    {/* Authentic GCash Receipt Card matching reference or Standard Text */}
-                    {receipt ? (
-                      <View style={styles.gcashReceiptCardWrap}>
-                        {/* Blue top curved container with floating checkmark */}
-                        <View style={styles.gcashCardHeaderTop}>
-                          <View style={styles.gcashCheckmarkBadge}>
-                            <Ionicons name="checkmark" size={24} color="#FFFFFF" />
-                          </View>
-                        </View>
-
-                        {/* White Main Card Body */}
-                        <View style={styles.gcashWhiteCard}>
-                          {/* Recipient Name - Always the operator's real name masked */}
-                          <Text style={styles.gcashRecipientName} numberOfLines={1}>
-                            {maskName(
-                              resolvedOperatorName && resolvedOperatorName !== "Vehicle Host"
-                                ? resolvedOperatorName
-                                : receipt.recipient || "Vehicle Host"
-                            )}
-                          </Text>
-
-                          {/* Recipient Phone Pill */}
-                          <View style={styles.gcashPhonePill}>
-                            <Text style={styles.gcashPhoneText}>
-                              {maskPhone(receipt.phone || resolvedOperatorPhone)}
-                            </Text>
-                          </View>
-
-                          {/* Subtitle */}
-                          <Text style={styles.gcashSubtitle}>Sent via GCash</Text>
-
-                          {/* Thin Divider */}
-                          <View style={styles.gcashDivider} />
-
-                          {/* Amount Row */}
-                          <View style={styles.gcashRow}>
-                            <Text style={styles.gcashRowLabel}>Amount</Text>
-                            <Text style={styles.gcashRowValue}>
-                              {(() => {
-                                const num = parseFloat((receipt.amount || "200").replace(/[^0-9.]/g, ""));
-                                return isNaN(num) ? "200.00" : num.toFixed(2);
-                              })()}
-                            </Text>
-                          </View>
-
-                          {/* Thin Divider */}
-                          <View style={styles.gcashDivider} />
-
-                          {/* Total Amount Sent Row */}
-                          <View style={styles.gcashTotalRow}>
-                            <Text style={styles.gcashTotalLabel}>Total Amount Sent</Text>
-                            <Text style={styles.gcashTotalValue}>
-                              ₱ {(() => {
-                                const num = parseFloat((receipt.amount || "200").replace(/[^0-9.]/g, ""));
-                                return isNaN(num) ? "200.00" : num.toFixed(2);
-                              })()}
-                            </Text>
-                          </View>
-
-                          {/* Soft Ice Blue Footer with Copyable Ref & Timestamp */}
-                          <TouchableOpacity
-                            activeOpacity={0.75}
-                            style={styles.gcashFooter}
-                            onPress={async () => {
-                              const ref = receipt.reference || "0046 018 218906";
-                              await copyToClipboard(ref);
-                              setShowCopiedToast(true);
-                              setTimeout(() => setShowCopiedToast(false), 1500);
-                            }}
-                          >
-                            <Text style={styles.gcashRefText}>
-                              Ref No.{" "}
-                              <Text style={styles.gcashRefNum}>
-                                {receipt.reference || "0046 018 218906"}
-                              </Text>
-                            </Text>
-                            <Text style={styles.gcashDateText}>
-                              {formatReceiptDateTime(item.created_at)}
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    ) : callLog ? (
+        <KeyboardAvoidingView
+          style={styles.keyboardContainer}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
+        >
+          {loading ? (
+            <View style={styles.loadingWrap}>
+              <ActivityIndicator size="small" color={Colors.primary} />
+              <Text style={styles.loadingText}>Loading conversation...</Text>
+            </View>
+          ) : (
+            <FlatList
+              ref={flatListRef}
+              data={messages}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.messagesList}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              initialNumToRender={12}
+              maxToRenderPerBatch={8}
+              updateCellsBatchingPeriod={50}
+              windowSize={7}
+              removeClippedSubviews={Platform.OS === "android"}
+              onContentSizeChange={() => {
+                if (shouldScrollToEndRef.current) {
+                  flatListRef.current?.scrollToEnd({ animated: true });
+                }
+              }}
+              ListHeaderComponent={
+                hasMore ? (
+                  <View style={styles.loadMoreWrap}>
+                    {loadingEarlier ? (
+                      <ActivityIndicator size="small" color={Colors.primary} />
+                    ) : (
                       <TouchableOpacity
-                        style={styles.callLogCard}
-                        onPress={() => {
-                          if (chatUser) {
-                            startCall(chatUser);
-                          } else if (id) {
-                            startCall({
-                              id: parseInt(id, 10),
-                              name: displayName,
-                              role: user?.role === "operator" ? "renter" : "operator",
-                            });
-                          }
-                        }}
-                        activeOpacity={0.8}
+                        style={styles.loadMoreBtn}
+                        onPress={handleLoadEarlier}
+                        activeOpacity={0.7}
                       >
+                        <Ionicons
+                          name="time-outline"
+                          size={14}
+                          color="#64748B"
+                        />
+                        <Text style={styles.loadMoreText}>
+                          Load earlier messages
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ) : null
+              }
+              ListEmptyComponent={
+                !sending && messages.length === 0 ? (
+                  <View style={styles.emptyWrap}>
+                    <Text style={styles.emptyTitle}>Start a Conversation</Text>
+                    <Text style={styles.emptySub}>
+                      Discuss payment details, send receipts orphotos, and
+                      coordinate rental pickup!
+                    </Text>
+                  </View>
+                ) : null
+              }
+              renderItem={({ item }) => {
+                const isUser = item.sender === "user";
+                const parsed = parseReplyData(item.text);
+                const receipt = parseReceiptData(parsed.cleanText);
+                const callLog = parseCallData(parsed.cleanText || item.text);
+                const hasImage = Boolean(item.image_url);
+                const hasText = Boolean(parsed.cleanText);
+                const isImageOnly =
+                  hasImage && !hasText && !parsed.reply && !receipt && !callLog;
+
+                return (
+                  <View
+                    style={[
+                      styles.messageBubbleWrap,
+                      isUser
+                        ? styles.userBubbleWrap
+                        : styles.operatorBubbleWrap,
+                    ]}
+                  >
+                    <TouchableOpacity
+                      style={[
+                        styles.messageBubble,
+                        receipt
+                          ? styles.receiptBubble
+                          : isImageOnly
+                            ? styles.imageOnlyBubble
+                            : callLog
+                              ? styles.callLogBubble
+                              : isUser
+                                ? styles.userBubble
+                                : styles.operatorBubble,
+                        parsed.reply ? styles.replyBubbleWrap : null,
+                      ]}
+                      onLongPress={() => {
+                        if (receipt || callLog) return;
+                        setSelectedMessageForAction(item);
+                      }}
+                      delayLongPress={220}
+                      activeOpacity={
+                        receipt || isImageOnly || callLog ? 1 : 0.92
+                      }
+                    >
+                      {/* Quoted Reply Preview inside bubble (No author label, just the message snippet) */}
+                      {parsed.reply ? (
                         <View
                           style={[
-                            styles.callLogIconWrap,
-                            callLog.type === "missed" ? styles.callLogIconMissed : styles.callLogIconVoice,
+                            styles.quotedReplyBubble,
+                            isUser
+                              ? styles.quotedReplyBubbleUser
+                              : styles.quotedReplyBubbleOperator,
                           ]}
                         >
-                          <Ionicons
-                            name="call"
-                            size={18}
-                            color={callLog.type === "missed" ? "#EF4444" : "#10B981"}
-                            style={callLog.type === "missed" ? { transform: [{ rotate: "135deg" }] } : undefined}
+                          <View
+                            style={[
+                              styles.quotedBar,
+                              isUser
+                                ? styles.quotedBarUser
+                                : styles.quotedBarOperator,
+                            ]}
                           />
+                          <View
+                            style={{
+                              flex: 1,
+                              paddingVertical: 2,
+                              paddingRight: 4,
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.quotedSnippet,
+                                isUser
+                                  ? styles.quotedSnippetUser
+                                  : styles.quotedSnippetOperator,
+                              ]}
+                              numberOfLines={4}
+                            >
+                              {parsed.reply.snippet}
+                            </Text>
+                          </View>
                         </View>
-                        <View style={styles.callLogTextCol}>
-                          <Text style={styles.callLogTitle}>
-                            {callLog.type === "missed" ? "Missed Call" : "Voice Call"}
-                          </Text>
-                          <Text style={styles.callLogSubtitle}>
-                            {callLog.type === "missed"
-                              ? "Tap to call back"
-                              : callLog.duration > 0
-                              ? `${formatCallDurationText(callLog.duration)} • Tap to call back`
-                              : "Tap to call back"}
-                          </Text>
+                      ) : null}
+
+                      {/* Image Attachment in Chat (Natural aspect ratio, no bubble container when standalone) */}
+                      {item.image_url ? (
+                        <ChatImage
+                          uri={item.image_url}
+                          isAlone={isImageOnly}
+                          onPress={() =>
+                            setSelectedViewerImage(item.image_url || null)
+                          }
+                          onLongPress={() => setSelectedMessageForAction(item)}
+                        />
+                      ) : null}
+
+                      {/* Payment details submitted in chat or Standard Text */}
+                      {receipt ? (
+                        <View style={styles.gcashReceiptCardWrap}>
+                          {/* Blue top curved container with floating checkmark */}
+                          <View style={styles.gcashCardHeaderTop}>
+                            <View style={styles.gcashCheckmarkBadge}>
+                              <Ionicons
+                                name="document-text-outline"
+                                size={24}
+                                color="#FFFFFF"
+                              />
+                            </View>
+                          </View>
+
+                          {/* White Main Card Body */}
+                          <View style={styles.gcashWhiteCard}>
+                            {/* Recipient Name - Always the operator's real name masked */}
+                            <Text
+                              style={styles.gcashRecipientName}
+                              numberOfLines={1}
+                            >
+                              {maskName(
+                                resolvedOperatorName &&
+                                  resolvedOperatorName !== "Vehicle Host"
+                                  ? resolvedOperatorName
+                                  : receipt.recipient || "Vehicle Host",
+                              )}
+                            </Text>
+
+                            {/* Recipient Phone Pill */}
+                            <View style={styles.gcashPhonePill}>
+                              <Text style={styles.gcashPhoneText}>
+                                {maskPhone(
+                                  receipt.phone || resolvedOperatorPhone,
+                                )}
+                              </Text>
+                            </View>
+
+                            {/* Subtitle */}
+                            <Text style={styles.gcashSubtitle}>
+                              Payment record •{" "}
+                              {receipt.method || "Method not provided"}
+                            </Text>
+                            <Text style={styles.gcashSubtitle}>
+                              Confirm receipt with the host
+                            </Text>
+
+                            {/* Thin Divider */}
+                            <View style={styles.gcashDivider} />
+
+                            {/* Amount Row */}
+                            <View style={styles.gcashRow}>
+                              <Text style={styles.gcashRowLabel}>Amount</Text>
+                              <Text style={styles.gcashRowValue}>
+                                {(() => {
+                                  const num = parseFloat(
+                                    (receipt.amount || "").replace(
+                                      /[^0-9.]/g,
+                                      "",
+                                    ),
+                                  );
+                                  return isNaN(num)
+                                    ? "Not provided"
+                                    : num.toFixed(2);
+                                })()}
+                              </Text>
+                            </View>
+
+                            {/* Thin Divider */}
+                            <View style={styles.gcashDivider} />
+
+                            {/* Total Amount Sent Row */}
+                            <View style={styles.gcashTotalRow}>
+                              <Text style={styles.gcashTotalLabel}>
+                                Reported Amount
+                              </Text>
+                              <Text style={styles.gcashTotalValue}>
+                                ₱{" "}
+                                {(() => {
+                                  const num = parseFloat(
+                                    (receipt.amount || "").replace(
+                                      /[^0-9.]/g,
+                                      "",
+                                    ),
+                                  );
+                                  return isNaN(num)
+                                    ? "Not provided"
+                                    : num.toFixed(2);
+                                })()}
+                              </Text>
+                            </View>
+
+                            {/* Soft Ice Blue Footer with Copyable Ref & Timestamp */}
+                            <TouchableOpacity
+                              activeOpacity={0.75}
+                              style={styles.gcashFooter}
+                              onPress={async () => {
+                                const ref = receipt.reference;
+                                if (!ref) return;
+                                await copyToClipboard(ref);
+                                setShowCopiedToast(true);
+                                setTimeout(
+                                  () => setShowCopiedToast(false),
+                                  1500,
+                                );
+                              }}
+                            >
+                              <Text style={styles.gcashRefText}>
+                                Ref No.{" "}
+                                <Text style={styles.gcashRefNum}>
+                                  {receipt.reference || "Not provided"}
+                                </Text>
+                              </Text>
+                              <Text style={styles.gcashDateText}>
+                                {formatReceiptDateTime(item.created_at)}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
                         </View>
-                      </TouchableOpacity>
-                    ) : parsed.cleanText ? (
-                      <Text
+                      ) : callLog ? (
+                        <TouchableOpacity
+                          style={styles.callLogCard}
+                          onPress={() => {
+                            if (chatUser) {
+                              startCall(chatUser);
+                            } else if (id) {
+                              startCall({
+                                id: parseInt(id, 10),
+                                name: displayName,
+                                role:
+                                  user?.role === "operator"
+                                    ? "renter"
+                                    : "operator",
+                              });
+                            }
+                          }}
+                          activeOpacity={0.8}
+                        >
+                          <View
+                            style={[
+                              styles.callLogIconWrap,
+                              callLog.type === "missed"
+                                ? styles.callLogIconMissed
+                                : styles.callLogIconVoice,
+                            ]}
+                          >
+                            <Ionicons
+                              name="call"
+                              size={18}
+                              color={
+                                callLog.type === "missed"
+                                  ? "#EF4444"
+                                  : "#10B981"
+                              }
+                              style={
+                                callLog.type === "missed"
+                                  ? { transform: [{ rotate: "135deg" }] }
+                                  : undefined
+                              }
+                            />
+                          </View>
+                          <View style={styles.callLogTextCol}>
+                            <Text style={styles.callLogTitle}>
+                              {callLog.type === "missed"
+                                ? "Missed Call"
+                                : "Voice Call"}
+                            </Text>
+                            <Text style={styles.callLogSubtitle}>
+                              {callLog.type === "missed"
+                                ? "Tap to call back"
+                                : callLog.duration > 0
+                                  ? `${formatCallDurationText(callLog.duration)} • Tap to call back`
+                                  : "Tap to call back"}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      ) : parsed.cleanText ? (
+                        <Text
+                          style={[
+                            styles.messageText,
+                            isUser
+                              ? styles.userMessageText
+                              : styles.operatorMessageText,
+                          ]}
+                        >
+                          {parsed.cleanText}
+                        </Text>
+                      ) : null}
+                    </TouchableOpacity>
+
+                    {/* Time & Delivery Status Indicator (Placed Outside the Bubble) */}
+                    {!receipt ? (
+                      <View
                         style={[
-                          styles.messageText,
-                          isUser ? styles.userMessageText : styles.operatorMessageText,
+                          styles.outsideFooter,
+                          isUser
+                            ? styles.outsideFooterUser
+                            : styles.outsideFooterOperator,
                         ]}
                       >
-                        {parsed.cleanText}
-                      </Text>
+                        <Text
+                          style={[
+                            styles.outsideTimeText,
+                            isUser
+                              ? styles.outsideUserTimeText
+                              : styles.outsideOperatorTimeText,
+                          ]}
+                        >
+                          {item.time}
+                        </Text>
+                        {isUser && (
+                          <View style={styles.outsideStatusWrap}>
+                            <Ionicons
+                              name={
+                                item.is_read ? "checkmark-done" : "checkmark"
+                              }
+                              size={13}
+                              color={item.is_read ? "#3B82F6" : "#94A3B8"}
+                            />
+                            {item.is_read ? (
+                              <Text style={styles.outsideSeenText}>Seen</Text>
+                            ) : null}
+                          </View>
+                        )}
+                      </View>
                     ) : null}
-                  </TouchableOpacity>
+                  </View>
+                );
+              }}
+            />
+          )}
 
-                  {/* Time & Delivery Status Indicator (Placed Outside the Bubble) */}
-                  {!receipt ? (
-                    <View
-                      style={[
-                        styles.outsideFooter,
-                        isUser ? styles.outsideFooterUser : styles.outsideFooterOperator,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.outsideTimeText,
-                          isUser ? styles.outsideUserTimeText : styles.outsideOperatorTimeText,
-                        ]}
-                      >
-                        {item.time}
-                      </Text>
-                      {isUser && (
-                        <View style={styles.outsideStatusWrap}>
-                          <Ionicons
-                            name={item.is_read ? "checkmark-done" : "checkmark"}
-                            size={13}
-                            color={item.is_read ? "#3B82F6" : "#94A3B8"}
-                          />
-                          {item.is_read ? (
-                            <Text style={styles.outsideSeenText}>Seen</Text>
-                          ) : null}
-                        </View>
-                      )}
-                    </View>
-                  ) : null}
-                </View>
-              );
-            }}
-          />
-        )}
-
-        {/* Replying Preview Banner (No author label, just the message snippet) */}
-        {replyingToMessage && (
-          <View style={styles.replyBar}>
-            <View style={styles.replyBarAccent} />
-            <View style={styles.replyBarTextCol}>
-              <Text style={styles.replyBarSnippet} numberOfLines={2}>
-                {parseReplyData(replyingToMessage.text).cleanText || (replyingToMessage.image_url ? "📷 Photo" : "")}
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={styles.replyBarCloseBtn}
-              onPress={() => setReplyingToMessage(null)}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons name="close-circle" size={20} color={Colors.secondary} />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Input Bar with Photo Picker */}
-        <View style={styles.inputContainer}>
-          {/* Camera Button */}
-          <TouchableOpacity style={styles.attachButton} onPress={handleTakePhoto} activeOpacity={0.7}>
-            <Ionicons name="camera-outline" size={22} color={Colors.dark} />
-          </TouchableOpacity>
-
-          {/* Multiple Gallery Photos Button */}
-          <TouchableOpacity style={styles.attachButton} onPress={handlePickImage} activeOpacity={0.7}>
-            <Ionicons name="images-outline" size={21} color={Colors.dark} />
-          </TouchableOpacity>
-
-          <TextInput
-            ref={inputRef}
-            style={styles.textInput}
-            placeholder="message"
-            placeholderTextColor={Colors.secondary}
-            value={inputMessage}
-            onChangeText={setInputMessage}
-            multiline
-          />
-
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              inputMessage.trim() || sending ? styles.sendButtonActive : styles.sendButtonDisabled,
-            ]}
-            onPress={() => handleSendMessage()}
-            disabled={!inputMessage.trim() || sending}
-            activeOpacity={0.8}
-          >
-            {sending ? (
-              <ActivityIndicator size="small" color={Colors.white} />
-            ) : (
-              <Ionicons
-                name="send"
-                size={18}
-                color={inputMessage.trim() ? Colors.white : Colors.secondary}
-              />
-            )}
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-
-      {/* Horizontal Action Bar on Bubble Long-Press (Reply, Copy, Delete) */}
-      <Modal
-        visible={!!selectedMessageForAction}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setSelectedMessageForAction(null)}
-      >
-        <Pressable
-          style={styles.horizontalBackdrop}
-          onPress={() => setSelectedMessageForAction(null)}
-        >
-          <View style={styles.horizontalBarCard}>
-            {/* Reply */}
-            <TouchableOpacity
-              style={styles.horizontalActionBtn}
-              onPress={handleReplyAction}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="arrow-undo-outline" size={20} color={Colors.dark} />
-              <Text style={styles.horizontalActionText}>Reply</Text>
-            </TouchableOpacity>
-
-            <View style={styles.horizontalDivider} />
-
-            {/* Copy */}
-            <TouchableOpacity
-              style={styles.horizontalActionBtn}
-              onPress={handleCopyAction}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="copy-outline" size={20} color={Colors.dark} />
-              <Text style={styles.horizontalActionText}>Copy</Text>
-            </TouchableOpacity>
-
-            <View style={styles.horizontalDivider} />
-
-            {/* Delete or Protected Receipt */}
-            {selectedMessageForAction && parseReceiptData(selectedMessageForAction.text) ? (
-              <View style={[styles.horizontalActionBtn, { opacity: 0.6 }]}>
-                <Ionicons name="lock-closed" size={18} color="#64748B" />
-                <Text style={[styles.horizontalActionText, { color: "#64748B" }]}>Protected</Text>
-              </View>
-            ) : (
-              <TouchableOpacity
-                style={styles.horizontalActionBtn}
-                onPress={handleDeleteAction}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="trash-outline" size={20} color="#EF4444" />
-                <Text style={[styles.horizontalActionText, { color: "#EF4444" }]}>Delete</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </Pressable>
-      </Modal>
-
-      {/* Delete Choice Bottom Sheet: Delete for Me vs Delete for Everyone */}
-      <AppBottomSheet
-        visible={!!messageToDelete}
-        onClose={() => setMessageToDelete(null)}
-        position="bottom"
-        showHandle={true}
-        sheetStyle={styles.deleteSheet}
-      >
-        <View style={styles.deleteSheetContent}>
-          <Text style={styles.deleteSheetTitle}>Delete Message</Text>
-          <Text style={styles.deleteSheetSubtitle}>
-            Choose how you want to delete this message.
-          </Text>
-
-          <TouchableOpacity
-            style={styles.deleteOptionCard}
-            onPress={handleConfirmDeleteForMe}
-            activeOpacity={0.7}
-          >
-            <View style={styles.deleteOptionIconWrap}>
-              <Ionicons name="person-outline" size={20} color={Colors.dark} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.deleteOptionTitle}>Delete for me</Text>
-              <Text style={styles.deleteOptionDesc}>
-                Removes this message from your chat screen.
-              </Text>
-            </View>
-          </TouchableOpacity>
-
-          {messageToDelete?.sender === "user" ? (
-            <TouchableOpacity
-              style={[styles.deleteOptionCard, { borderColor: "#FECACA", backgroundColor: "#FEF2F2" }]}
-              onPress={handleConfirmDeleteForEveryone}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.deleteOptionIconWrap, { backgroundColor: "#FEE2E2" }]}>
-                <Ionicons name="trash-outline" size={20} color="#EF4444" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.deleteOptionTitle, { color: "#EF4444" }]}>Delete for everyone</Text>
-                <Text style={[styles.deleteOptionDesc, { color: "#B91C1C" }]}>
-                  Permanently deletes this message for all participants.
+          {/* Replying Preview Banner (No author label, just the message snippet) */}
+          {replyingToMessage && (
+            <View style={styles.replyBar}>
+              <View style={styles.replyBarAccent} />
+              <View style={styles.replyBarTextCol}>
+                <Text style={styles.replyBarSnippet} numberOfLines={2}>
+                  {parseReplyData(replyingToMessage.text).cleanText ||
+                    (replyingToMessage.image_url ? "📷 Photo" : "")}
                 </Text>
               </View>
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.deleteNoticeBox}>
-              <Ionicons name="information-circle-outline" size={16} color="#64748B" />
-              <Text style={styles.deleteNoticeText}>
-                You can only delete messages sent by you for everyone.
-              </Text>
+              <TouchableOpacity
+                style={styles.replyBarCloseBtn}
+                onPress={() => setReplyingToMessage(null)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons
+                  name="close-circle"
+                  size={20}
+                  color={Colors.secondary}
+                />
+              </TouchableOpacity>
             </View>
           )}
 
-          <TouchableOpacity
-            style={styles.deleteCancelBtn}
-            onPress={() => setMessageToDelete(null)}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.deleteCancelText}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      </AppBottomSheet>
-
-      {/* Floating Copied Toast Pill */}
-      {showCopiedToast && (
-        <View style={styles.copiedToastWrap} pointerEvents="none">
-          <View style={styles.copiedToastPill}>
-            <Ionicons name="checkmark-circle" size={15} color="#10B981" />
-            <Text style={styles.copiedToastText}>Copied</Text>
-          </View>
-        </View>
-      )}
-
-      {/* Fullscreen Image Viewer Modal */}
-      <Modal
-        visible={!!selectedViewerImage}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setSelectedViewerImage(null)}
-      >
-        <View style={styles.imageViewerOverlay}>
-          <SafeAreaView style={styles.imageViewerHeader}>
+          {/* Input Bar with Photo Picker */}
+          <View style={styles.inputContainer}>
+            {/* Camera Button */}
             <TouchableOpacity
-              style={styles.closeViewerBtn}
-              onPress={() => setSelectedViewerImage(null)}
+              style={styles.attachButton}
+              onPress={handleTakePhoto}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="camera-outline" size={22} color={Colors.dark} />
+            </TouchableOpacity>
+
+            {/* Multiple Gallery Photos Button */}
+            <TouchableOpacity
+              style={styles.attachButton}
+              onPress={handlePickImage}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="images-outline" size={21} color={Colors.dark} />
+            </TouchableOpacity>
+
+            <TextInput
+              ref={inputRef}
+              style={styles.textInput}
+              placeholder="message"
+              placeholderTextColor={Colors.secondary}
+              value={inputMessage}
+              onChangeText={setInputMessage}
+              multiline
+            />
+
+            <TouchableOpacity
+              style={[
+                styles.sendButton,
+                inputMessage.trim() || sending
+                  ? styles.sendButtonActive
+                  : styles.sendButtonDisabled,
+              ]}
+              onPress={() => handleSendMessage()}
+              disabled={!inputMessage.trim() || sending}
               activeOpacity={0.8}
             >
-              <Ionicons name="close" size={24} color="#FFFFFF" />
+              {sending ? (
+                <ActivityIndicator size="small" color={Colors.white} />
+              ) : (
+                <Ionicons
+                  name="send"
+                  size={18}
+                  color={inputMessage.trim() ? Colors.white : Colors.secondary}
+                />
+              )}
             </TouchableOpacity>
-          </SafeAreaView>
+          </View>
+        </KeyboardAvoidingView>
 
-          {selectedViewerImage ? (
-            <Image
-              source={{ uri: selectedViewerImage }}
-              style={styles.fullscreenImage}
-              contentFit="contain"
-            />
-          ) : null}
-        </View>
-      </Modal>
+        {/* Horizontal Action Bar on Bubble Long-Press (Reply, Copy, Delete) */}
+        <Modal
+          visible={!!selectedMessageForAction}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setSelectedMessageForAction(null)}
+        >
+          <Pressable
+            style={styles.horizontalBackdrop}
+            onPress={() => setSelectedMessageForAction(null)}
+          >
+            <View style={styles.horizontalBarCard}>
+              {/* Reply */}
+              <TouchableOpacity
+                style={styles.horizontalActionBtn}
+                onPress={handleReplyAction}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name="arrow-undo-outline"
+                  size={20}
+                  color={Colors.dark}
+                />
+                <Text style={styles.horizontalActionText}>Reply</Text>
+              </TouchableOpacity>
+
+              <View style={styles.horizontalDivider} />
+
+              {/* Copy */}
+              <TouchableOpacity
+                style={styles.horizontalActionBtn}
+                onPress={handleCopyAction}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="copy-outline" size={20} color={Colors.dark} />
+                <Text style={styles.horizontalActionText}>Copy</Text>
+              </TouchableOpacity>
+
+              <View style={styles.horizontalDivider} />
+
+              {/* Delete or Protected Receipt */}
+              {selectedMessageForAction &&
+              parseReceiptData(selectedMessageForAction.text) ? (
+                <View style={[styles.horizontalActionBtn, { opacity: 0.6 }]}>
+                  <Ionicons name="lock-closed" size={18} color="#64748B" />
+                  <Text
+                    style={[styles.horizontalActionText, { color: "#64748B" }]}
+                  >
+                    Protected
+                  </Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.horizontalActionBtn}
+                  onPress={handleDeleteAction}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                  <Text
+                    style={[styles.horizontalActionText, { color: "#EF4444" }]}
+                  >
+                    Delete
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </Pressable>
+        </Modal>
+
+        {/* Delete Choice Bottom Sheet: Delete for Me vs Delete for Everyone */}
+        <AppBottomSheet
+          visible={!!messageToDelete}
+          onClose={() => setMessageToDelete(null)}
+          position="bottom"
+          showHandle={true}
+          sheetStyle={styles.deleteSheet}
+        >
+          <View style={styles.deleteSheetContent}>
+            <Text style={styles.deleteSheetTitle}>Delete Message</Text>
+            <Text style={styles.deleteSheetSubtitle}>
+              Choose how you want to delete this message.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.deleteOptionCard}
+              onPress={handleConfirmDeleteForMe}
+              activeOpacity={0.7}
+            >
+              <View style={styles.deleteOptionIconWrap}>
+                <Ionicons name="person-outline" size={20} color={Colors.dark} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.deleteOptionTitle}>Delete for me</Text>
+                <Text style={styles.deleteOptionDesc}>
+                  Removes this message from your chat screen.
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {messageToDelete?.sender === "user" ? (
+              <TouchableOpacity
+                style={[
+                  styles.deleteOptionCard,
+                  { borderColor: "#FECACA", backgroundColor: "#FEF2F2" },
+                ]}
+                onPress={handleConfirmDeleteForEveryone}
+                activeOpacity={0.7}
+              >
+                <View
+                  style={[
+                    styles.deleteOptionIconWrap,
+                    { backgroundColor: "#FEE2E2" },
+                  ]}
+                >
+                  <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[styles.deleteOptionTitle, { color: "#EF4444" }]}
+                  >
+                    Delete for everyone
+                  </Text>
+                  <Text style={[styles.deleteOptionDesc, { color: "#B91C1C" }]}>
+                    Permanently deletes this message for all participants.
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.deleteNoticeBox}>
+                <Ionicons
+                  name="information-circle-outline"
+                  size={16}
+                  color="#64748B"
+                />
+                <Text style={styles.deleteNoticeText}>
+                  You can only delete messages sent by you for everyone.
+                </Text>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={styles.deleteCancelBtn}
+              onPress={() => setMessageToDelete(null)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.deleteCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </AppBottomSheet>
+
+        {/* Floating Copied Toast Pill */}
+        {showCopiedToast && (
+          <View style={styles.copiedToastWrap} pointerEvents="none">
+            <View style={styles.copiedToastPill}>
+              <Ionicons name="checkmark-circle" size={15} color="#10B981" />
+              <Text style={styles.copiedToastText}>Copied</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Fullscreen Image Viewer Modal */}
+        <Modal
+          visible={!!selectedViewerImage}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setSelectedViewerImage(null)}
+        >
+          <View style={styles.imageViewerOverlay}>
+            <SafeAreaView style={styles.imageViewerHeader}>
+              <TouchableOpacity
+                style={styles.closeViewerBtn}
+                onPress={() => setSelectedViewerImage(null)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="close" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </SafeAreaView>
+
+            {selectedViewerImage ? (
+              <Image
+                source={{ uri: selectedViewerImage }}
+                style={styles.fullscreenImage}
+                contentFit="contain"
+              />
+            ) : null}
+          </View>
+        </Modal>
       </View>
     </SafeAreaView>
   );

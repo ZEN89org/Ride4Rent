@@ -80,3 +80,42 @@ export interface OperatorStatus {
   account_status: "pending" | "active" | "rejected";
   operator_profile: OperatorProfile;
 }
+
+export interface RevenueBookingItem {
+  id: number;
+  booking_code: string;
+  vehicle_name: string;
+  renter_name: string;
+  start_date: string | null;
+  end_date: string | null;
+  completed_at: string;
+  base_rental: number;
+  surcharges: number;
+  gross_total: number;
+  commission_percent: number;
+  commission_amount: number;
+  net_amount: number;
+}
+
+export interface AvailableMonth {
+  month: string;
+  label: string;
+  count: number;
+}
+
+export interface OperatorRevenueData {
+  month: string;
+  month_label: string;
+  cycle_start: string;
+  cycle_end: string;
+  is_current_cycle: boolean;
+  days_remaining_in_cycle: number;
+  commission_percent: number;
+  gross_revenue: number;
+  commission_due: number;
+  net_earnings: number;
+  completed_bookings_count: number;
+  active_bookings_count: number;
+  available_months: AvailableMonth[];
+  bookings: RevenueBookingItem[];
+}

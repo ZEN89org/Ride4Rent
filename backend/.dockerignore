@@ -5,3 +5,9 @@
 node_modules
 vendor
 tests
+
+# Runtime verification documents are restored only through signed access.
+storage/app/private
+storage/app/public/driver_licenses
+storage/app/public/operator-documents
+storage/app/public/operator_documents

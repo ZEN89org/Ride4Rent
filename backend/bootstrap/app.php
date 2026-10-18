@@ -1,5 +1,10 @@
 <?php
 
+use App\Http\Middleware\ActiveOperatorMiddleware;
+use App\Http\Middleware\AdminMiddleware;
+use App\Http\Middleware\AdminWebMiddleware;
+use App\Http\Middleware\EnforcePlatformAccess;
+use App\Http\Middleware\PersistUploadedStorageFiles;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -17,18 +22,19 @@ return Application::configure(basePath: dirname(__DIR__))
     ])
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->trustProxies(at: '*');
+        $middleware->api(append: [EnforcePlatformAccess::class]);
 
         $middleware->redirectTo(
             guests: '/admin/login',
             users: '/admin/dashboard',
         );
 
-        $middleware->append(\App\Http\Middleware\PersistUploadedStorageFiles::class);
+        $middleware->append(PersistUploadedStorageFiles::class);
 
         $middleware->alias([
-            'admin' => \App\Http\Middleware\AdminMiddleware::class,
-            'admin.web' => \App\Http\Middleware\AdminWebMiddleware::class,
-            'active.operator' => \App\Http\Middleware\ActiveOperatorMiddleware::class,
+            'admin' => AdminMiddleware::class,
+            'admin.web' => AdminWebMiddleware::class,
+            'active.operator' => ActiveOperatorMiddleware::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

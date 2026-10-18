@@ -8,3 +8,5 @@ require __DIR__.'/api/bookings.php';
 require __DIR__.'/api/messages.php';
 require __DIR__.'/api/notifications.php';
 require __DIR__.'/api/assistant.php';
+
+require __DIR__.'/api/settings.php';

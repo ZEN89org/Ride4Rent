@@ -2,17 +2,11 @@
 
 namespace App\Models;
 
+use App\Services\PrivateDocumentService;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Model;
-use App\Models\BodyType;
-use App\Models\FuelType;
-use App\Models\TransmissionType;
-use App\Models\VehicleBrand;
-use App\Models\VehicleImage;
-use App\Models\VehicleType;
 
 #[Fillable([
     'operator_id',
@@ -86,11 +80,15 @@ class Vehicle extends Model
 
     public static function resolveStorageUrl(?string $path, ?string $hostOverride = null): ?string
     {
-        if (empty($path) || !is_string($path)) {
+        if (empty($path) || ! is_string($path)) {
             return null;
         }
 
         $trimmed = trim($path);
+        $documentPath = preg_replace('#^.*?/storage/#', '', ltrim($trimmed, '/'));
+        if (PrivateDocumentService::isPrivate($documentPath)) {
+            return PrivateDocumentService::url($documentPath);
+        }
         if ($trimmed === '') {
             return null;
         }
@@ -104,7 +102,7 @@ class Vehicle extends Model
             str_starts_with($host, 'http://') &&
             (str_contains($host, '.railway.app') || str_contains($host, '.ngrok'))
         ) {
-            $host = 'https://' . substr($host, 7);
+            $host = 'https://'.substr($host, 7);
         }
 
         // Fix accidental double-prefixed URLs like https://host/storage/https://...
@@ -115,19 +113,21 @@ class Vehicle extends Model
         if (str_starts_with($trimmed, 'http://') || str_starts_with($trimmed, 'https://')) {
             // If URL points to a /storage/ path on localhost or a private LAN IP, rewrite to current host
             if ($host && preg_match('#^https?://(?:localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[0-1])\.\d+\.\d+)(?::\d+)?/storage/(.+)$#i', $trimmed, $matches)) {
-                return rtrim($host, '/') . '/storage/' . ltrim($matches[1], '/');
+                return rtrim($host, '/').'/storage/'.ltrim($matches[1], '/');
             }
             if (
                 str_starts_with($trimmed, 'http://') &&
                 (str_contains($trimmed, '.railway.app') || str_contains($trimmed, '.ngrok'))
             ) {
-                return 'https://' . substr($trimmed, 7);
+                return 'https://'.substr($trimmed, 7);
             }
+
             return $trimmed;
         }
 
         $cleanRelative = ltrim(preg_replace('#^/?storage/#', '', $trimmed), '/');
-        return rtrim($host, '/') . '/storage/' . $cleanRelative;
+
+        return rtrim($host, '/').'/storage/'.$cleanRelative;
     }
 
     public function getImageUrlAttribute(): ?string
@@ -147,11 +147,30 @@ class Vehicle extends Model
         return $this->belongsTo(User::class, 'operator_id');
     }
 
-    public function vehicleType(): BelongsTo { return $this->belongsTo(VehicleType::class); }
-    public function brand(): BelongsTo { return $this->belongsTo(VehicleBrand::class); }
-    public function bodyType(): BelongsTo { return $this->belongsTo(BodyType::class); }
-    public function transmissionType(): BelongsTo { return $this->belongsTo(TransmissionType::class); }
-    public function fuelType(): BelongsTo { return $this->belongsTo(FuelType::class); }
+    public function vehicleType(): BelongsTo
+    {
+        return $this->belongsTo(VehicleType::class);
+    }
+
+    public function brand(): BelongsTo
+    {
+        return $this->belongsTo(VehicleBrand::class);
+    }
+
+    public function bodyType(): BelongsTo
+    {
+        return $this->belongsTo(BodyType::class);
+    }
+
+    public function transmissionType(): BelongsTo
+    {
+        return $this->belongsTo(TransmissionType::class);
+    }
+
+    public function fuelType(): BelongsTo
+    {
+        return $this->belongsTo(FuelType::class);
+    }
 
     public function images(): HasMany
     {
@@ -168,4 +187,3 @@ class Vehicle extends Model
         return $this->hasMany(VehicleMaintenance::class, 'vehicle_id');
     }
 }
-

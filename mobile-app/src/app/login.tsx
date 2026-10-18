@@ -1,13 +1,11 @@
 import { router } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Animated,
   Dimensions,
   Image,
   Keyboard,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -43,16 +41,16 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [loginError, setLoginError] = useState("");
-  const [loggingIn, setLoggingIn] = useState(false);
-  const loggingInOpacity = useRef(new Animated.Value(0)).current;
 
   const { login: signIn } = useAuth();
   const { showSuccess } = useAppToast();
 
   // Animation values for smooth entrance slide
-  const sheetTranslateY = useRef(new Animated.Value(SCREEN_HEIGHT * 0.7)).current;
-  const headerOpacity = useRef(new Animated.Value(0)).current;
-  const headerTranslateY = useRef(new Animated.Value(20)).current;
+  const sheetTranslateY = useState(
+    () => new Animated.Value(SCREEN_HEIGHT * 0.7),
+  )[0];
+  const headerOpacity = useState(() => new Animated.Value(0))[0];
+  const headerTranslateY = useState(() => new Animated.Value(20))[0];
 
   useEffect(() => {
     // 1st flow: Header appears & sheet slides up from bottom
@@ -74,7 +72,7 @@ export default function Login() {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [headerOpacity, headerTranslateY, sheetTranslateY]);
 
   const handleEmailChange = (value: string) => {
     setEmail(value);
@@ -117,21 +115,11 @@ export default function Login() {
       const loggedInToken = response.data.token;
 
       Keyboard.dismiss();
-      setLoggingIn(true);
-      Animated.timing(loggingInOpacity, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
 
-      await Promise.all([
-        signIn(loggedInUser, loggedInToken),
-        new Promise((resolve) => setTimeout(resolve, 900)),
-      ]);
+      // Sign-in auth transition runs with spinner cleanly inside the button
+      await signIn(loggedInUser, loggedInToken);
 
-      setLoggingIn(false);
-
-      router.dismissAll();
+      if (router.canDismiss()) router.dismissAll();
 
       if (loggedInUser.role === "operator") {
         if (loggedInUser.account_status === "rejected") {
@@ -152,9 +140,6 @@ export default function Login() {
         error?.response?.data?.message ??
         "Invalid email or password.";
       setLoginError(message);
-      setLoggingIn(false);
-      loggingInOpacity.setValue(0);
-    } finally {
       setLoading(false);
     }
   };
@@ -177,9 +162,7 @@ export default function Login() {
               },
             ]}
           >
-            <Text style={styles.welcomeTitle}>
-              Welcome{'\n'}Back
-            </Text>
+            <Text style={styles.welcomeTitle}>Welcome{"\n"}Back</Text>
             <Text style={styles.welcomeSubtitle}>
               Please sign in to continue
             </Text>
@@ -272,7 +255,10 @@ export default function Login() {
             onClose={() => setShowForgotPasswordModal(false)}
             onSuccess={() => {
               setShowForgotPasswordModal(false);
-              showSuccess("Password Updated", "You can now log in with your new password.");
+              showSuccess(
+                "Password Updated",
+                "You can now log in with your new password.",
+              );
             }}
           />
 
@@ -290,42 +276,11 @@ export default function Login() {
           />
         </KeyboardAvoidingView>
       </SafeAreaView>
-
-      <Modal visible={loggingIn} transparent animationType="none" statusBarTranslucent>
-        <Animated.View style={[styles.loggingInOverlay, { opacity: loggingInOpacity }]}>
-          <View style={styles.loggingInCard}>
-            <ActivityIndicator size="large" color={Colors.primary} />
-            <Text style={styles.loggingInText}>Signing you in...</Text>
-          </View>
-        </Animated.View>
-      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  loggingInOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.55)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  loggingInCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 20,
-    paddingVertical: 28,
-    paddingHorizontal: 36,
-    alignItems: "center",
-    gap: 14,
-    minWidth: 200,
-  },
-
-  loggingInText: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: 15,
-    color: Colors.dark,
-  },
 
   root: {
     flex: 1,

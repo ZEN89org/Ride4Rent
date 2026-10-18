@@ -4,6 +4,7 @@ export const Spacing = {
   md: 16,
   lg: 24,
   xl: 32,
+  xxl: 48,
 };
 
 export const Radius = {
@@ -21,6 +22,8 @@ export const Radius = {
 };
 
 export const FontSize = {
+  caption: 12,
+  subheading: 18,
   small: 14,
   body: 16,
   title: 22,

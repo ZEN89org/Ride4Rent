@@ -33,7 +33,7 @@ flowchart TD
 
 #### For Renters:
 1. **Sign Up / Login**: Register with name, email, phone number, and password, or verify with OTP.
-2. **Driver's License Upload**: Submit front and back photos of your valid driver's license for verification.
+2. **Driver's License Upload**: Submit front and back photos of your valid driver's license for administrator verification. Approval is required before booking when the admin KYC setting is enabled.
 3. **Explore Ready**: Once registered, browse available motorcycles across nearby locations.
 
 #### For Operators:
@@ -67,8 +67,8 @@ flowchart TD
 3. **Select Rental Dates**: Renter chooses **Start Date** and **End Date**.
    - The system calculates total rental days, total rent, and the reservation deposit due.
 4. **Submit Reservation**: Renter taps **"Book Motorcycle"**.
-   - The system reserves 1 unit from inventory and sets booking status to `pending_payment`.
-   - The Operator receives an instant alert of a new booking request.
+   - The system creates a `pending_payment` request. Inventory is reserved when payment details are submitted for host verification.
+   - The backend creates a notification for the operator; the app retrieves it during its next refresh.
 
 ---
 
@@ -88,7 +88,7 @@ flowchart TD
    - The Operator inspects the receipt in chat (tap to zoom full screen).
    - In **Operator Bookings**, the Operator taps **"Confirm Payment Received & Approve"**.
    - The booking status updates to `approved` and `payment_status: paid_reservation`.
-   - **Instant Alert**: The Renter receives an immediate push notification: *"🎉 Payment Confirmed & Booking Approved! Ready for pickup."*
+   - **App Alert**: The renter receives a device alert after the app fetches the new notification: *"🎉 Payment Confirmed & Booking Approved! Ready for pickup."*
 
 ---
 
@@ -109,12 +109,12 @@ flowchart TD
 ### Phase 6: Active Trip & Real-Time GPS Telemetry
 
 1. **Live GPS Sync**:
-   - While the trip is active, the Renter’s phone broadcasts background GPS coordinates (latitude, longitude, speed, and current street address) to the backend.
+   - While the trip is active, the Renter’s phone broadcasts GPS coordinates using a background location task in an installed build with background location permission; otherwise the app uses foreground updates. Telemetry includes (latitude, longitude, speed, and current street address) to the backend.
 2. **Fleet Tracking (Operator)**:
    - The Operator can tap **"Track Location"** on any active trip to view the motorcycle's live position on the map.
 3. **Rental Extension (Optional)**:
    - If the Renter needs more time, they tap **"Request Extension"** and pick additional days.
-   - The Operator reviews and taps **"Approve Extension"**, automatically updating the scheduled return date and invoice.
+   - The Operator reviews and taps **"Approve Extension"**, allowing the renter to submit extension payment details. The return date and invoice update after the operator confirms receipt.
 
 ---
 
@@ -146,7 +146,7 @@ flowchart TD
    - The Renter receives a prompt to rate the rental experience (1 to 5 stars) and write feedback.
    - Reviews are publicly displayed on the motorcycle's profile.
 2. **Notifications History**:
-   - All booking updates, payment confirmations, trip starts, and approvals are logged in the **Notification Center** and sent via **Device Push Notifications**.
+   - All booking updates, payment confirmations, trip starts, and approvals are logged in the **Notification Center** and retrieved by polling, with local device alerts and scheduled reminders. Server-to-device remote push delivery is not currently configured.
 
 ---
 

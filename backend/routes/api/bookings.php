@@ -1,9 +1,10 @@
 <?php
 
 use App\Http\Controllers\API\BookingController;
+use App\Http\Middleware\SerializeBookingMutation;
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
+Route::prefix('v1')->middleware(['auth:sanctum', SerializeBookingMutation::class])->group(function () {
     Route::get('/bookings', [BookingController::class, 'index']);
     Route::post('/bookings', [BookingController::class, 'store']);
     Route::post('/bookings/batch-delete', [BookingController::class, 'batchDelete']);
@@ -19,6 +20,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::post('/bookings/{id}/request-extension', [BookingController::class, 'requestExtension']);
     Route::post('/bookings/{id}/approve-extension', [BookingController::class, 'approveExtension']);
     Route::post('/bookings/{id}/reject-extension', [BookingController::class, 'rejectExtension']);
+    Route::post('/bookings/{id}/confirm-extension-payment', [BookingController::class, 'confirmExtensionPayment']);
     Route::post('/bookings/{id}/settle-extension-payment', [BookingController::class, 'settleExtensionPayment']);
     Route::delete('/bookings/{id}', [BookingController::class, 'destroy']);
 });

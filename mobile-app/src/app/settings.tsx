@@ -1,23 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  AppState,
-  Linking,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, AppState, Linking, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import Constants, { ExecutionEnvironment } from "expo-constants";
-import { isRunningInExpoGo } from "expo";
+import Constants from "expo-constants";
+
 
 import { Colors } from "@/constants/colors";
 import { FontFamily, Spacing } from "@/constants/theme";

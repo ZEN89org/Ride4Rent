@@ -6,3 +6,14 @@ backend/public/storage
 .vscode/
 .idea/
 *.log
+
+# Exclude private user uploads from remote mobile build archives.
+mobile-app/assets/storage/chat_images/
+mobile-app/assets/storage/driver_licenses/
+mobile-app/assets/storage/operator-documents/
+mobile-app/assets/storage/operator_documents/
+mobile-app/assets/storage/secondary_driver_licenses/
+mobile-app/assets/storage/payment_qr_codes/
+mobile-app/assets/storage/profile-photos/
+.tmp/
+eslint-results.json

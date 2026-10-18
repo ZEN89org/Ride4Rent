@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   Image,
   ScrollView,
@@ -26,22 +26,11 @@ export default function DriverLicenseScreen() {
   const { showSuccess, showError } = useAppToast();
   const { refreshUnreadCount } = useNotificationCount();
 
-  const [frontImage, setFrontImage] = useState<string | null>(
-    resolveImageUrl(user?.drivers_license_front) || null
-  );
-  const [backImage, setBackImage] = useState<string | null>(
-    resolveImageUrl(user?.drivers_license_back) || null
-  );
+  const [frontDraft, setFrontImage] = useState<string | null>(null);
+  const frontImage = frontDraft ?? resolveImageUrl(user?.drivers_license_front);
+  const [backDraft, setBackImage] = useState<string | null>(null);
+  const backImage = backDraft ?? resolveImageUrl(user?.drivers_license_back);
   const [uploading, setUploading] = useState(false);
-
-  useEffect(() => {
-    if (user?.drivers_license_front) {
-      setFrontImage(resolveImageUrl(user.drivers_license_front));
-    }
-    if (user?.drivers_license_back) {
-      setBackImage(resolveImageUrl(user.drivers_license_back));
-    }
-  }, [user?.drivers_license_front, user?.drivers_license_back]);
 
   useFocusEffect(
     useCallback(() => {
@@ -66,19 +55,22 @@ export default function DriverLicenseScreen() {
 
       return () => {
         active = false;
-        if (typeof cancelIdleCallback === "function" && typeof idleId === "number") {
+        if (
+          typeof cancelIdleCallback === "function" &&
+          typeof idleId === "number"
+        ) {
           cancelIdleCallback(idleId);
         } else {
           clearTimeout(idleId as any);
         }
       };
-    }, [])
+    }, [refreshUser]),
   );
 
   const isVerified =
     Boolean(
       user?.is_drivers_license_verified &&
-        user?.license_verification_status === "approved"
+        user?.license_verification_status === "approved",
     ) || user?.license_verification_status === "approved";
 
   const verificationStatus =
@@ -86,8 +78,8 @@ export default function DriverLicenseScreen() {
     (isVerified
       ? "approved"
       : user?.drivers_license_front
-      ? "pending"
-      : "unverified");
+        ? "pending"
+        : "unverified");
 
   const isPending = verificationStatus === "pending";
   const isRejected = verificationStatus === "rejected";
@@ -101,33 +93,35 @@ export default function DriverLicenseScreen() {
         subtext: "Your driver's license is verified and ready for booking.",
       }
     : isPending
-    ? {
-        label: "Pending Review",
-        color: "#92400E",
-        bg: "#FEF3C7",
-        subtext: "Saved and ready for host verification upon booking.",
-      }
-    : isRejected
-    ? {
-        label: "Rejected",
-        color: "#B91C1C",
-        bg: "#FEE2E2",
-        subtext:
-          user?.license_rejection_reason ||
-          "Please upload clear, glare-free photos of both sides.",
-      }
-    : {
-        label: "Unverified",
-        color: "#92400E",
-        bg: Colors.logoBackground,
-        subtext: "Upload clear photos of the front and back of your license.",
-      };
+      ? {
+          label: "Pending Review",
+          color: "#92400E",
+          bg: "#FEF3C7",
+          subtext:
+            "Submitted for administrator review. Approval is required when booking verification is enabled.",
+        }
+      : isRejected
+        ? {
+            label: "Rejected",
+            color: "#B91C1C",
+            bg: "#FEE2E2",
+            subtext:
+              user?.license_rejection_reason ||
+              "Please upload clear, glare-free photos of both sides.",
+          }
+        : {
+            label: "Unverified",
+            color: "#92400E",
+            bg: Colors.logoBackground,
+            subtext:
+              "Upload clear photos of the front and back of your license.",
+          };
 
   const handlePickImage = async (side: "front" | "back") => {
     if (isVerified) {
       showError(
         "Already Verified",
-        "Your driver's license is already verified and approved."
+        "Your driver's license is already verified and approved.",
       );
       return;
     }
@@ -138,7 +132,7 @@ export default function DriverLicenseScreen() {
       if (!permission.granted) {
         showError(
           "Permission Required",
-          "Camera roll permission is required to upload your license."
+          "Camera roll permission is required to upload your license.",
         );
         return;
       }
@@ -169,7 +163,7 @@ export default function DriverLicenseScreen() {
     if (!frontImage || !backImage) {
       showError(
         "Missing License Photo",
-        "Please upload both the Front and Back sides of your driver's license."
+        "Please upload both the Front and Back sides of your driver's license.",
       );
       return;
     }
@@ -182,13 +176,13 @@ export default function DriverLicenseScreen() {
       await refreshUnreadCount().catch(() => {});
       showSuccess(
         "License Saved",
-        "Driver's license saved! Your vehicle host will verify it upon booking."
+        "Driver's license saved! An administrator will review your documents.",
       );
       router.back();
     } catch (e: any) {
       showError(
         "Upload Failed",
-        e.response?.data?.message || "Could not save driver's license."
+        e.response?.data?.message || "Could not save driver's license.",
       );
     } finally {
       setUploading(false);
@@ -206,7 +200,7 @@ export default function DriverLicenseScreen() {
           >
             <Ionicons name="chevron-back" size={22} color={Colors.dark} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Driver's License</Text>
+          <Text style={styles.headerTitle}>Driver&apos;s License</Text>
           <View style={{ width: 38 }} />
         </View>
 
@@ -216,7 +210,7 @@ export default function DriverLicenseScreen() {
           </View>
           <Text style={styles.guestTitle}>Sign In Required</Text>
           <Text style={styles.guestSubtitle}>
-            Sign in to upload and manage your driver's license.
+            Sign in to upload and manage your driver&apos;s license.
           </Text>
           <TouchableOpacity
             style={styles.signInButton}
@@ -241,7 +235,7 @@ export default function DriverLicenseScreen() {
         >
           <Ionicons name="chevron-back" size={22} color={Colors.dark} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Driver's License</Text>
+        <Text style={styles.headerTitle}>Driver&apos;s License</Text>
         <View style={{ width: 38 }} />
       </View>
 
@@ -285,9 +279,7 @@ export default function DriverLicenseScreen() {
           <View style={styles.cardBlock}>
             <View style={styles.cardHeaderRow}>
               <Text style={styles.cardLabel}>Front Side</Text>
-              {frontImage && (
-                <Text style={styles.readyTag}>Uploaded</Text>
-              )}
+              {frontImage && <Text style={styles.readyTag}>Uploaded</Text>}
             </View>
 
             <TouchableOpacity
@@ -335,9 +327,7 @@ export default function DriverLicenseScreen() {
           <View style={styles.cardBlock}>
             <View style={styles.cardHeaderRow}>
               <Text style={styles.cardLabel}>Back Side</Text>
-              {backImage && (
-                <Text style={styles.readyTag}>Uploaded</Text>
-              )}
+              {backImage && <Text style={styles.readyTag}>Uploaded</Text>}
             </View>
 
             <TouchableOpacity
@@ -390,10 +380,10 @@ export default function DriverLicenseScreen() {
                 uploading
                   ? "Saving..."
                   : isRejected
-                  ? "Re-upload License"
-                  : user?.drivers_license_front
-                  ? "Update License"
-                  : "Save License"
+                    ? "Re-upload License"
+                    : user?.drivers_license_front
+                      ? "Update License"
+                      : "Save License"
               }
               onPress={handleSubmit}
               loading={uploading}

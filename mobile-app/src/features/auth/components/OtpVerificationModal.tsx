@@ -16,7 +16,10 @@ import {
 import PrimaryButton from "@/components/common/PrimaryButton";
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Radius, Spacing } from "@/constants/theme";
-import { sendVerificationOtp, verifyOtp } from "@/features/auth/services/authService";
+import {
+  sendVerificationOtp,
+  verifyOtp,
+} from "@/features/auth/services/authService";
 
 interface OtpVerificationModalProps {
   visible: boolean;
@@ -26,7 +29,13 @@ interface OtpVerificationModalProps {
   onVerified: (otp: string) => void;
 }
 
-export default function OtpVerificationModal({
+export default function OtpVerificationModal(props: OtpVerificationModalProps) {
+  return props.visible ? (
+    <OtpVerificationContent key={props.email} {...props} />
+  ) : null;
+}
+
+function OtpVerificationContent({
   visible,
   email,
   onClose,
@@ -42,12 +51,10 @@ export default function OtpVerificationModal({
 
   useEffect(() => {
     if (visible) {
-      setOtp(["", "", "", "", "", ""]);
-      setError("");
-      setCountdown(60);
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         inputRefs.current[0]?.focus();
       }, 300);
+      return () => clearTimeout(timer);
     }
   }, [visible]);
 
@@ -126,7 +133,13 @@ export default function OtpVerificationModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" statusBarTranslucent={true} onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      statusBarTranslucent={true}
+      onRequestClose={onClose}
+    >
       <KeyboardAvoidingView
         style={styles.overlay}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -143,7 +156,11 @@ export default function OtpVerificationModal({
             {/* Header */}
             <View style={styles.header}>
               <View style={styles.iconCircle}>
-                <Ionicons name="mail-unread-outline" size={28} color={Colors.primary} />
+                <Ionicons
+                  name="mail-unread-outline"
+                  size={28}
+                  color={Colors.primary}
+                />
               </View>
               <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
                 <Ionicons name="close" size={24} color={Colors.secondary} />
@@ -161,7 +178,9 @@ export default function OtpVerificationModal({
               {otp.map((digit, index) => (
                 <TextInput
                   key={index}
-                  ref={(ref) => { inputRefs.current[index] = ref; }}
+                  ref={(ref) => {
+                    inputRefs.current[index] = ref;
+                  }}
                   style={[
                     styles.otpInput,
                     digit ? styles.otpInputFilled : null,
@@ -181,7 +200,9 @@ export default function OtpVerificationModal({
 
             {/* Resend Timer */}
             <View style={styles.resendRow}>
-              <Text style={styles.resendPrompt}>Didn't receive the code? </Text>
+              <Text style={styles.resendPrompt}>
+                Didn&apos;t receive the code?{" "}
+              </Text>
               {countdown > 0 ? (
                 <Text style={styles.countdownText}>Resend in {countdown}s</Text>
               ) : (

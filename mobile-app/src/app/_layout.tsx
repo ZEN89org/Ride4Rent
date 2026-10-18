@@ -9,6 +9,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { Stack } from "expo-router";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import { Platform, StatusBar as RNStatusBar } from "react-native";
+import { TripLocationProvider } from "../context/TripLocationContext";
 import { AuthProvider } from "../features/auth/context/AuthContext";
 import { FavoritesProvider } from "../context/FavoritesContext";
 import { ToastProvider } from "../context/ToastContext";
@@ -32,12 +33,13 @@ export default function RootLayout() {
   }
 
   return (
-    <AuthProvider>
-      <CallProvider>
-        <NotificationProvider>
-          <ToastProvider>
-            <FavoritesProvider>
-              <SideNavProvider>
+    <ToastProvider>
+      <AuthProvider>
+        <TripLocationProvider>
+          <CallProvider>
+            <NotificationProvider>
+              <FavoritesProvider>
+                <SideNavProvider>
                 {Platform.OS === "android" && (
                   <RNStatusBar
                     translucent
@@ -72,11 +74,12 @@ export default function RootLayout() {
                   <Stack.Screen name="notifications" />
                   <Stack.Screen name="current-location" />
                 </Stack>
-              </SideNavProvider>
-            </FavoritesProvider>
-          </ToastProvider>
-        </NotificationProvider>
-      </CallProvider>
-    </AuthProvider>
+                </SideNavProvider>
+              </FavoritesProvider>
+            </NotificationProvider>
+          </CallProvider>
+        </TripLocationProvider>
+      </AuthProvider>
+    </ToastProvider>
   );
 }

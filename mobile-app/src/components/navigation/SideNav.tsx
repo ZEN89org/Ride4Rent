@@ -13,15 +13,8 @@ import {
 } from "react-native";
 
 import { Colors } from "@/constants/colors";
-import {
-  FontFamily,
-  FontSize,
-  Spacing,
-} from "@/constants/theme";
-import {
-  SIDE_NAV_WIDTH,
-  useSideNav,
-} from "@/context/SideNavContext";
+import { FontFamily, FontSize, Spacing } from "@/constants/theme";
+import { SIDE_NAV_WIDTH, useSideNav } from "@/context/SideNavContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 
 type SideNavProps = {
@@ -33,13 +26,8 @@ export default function SideNav({
   user: userProp,
   isGuest: isGuestProp,
 }: SideNavProps) {
-  const {
-    isVisible,
-    isSettled,
-    animation,
-    closeSideNav,
-    closeImmediate,
-  } = useSideNav();
+  const { isVisible, isSettled, animation, closeSideNav, closeImmediate } =
+    useSideNav();
 
   const pathname = usePathname();
   const openedPathnameRef = useRef<string | null>(null);
@@ -64,7 +52,7 @@ export default function SideNav({
       openedPathnameRef.current = null;
       navigatingRef.current = false;
     }
-  }, [isVisible]);
+  }, [isVisible, pathname]);
 
   // Close the drawer silently in the background ONLY after the target screen has mounted
   useEffect(() => {
@@ -297,8 +285,8 @@ export default function SideNav({
               {loggingOut
                 ? "Logging out..."
                 : isActuallyGuest
-                ? "Login"
-                : "Logout"}
+                  ? "Login"
+                  : "Logout"}
             </Text>
           </TouchableOpacity>
 
@@ -347,12 +335,7 @@ type MenuItemProps = {
   onPress: () => void;
 };
 
-function MenuItem({
-  icon,
-  imageSource,
-  label,
-  onPress,
-}: MenuItemProps) {
+function MenuItem({ icon, imageSource, label, onPress }: MenuItemProps) {
   return (
     <TouchableOpacity
       style={styles.menuItem}
@@ -541,4 +524,3 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
   },
 });
-

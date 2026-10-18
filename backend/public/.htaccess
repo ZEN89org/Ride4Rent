@@ -5,6 +5,9 @@
 
     RewriteEngine On
 
+    # Sensitive legacy uploads must pass through Laravel, even when files exist.
+    RewriteRule ^storage/(driver_licenses|operator_documents|operator-documents|secondary_driver_licenses)/ index.php [L]
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]

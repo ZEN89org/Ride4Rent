@@ -4,10 +4,10 @@
     "slug": "mobile-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/applogo.png",
     "scheme": "ride4rent",
     "userInterfaceStyle": "automatic",
-    "backgroundColor": "#FFFFFF",
+    "backgroundColor": "#FEC103",
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.zensysorg.ride4rent"
@@ -15,8 +15,8 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/images/applogo.png",
+        "monochromeImage": "./assets/images/applogo.png"
       },
       "permissions": [
         "ACCESS_FINE_LOCATION",
@@ -45,13 +45,32 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#FFFFFF"
+          "backgroundColor": "#FEC103",
+          "image": "./assets/images/1st.png",
+          "resizeMode": "cover"
         }
       ],
       "expo-font",
       "expo-image",
       "expo-web-browser",
-      "expo-sharing"
+      "expo-sharing",
+      "@livekit/react-native-expo-plugin",
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "microphonePermission": "Allow Ride4Rent to use your microphone for calls.",
+          "cameraPermission": "Allow Ride4Rent to use your camera."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Ride4Rent to share your location with your rental operator during an active trip.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

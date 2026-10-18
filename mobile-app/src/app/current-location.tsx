@@ -1,22 +1,31 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   AppState,
+  LayoutAnimation,
   Linking,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
+  UIManager,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
 
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Radius, Spacing } from "@/constants/theme";
 import { getSavedLocation, saveLocation } from "@/storage/locationStorage";
+import {
+  isInServiceArea,
+  SERVICE_AREA_ERROR,
+  serviceAreaLockScript,
+} from "@/utils/serviceArea";
 
 type LocationData = {
   latitude: number;
@@ -40,24 +49,54 @@ const DEFAULT_MINDORO_COORDS: LocationData = {
 };
 
 export default function CurrentLocation() {
+  const insets = useSafeAreaInsets();
   const { from } = useLocalSearchParams<{ from?: string }>();
   const webViewRef = useRef<WebView>(null);
 
-  const [activeLayer, setActiveLayer] = useState<"streets" | "satellite">("streets");
+  const [activeLayer, setActiveLayer] = useState<"streets" | "satellite">(
+    "streets",
+  );
+  const [isSheetExpanded, setIsSheetExpanded] = useState(true);
   const [region, setRegion] = useState<LocationData | null>(null);
-  const [mapInitialRegion, setMapInitialRegion] = useState<LocationData | null>(null);
+  const [mapInitialRegion, setMapInitialRegion] = useState<LocationData | null>(
+    null,
+  );
   const [address, setAddress] = useState<AddressData | null>(null);
   const [loading, setLoading] = useState(true);
   const [locationError, setLocationError] = useState(false);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [recenterLoading, setRecenterLoading] = useState(false);
+  const [outsideAttempt, setOutsideAttempt] = useState(false);
+  const [outsideBanner, setOutsideBanner] = useState(false);
+  const outsideBannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const geocodeRequest = useRef(0);
+
+  const toggleSheet = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setIsSheetExpanded((prev) => !prev);
+  };
+
+  const showOutsideError = () => {
+    setOutsideBanner(true);
+    if (outsideBannerTimer.current) clearTimeout(outsideBannerTimer.current);
+    outsideBannerTimer.current = setTimeout(() => setOutsideBanner(false), 3000);
+  };
+
+  useEffect(
+    () => () => {
+      if (outsideBannerTimer.current) clearTimeout(outsideBannerTimer.current);
+    },
+    [],
+  );
 
   const reverseGeocode = async (latitude: number, longitude: number) => {
+    const requestId = ++geocodeRequest.current;
     try {
       const result = await Location.reverseGeocodeAsync({
         latitude,
         longitude,
       });
+      if (requestId !== geocodeRequest.current) return;
 
       if (result && result.length > 0) {
         setAddress(result[0]);
@@ -66,14 +105,23 @@ export default function CurrentLocation() {
         try {
           const resp = await fetch(
             `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
-            { headers: { "User-Agent": "Ride4Rent-App" } }
+            { headers: { "User-Agent": "Ride4Rent-App" } },
           );
           const data = await resp.json();
+          if (requestId !== geocodeRequest.current) return;
           if (data?.address) {
             setAddress({
               street: data.address.road || data.address.pedestrian || null,
-              district: data.address.suburb || data.address.neighbourhood || data.address.village || null,
-              city: data.address.city || data.address.town || data.address.municipality || "Oriental Mindoro",
+              district:
+                data.address.suburb ||
+                data.address.neighbourhood ||
+                data.address.village ||
+                null,
+              city:
+                data.address.city ||
+                data.address.town ||
+                data.address.municipality ||
+                "Oriental Mindoro",
               region: data.address.state || "MIMAROPA",
               formattedAddress: data.display_name || null,
             });
@@ -87,9 +135,18 @@ export default function CurrentLocation() {
     }
   };
 
-  const updateSelectedLocation = async (latitude: number, longitude: number) => {
-    const newLocation = { latitude, longitude };
-    setRegion(newLocation);
+  const updateSelectedLocation = async (
+    latitude: number,
+    longitude: number,
+  ) => {
+    setRegion({ latitude, longitude });
+    if (!isInServiceArea(latitude, longitude)) {
+      geocodeRequest.current++;
+      setOutsideAttempt(true);
+      setAddress(null);
+      return;
+    }
+    setOutsideAttempt(false);
     await reverseGeocode(latitude, longitude);
   };
 
@@ -134,7 +191,8 @@ export default function CurrentLocation() {
       let isGranted = permission.status === "granted";
 
       if (!isGranted) {
-        const requestedPermission = await Location.requestForegroundPermissionsAsync();
+        const requestedPermission =
+          await Location.requestForegroundPermissionsAsync();
         isGranted = requestedPermission.status === "granted";
         if (!isGranted) {
           setPermissionDenied(true);
@@ -153,7 +211,7 @@ export default function CurrentLocation() {
           Alert.alert(
             "Device Location is Off",
             "Please turn on Location / GPS in your device quick settings for live pinpointing. Showing default regional hub on map.",
-            [{ text: "OK" }]
+            [{ text: "OK" }],
           );
         }
       } catch {}
@@ -162,13 +220,19 @@ export default function CurrentLocation() {
 
       // Tier 1: Try Last Known Position first for instant loading
       try {
-        const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: 600000 });
+        const lastKnown = await Location.getLastKnownPositionAsync({
+          maxAge: 600000,
+        });
         if (lastKnown?.coords?.latitude && lastKnown?.coords?.longitude) {
           resolvedCoords = {
             latitude: lastKnown.coords.latitude,
             longitude: lastKnown.coords.longitude,
           };
-          if (!shouldRecenterMap && !region) {
+          if (
+            !shouldRecenterMap &&
+            !region &&
+            isInServiceArea(resolvedCoords.latitude, resolvedCoords.longitude)
+          ) {
             setMapInitialRegion(resolvedCoords);
             setRegion(resolvedCoords);
             reverseGeocode(resolvedCoords.latitude, resolvedCoords.longitude);
@@ -181,12 +245,19 @@ export default function CurrentLocation() {
 
       // Tier 2: Try accurate current position with a 6-second timeout
       try {
-        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000));
+        const timeoutPromise = new Promise<null>((resolve) =>
+          setTimeout(() => resolve(null), 6000),
+        );
         const currentPromise = Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced,
         });
         const current = await Promise.race([currentPromise, timeoutPromise]);
-        if (current && "coords" in current && current.coords?.latitude && current.coords?.longitude) {
+        if (
+          current &&
+          "coords" in current &&
+          current.coords?.latitude &&
+          current.coords?.longitude
+        ) {
           resolvedCoords = {
             latitude: current.coords.latitude,
             longitude: current.coords.longitude,
@@ -199,12 +270,19 @@ export default function CurrentLocation() {
       // Tier 3: If still unresolved, try Lowest accuracy (Cell/WiFi, works indoors!) with 5-second timeout
       if (!resolvedCoords) {
         try {
-          const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000));
+          const timeoutPromise = new Promise<null>((resolve) =>
+            setTimeout(() => resolve(null), 5000),
+          );
           const lowPromise = Location.getCurrentPositionAsync({
             accuracy: Location.Accuracy.Lowest,
           });
           const low = await Promise.race([lowPromise, timeoutPromise]);
-          if (low && "coords" in low && low.coords?.latitude && low.coords?.longitude) {
+          if (
+            low &&
+            "coords" in low &&
+            low.coords?.latitude &&
+            low.coords?.longitude
+          ) {
             resolvedCoords = {
               latitude: low.coords.latitude,
               longitude: low.coords.longitude,
@@ -225,6 +303,17 @@ export default function CurrentLocation() {
       }
 
       // Apply the resolved coordinates
+      if (!isInServiceArea(resolvedCoords.latitude, resolvedCoords.longitude)) {
+        setOutsideAttempt(false);
+        Alert.alert(
+          "Outside service area",
+          "Your current location is outside Oriental Mindoro. Select a location inside the highlighted province.",
+        );
+        resolvedCoords =
+          region && isInServiceArea(region.latitude, region.longitude)
+            ? region
+            : DEFAULT_SERVICE_HUB;
+      }
       if (!shouldRecenterMap || !mapInitialRegion) {
         setMapInitialRegion(resolvedCoords);
       }
@@ -237,7 +326,7 @@ export default function CurrentLocation() {
             type: "RECENTER_TO_LOCATION",
             latitude: resolvedCoords.latitude,
             longitude: resolvedCoords.longitude,
-          })
+          }),
         );
       }
 
@@ -250,7 +339,10 @@ export default function CurrentLocation() {
       if (!region) {
         setMapInitialRegion(DEFAULT_SERVICE_HUB);
         setRegion(DEFAULT_SERVICE_HUB);
-        reverseGeocode(DEFAULT_SERVICE_HUB.latitude, DEFAULT_SERVICE_HUB.longitude);
+        reverseGeocode(
+          DEFAULT_SERVICE_HUB.latitude,
+          DEFAULT_SERVICE_HUB.longitude,
+        );
       }
       setLocationError(false);
       setLoading(false);
@@ -260,9 +352,15 @@ export default function CurrentLocation() {
 
   const handleMapMessage = async (event: WebViewMessageEvent) => {
     try {
-      const data = typeof event.nativeEvent.data === "string"
-        ? JSON.parse(event.nativeEvent.data)
-        : event.nativeEvent.data;
+      const data =
+        typeof event.nativeEvent.data === "string"
+          ? JSON.parse(event.nativeEvent.data)
+          : event.nativeEvent.data;
+
+      if (data.type === "OUTSIDE_SERVICE_AREA") {
+        showOutsideError();
+        return;
+      }
 
       if (data.type === "MAP_MOVED") {
         const latitude = Number(data.latitude);
@@ -282,7 +380,9 @@ export default function CurrentLocation() {
       return "Locating address...";
     }
 
-    const street = [address.streetNumber, address.street].filter(Boolean).join(" ");
+    const street = [address.streetNumber, address.street]
+      .filter(Boolean)
+      .join(" ");
     if (street) {
       return street;
     }
@@ -313,7 +413,7 @@ export default function CurrentLocation() {
     webViewRef.current?.injectJavaScript(`switchLayer('${mode}'); true;`);
   };
 
-  const createMapHtml = () => {
+  const mapHtml = useMemo(() => {
     if (!mapInitialRegion) {
       return "";
     }
@@ -337,7 +437,7 @@ export default function CurrentLocation() {
       user-select: none;
       -webkit-user-select: none;
     }
-    .leaflet-control-attribution { display: none !important; }
+    .leaflet-control-attribution { font-size: 8px; max-width: 85vw; }
     .leaflet-control-zoom { display: none !important; }
 
     /* Center Marker Pin with Golden Pulse */
@@ -368,24 +468,13 @@ export default function CurrentLocation() {
     }
     .location-marker {
       position: relative;
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
-      background: #FEC103;
-      border: 3px solid #FFFFFF;
-      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
-      z-index: 10;
-    }
-    .location-marker::after {
-      content: "";
-      position: absolute;
-      width: 6px;
-      height: 6px;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
+      width: 26px;
+      height: 26px;
       border-radius: 50%;
       background: #FFFFFF;
+      border: 5px solid #FEC103;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+      z-index: 10;
     }
     @keyframes locationPulse {
       0% { transform: scale(0.6); opacity: 0.9; }
@@ -406,7 +495,7 @@ export default function CurrentLocation() {
   <script>
     const initialLatitude = ${mapInitialRegion.latitude};
     const initialLongitude = ${mapInitialRegion.longitude};
-    let currentMode = "${activeLayer}";
+    let currentMode = "streets";
 
     const map = L.map("map", {
       zoomControl: false,
@@ -416,6 +505,16 @@ export default function CurrentLocation() {
       doubleClickZoom: true,
       scrollWheelZoom: true,
     }).setView([initialLatitude, initialLongitude], 16);
+    ${serviceAreaLockScript("map")}
+
+    function notifyOutside() {
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: "OUTSIDE_SERVICE_AREA" }));
+      }
+    }
+    let lastValidCenter = window.r4rIsInServiceArea(initialLatitude, initialLongitude)
+      ? [initialLatitude, initialLongitude]
+      : null;
 
     // 1. Watermark-free, official Esri World Street Map
     const streetsLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
@@ -480,6 +579,17 @@ export default function CurrentLocation() {
         return;
       }
 
+      // Dragged outside Oriental Mindoro -> snap back to the last valid point
+      if (!window.r4rIsInServiceArea(center.lat, center.lng)) {
+        notifyOutside();
+        if (lastValidCenter) {
+          isRecentering = true;
+          map.flyTo(lastValidCenter, map.getZoom(), { animate: true, duration: 0.4 });
+        }
+        return;
+      }
+
+      lastValidCenter = [center.lat, center.lng];
       clearTimeout(moveTimer);
       moveTimer = setTimeout(function() {
         if (window.ReactNativeWebView) {
@@ -493,6 +603,11 @@ export default function CurrentLocation() {
     });
 
     map.on("click", function(event) {
+      // Taps outside Oriental Mindoro are blocked
+      if (!window.r4rIsInServiceArea(event.latlng.lat, event.latlng.lng)) {
+        notifyOutside();
+        return;
+      }
       map.flyTo([event.latlng.lat, event.latlng.lng], map.getZoom(), {
         animate: true,
         duration: 0.45,
@@ -507,6 +622,7 @@ export default function CurrentLocation() {
           const lng = Number(data.longitude);
           if (Number.isFinite(lat) && Number.isFinite(lng)) {
             isRecentering = true;
+            if (window.r4rIsInServiceArea(lat, lng)) lastValidCenter = [lat, lng];
             marker.setLatLng([lat, lng]);
             map.flyTo([lat, lng], 17, {
               animate: true,
@@ -531,14 +647,28 @@ export default function CurrentLocation() {
 </body>
 </html>
     `;
-  };
+  }, [mapInitialRegion]);
+  const mapSource = useMemo(() => ({ html: mapHtml }), [mapHtml]);
+
+  const restoreCurrentLocation = useEffectEvent(() => getCurrentLocation());
+  const resumeLocation = useEffectEvent(() => {
+    if (!region) getCurrentLocation();
+  });
 
   useEffect(() => {
     const initLocation = async () => {
       try {
         const saved = await getSavedLocation();
-        if (saved && Number.isFinite(saved.latitude) && Number.isFinite(saved.longitude)) {
-          const coords = { latitude: saved.latitude, longitude: saved.longitude };
+        if (
+          saved &&
+          Number.isFinite(saved.latitude) &&
+          Number.isFinite(saved.longitude) &&
+          isInServiceArea(saved.latitude, saved.longitude)
+        ) {
+          const coords = {
+            latitude: saved.latitude,
+            longitude: saved.longitude,
+          };
           setMapInitialRegion(coords);
           setRegion(coords);
           setLoading(false);
@@ -548,7 +678,7 @@ export default function CurrentLocation() {
       } catch {
         // fallback to live GPS
       }
-      getCurrentLocation();
+      restoreCurrentLocation();
     };
 
     initLocation();
@@ -559,9 +689,7 @@ export default function CurrentLocation() {
         Location.getForegroundPermissionsAsync().then((perm) => {
           if (perm.status === "granted") {
             setPermissionDenied(false);
-            if (!region) {
-              getCurrentLocation();
-            }
+            resumeLocation();
           }
         });
       }
@@ -581,7 +709,7 @@ export default function CurrentLocation() {
         [
           { text: "Open Settings", onPress: () => Linking.openSettings() },
           { text: "Cancel", style: "cancel" },
-        ]
+        ],
       );
       return;
     }
@@ -593,6 +721,10 @@ export default function CurrentLocation() {
   };
 
   const handleConfirmLocation = async () => {
+    if (region && !isInServiceArea(region.latitude, region.longitude)) {
+      Alert.alert("Outside service area", SERVICE_AREA_ERROR);
+      return;
+    }
     if (permissionDenied || !region) {
       Alert.alert(
         "Location Required",
@@ -600,7 +732,7 @@ export default function CurrentLocation() {
         [
           { text: "Enable Location", onPress: handleRequestPermission },
           { text: "Cancel", style: "cancel" },
-        ]
+        ],
       );
       return;
     }
@@ -629,58 +761,8 @@ export default function CurrentLocation() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Current Location</Text>
-
-        <Text style={styles.description}>
-          Allow Ride4Rent to use your current location to find vehicles near you.
-        </Text>
-
-        {/* Street and Satellite view toggle under title and submessage */}
-        <View style={styles.layerSelector}>
-          <TouchableOpacity
-            style={[styles.layerButton, activeLayer === "streets" && styles.layerButtonActive]}
-            onPress={() => handleLayerSwitch("streets")}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name="map"
-              size={13}
-              color={activeLayer === "streets" ? Colors.white : Colors.secondary}
-            />
-            <Text
-              style={[
-                styles.layerButtonText,
-                activeLayer === "streets" && styles.layerButtonTextActive,
-              ]}
-            >
-              Streets
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.layerButton, activeLayer === "satellite" && styles.layerButtonActive]}
-            onPress={() => handleLayerSwitch("satellite")}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name="earth"
-              size={13}
-              color={activeLayer === "satellite" ? Colors.white : Colors.secondary}
-            />
-            <Text
-              style={[
-                styles.layerButtonText,
-                activeLayer === "satellite" && styles.layerButtonTextActive,
-              ]}
-            >
-              Satellite
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <View style={styles.mapContainer}>
+      {/* 1. TRUE FULL SCREEN MAP (Edge-to-edge background) */}
+      <View style={StyleSheet.absoluteFill}>
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={Colors.primary} />
@@ -688,14 +770,14 @@ export default function CurrentLocation() {
           </View>
         ) : permissionDenied ? (
           <View style={styles.permissionContainer}>
-
-
+            <View style={styles.permissionIconBadge}>
+              <Ionicons name="location" size={40} color={Colors.dark} />
+            </View>
             <Text style={styles.permissionTitle}>Location Access Required</Text>
-
             <Text style={styles.permissionText}>
-             Ride4Rent uses your location to show nearby rental vehicles on the map.
+              Ride4Rent uses your location to show nearby rental vehicles on the
+              map.
             </Text>
-
             <TouchableOpacity
               style={styles.enableLocationBtn}
               activeOpacity={0.85}
@@ -704,17 +786,14 @@ export default function CurrentLocation() {
               <Ionicons name="navigate" size={17} color={Colors.dark} />
               <Text style={styles.enableLocationBtnText}>Enable Location</Text>
             </TouchableOpacity>
-
-
           </View>
         ) : locationError ? (
           <View style={styles.errorContainer}>
             <Text style={styles.errorTitle}>Unable to get your location</Text>
-
             <Text style={styles.errorText}>
-              Please allow location access so Ride4Rent can find your current location.
+              Please allow location access so Ride4Rent can find your current
+              location.
             </Text>
-
             <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
               <Text style={styles.retryText}>Try Again</Text>
             </TouchableOpacity>
@@ -722,63 +801,207 @@ export default function CurrentLocation() {
         ) : region ? (
           <WebView
             ref={webViewRef}
-            source={{
-              html: createMapHtml(),
-            }}
-            style={styles.map}
+            source={mapSource}
+            style={StyleSheet.absoluteFill}
             originWhitelist={["*"]}
             javaScriptEnabled
             domStorageEnabled
             onMessage={handleMapMessage}
+            onLoadEnd={() =>
+              webViewRef.current?.injectJavaScript(
+                `switchLayer('${activeLayer}'); true;`,
+              )
+            }
             geolocationEnabled
             scrollEnabled={false}
           />
         ) : null}
-
-        {!loading && !locationError && region && (
-          <>
-            <View pointerEvents="none" style={styles.mapInstruction}>
-              <Text style={styles.mapInstructionText}>
-                Move the map or tap to choose a location
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              activeOpacity={0.8}
-              style={styles.myLocationButton}
-              onPress={handleRecenter}
-              disabled={recenterLoading}
-            >
-              {recenterLoading ? (
-                <ActivityIndicator size="small" color={Colors.dark} />
-              ) : (
-                <View style={styles.myLocationIcon}>
-                  <View style={styles.myLocationDot} />
-                </View>
-              )}
-            </TouchableOpacity>
-          </>
-        )}
       </View>
 
-      <View style={styles.bottomSheet}>
-        <View style={styles.sheetHandle} />
+      {/* 2. TOP FLOATING CARD (Overlapping Header & Layer Pills) */}
+      <View
+        pointerEvents="box-none"
+        style={[
+          styles.topFloatingCardContainer,
+          { top: Math.max(insets.top + 8, 44) },
+        ]}
+      >
+        <View style={styles.topFloatingCard}>
+          <View style={styles.topCardRow}>
+            {router.canGoBack() && (
+              <TouchableOpacity
+                onPress={() => router.back()}
+                style={styles.topBackBtn}
+                activeOpacity={0.7}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="arrow-back" size={20} color={Colors.dark} />
+              </TouchableOpacity>
+            )}
+            <View style={{ flex: 1 }}>
+              <Text style={styles.topCardTitle}>Current Location</Text>
+              <Text style={styles.topCardSubtitle}>
+                Allow Ride4Rent to use your current location to find vehicles near
+                you.
+              </Text>
+            </View>
+          </View>
+        </View>
 
-        <Text style={styles.locationTitle}>Your selected location</Text>
+        {/* Floating Layer Selector Pills directly underneath card */}
+        <View style={styles.layerSelectorRow}>
+          <TouchableOpacity
+            style={[
+              styles.layerPill,
+              activeLayer === "streets"
+                ? styles.layerPillActive
+                : styles.layerPillInactive,
+            ]}
+            onPress={() => handleLayerSwitch("streets")}
+            activeOpacity={0.85}
+          >
+            <Ionicons
+              name="map"
+              size={13}
+              color={activeLayer === "streets" ? Colors.white : Colors.dark}
+            />
+            <Text
+              style={[
+                styles.layerPillText,
+                activeLayer === "streets" && styles.layerPillTextActive,
+              ]}
+            >
+              Streets
+            </Text>
+          </TouchableOpacity>
 
-        <Text style={styles.addressText}>{getAddressText()}</Text>
+          <TouchableOpacity
+            style={[
+              styles.layerPill,
+              activeLayer === "satellite"
+                ? styles.layerPillActive
+                : styles.layerPillInactive,
+            ]}
+            onPress={() => handleLayerSwitch("satellite")}
+            activeOpacity={0.85}
+          >
+            <Ionicons
+              name="earth"
+              size={13}
+              color={activeLayer === "satellite" ? Colors.white : "#6B7280"}
+            />
+            <Text
+              style={[
+                styles.layerPillText,
+                activeLayer === "satellite" && styles.layerPillTextActive,
+              ]}
+            >
+              Satellite
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
-        {getCityText() !== "" && (
-          <Text style={styles.locationText}>{getCityText()}</Text>
-        )}
-
-        <TouchableOpacity
-          style={[styles.confirmButton, !region && styles.disabledButton]}
-          disabled={!region}
-          onPress={handleConfirmLocation}
+      {/* 3. OUTSIDE SERVICE AREA ALERT BANNER */}
+      {outsideBanner && (
+        <View
+          pointerEvents="none"
+          accessibilityRole="alert"
+          style={[
+            styles.outsideBanner,
+            { top: Math.max(insets.top + 160, 196) },
+          ]}
         >
-          <Text style={styles.confirmText}>Confirm Location</Text>
+          <Ionicons name="alert-circle" size={18} color={Colors.white} />
+          <Text style={styles.outsideBannerText}>
+            Outside service area. Ride4Rent is only available in Oriental
+            Mindoro.
+          </Text>
+        </View>
+      )}
+
+      {/* 4. FLOATING CIRCULAR LOCATE BUTTON (Bottom Right above Sheet) */}
+      {!loading && !locationError && region && (
+        <TouchableOpacity
+          activeOpacity={0.85}
+          style={[
+            styles.myLocationButton,
+            {
+              bottom: isSheetExpanded
+                ? 245 + insets.bottom
+                : 135 + insets.bottom,
+            },
+          ]}
+          onPress={handleRecenter}
+          disabled={recenterLoading}
+        >
+          {recenterLoading ? (
+            <ActivityIndicator size="small" color={Colors.primary} />
+          ) : (
+            <View style={styles.myLocationCircle}>
+              <View style={styles.myLocationDot} />
+            </View>
+          )}
         </TouchableOpacity>
+      )}
+
+      {/* 5. GOOGLE MAPS STYLE OVERLAPPING BOTTOM SHEET */}
+      <View
+        style={[
+          styles.bottomSheet,
+          {
+            paddingBottom: Math.max(insets.bottom + 12, 22),
+          },
+        ]}
+      >
+        {/* Handle for drag/toggle */}
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={toggleSheet}
+          style={styles.sheetHandleTouch}
+        >
+          <View style={styles.sheetHandle} />
+        </TouchableOpacity>
+
+        <TouchableOpacity activeOpacity={0.9} onPress={toggleSheet}>
+          <Text style={styles.sheetStreetText} numberOfLines={1}>
+            {getAddressText()}
+          </Text>
+          {getCityText() !== "" && (
+            <Text style={styles.sheetCityText} numberOfLines={1}>
+              {getCityText()}
+            </Text>
+          )}
+        </TouchableOpacity>
+
+        {isSheetExpanded && (
+          <View style={styles.sheetExpandedContent}>
+            <Text style={styles.sheetNoteText}>
+              Only location inside Oriental Mindoro can be selected
+            </Text>
+
+            {outsideAttempt && (
+              <Text
+                accessibilityRole="alert"
+                style={styles.sheetErrorText}
+              >
+                Choose a location inside Oriental Mindoro to continue.
+              </Text>
+            )}
+
+            <TouchableOpacity
+              style={[
+                styles.confirmButton,
+                (!region || outsideAttempt) && styles.disabledButton,
+              ]}
+              disabled={!region || outsideAttempt}
+              onPress={handleConfirmLocation}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.confirmText}>Confirm Location</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -787,124 +1010,149 @@ export default function CurrentLocation() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#F8FAFC",
+  },
+
+  topFloatingCardContainer: {
+    position: "absolute",
+    left: 18,
+    right: 18,
+    zIndex: 10,
+  },
+
+  topFloatingCard: {
     backgroundColor: Colors.white,
+    borderRadius: 22,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
   },
 
-  header: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: 60,
-    paddingBottom: Spacing.md,
+  topCardRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
   },
 
-  title: {
+  topBackBtn: {
+    paddingTop: 2,
+    paddingRight: 4,
+  },
+
+  topCardTitle: {
     fontFamily: FontFamily.bold,
-    fontSize: FontSize.heading,
+    fontSize: 21,
     color: Colors.dark,
   },
 
-  description: {
-    marginTop: Spacing.xs,
+  topCardSubtitle: {
+    marginTop: 4,
     fontFamily: FontFamily.regular,
-    fontSize: FontSize.body,
+    fontSize: 13.5,
     color: Colors.secondary,
-    lineHeight: 22,
+    lineHeight: 19,
   },
 
-  layerSelector: {
-    flexDirection: "row",
-    backgroundColor: "#F1F5F9",
-    borderRadius: Radius.full,
-    padding: 3,
-    marginTop: Spacing.sm,
-    alignSelf: "flex-start",
-    gap: 4,
-  },
-
-  layerButton: {
+  layerSelectorRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingVertical: 5,
-    paddingHorizontal: 11,
+    gap: 8,
+    marginTop: 10,
+  },
+
+  layerPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
     borderRadius: Radius.full,
   },
 
-  layerButtonActive: {
+  layerPillActive: {
     backgroundColor: Colors.dark,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
 
-  layerButtonText: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: 11.5,
-    color: Colors.secondary,
+  layerPillInactive: {
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
   },
 
-  layerButtonTextActive: {
-    color: Colors.white,
-  },
-
-  mapContainer: {
-    flex: 1,
-    overflow: "hidden",
-  },
-
-  map: {
-    width: "100%",
-    height: "100%",
-  },
-
-  mapInstruction: {
-    position: "absolute",
-    top: Spacing.md,
-    left: Spacing.lg,
-    right: Spacing.lg,
-    alignItems: "center",
-  },
-
-  mapInstructionText: {
-    backgroundColor: "rgba(255,255,255,0.96)",
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: 18,
+  layerPillText: {
     fontFamily: FontFamily.medium,
     fontSize: 12,
-    color: Colors.dark,
-    overflow: "hidden",
-    elevation: 3,
+    color: Colors.secondary,
+  },
+
+  layerPillTextActive: {
+    color: Colors.white,
+    fontFamily: FontFamily.semiBold,
+  },
+
+  outsideBanner: {
+    position: "absolute",
+    left: 18,
+    right: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#DC2626",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 10,
+    borderRadius: 14,
+    elevation: 6,
     shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
     shadowRadius: 4,
+    zIndex: 15,
+  },
+
+  outsideBannerText: {
+    flex: 1,
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+    color: Colors.white,
+    lineHeight: 16,
   },
 
   myLocationButton: {
     position: "absolute",
-    right: Spacing.lg,
-    bottom: Spacing.lg,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    right: 18,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: Colors.white,
     alignItems: "center",
     justifyContent: "center",
-    elevation: 6,
+    elevation: 7,
     shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
     shadowRadius: 6,
+    zIndex: 15,
   },
 
-  myLocationIcon: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 3,
+  myLocationCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 3.5,
     borderColor: Colors.primary,
     alignItems: "center",
     justifyContent: "center",
@@ -915,6 +1163,94 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: Colors.primary,
+  },
+
+  bottomSheet: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: Colors.white,
+    paddingHorizontal: 22,
+    paddingTop: 10,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    elevation: 20,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: -4,
+    },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    zIndex: 20,
+  },
+
+  sheetHandleTouch: {
+    alignItems: "center",
+    paddingVertical: 6,
+  },
+
+  sheetHandle: {
+    width: 52,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: "#9CA3AF",
+  },
+
+  sheetStreetText: {
+    marginTop: 8,
+    fontFamily: FontFamily.bold,
+    fontSize: 21,
+    color: Colors.dark,
+  },
+
+  sheetCityText: {
+    marginTop: 4,
+    fontFamily: FontFamily.regular,
+    fontSize: 14,
+    color: "#4B5563",
+  },
+
+  sheetExpandedContent: {
+    marginTop: 4,
+  },
+
+  sheetNoteText: {
+    marginTop: 14,
+    fontFamily: FontFamily.regular,
+    fontSize: 13.5,
+    color: "#4B5563",
+  },
+
+  sheetErrorText: {
+    marginTop: 6,
+    fontFamily: FontFamily.medium,
+    fontSize: 13,
+    color: "#DC2626",
+  },
+
+  confirmButton: {
+    marginTop: 18,
+    backgroundColor: Colors.primary,
+    paddingVertical: 16,
+    borderRadius: Radius.full,
+    alignItems: "center",
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+
+  disabledButton: {
+    opacity: 0.5,
+  },
+
+  confirmText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 17,
+    color: Colors.dark,
   },
 
   permissionContainer: {
@@ -1039,70 +1375,6 @@ const styles = StyleSheet.create({
 
   retryText: {
     fontFamily: FontFamily.bold,
-    color: Colors.dark,
-  },
-
-  sheetHandle: {
-    alignSelf: "center",
-    width: 42,
-    height: 4,
-    borderRadius: 10,
-    backgroundColor: "#D9D9D9",
-    marginBottom: Spacing.md,
-  },
-
-  bottomSheet: {
-    backgroundColor: Colors.white,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.xl,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    elevation: 10,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: -3,
-    },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-  },
-
-  locationTitle: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.body,
-    color: Colors.dark,
-  },
-
-  addressText: {
-    marginTop: 4,
-    fontFamily: FontFamily.medium,
-    fontSize: 15,
-    color: Colors.dark,
-  },
-
-  locationText: {
-    marginTop: 3,
-    fontFamily: FontFamily.regular,
-    fontSize: 13,
-    color: Colors.secondary,
-  },
-
-  confirmButton: {
-    marginTop: Spacing.md,
-    backgroundColor: Colors.primary,
-    paddingVertical: Spacing.md,
-    borderRadius: 25,
-    alignItems: "center",
-  },
-
-  disabledButton: {
-    opacity: 0.5,
-  },
-
-  confirmText: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.body,
     color: Colors.dark,
   },
 });

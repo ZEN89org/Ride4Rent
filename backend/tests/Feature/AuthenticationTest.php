@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\User;
-use App\Models\Vehicle;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -88,7 +87,7 @@ class AuthenticationTest extends TestCase
             'token' => hash('sha256', explode('|', $newToken, 2)[1]),
         ]);
 
-        $this->withHeader('Authorization', "******")
+        $this->withHeader('Authorization', '******')
             ->getJson('/api/v1/user')
             ->assertUnauthorized();
 
@@ -202,8 +201,8 @@ class AuthenticationTest extends TestCase
                 'reservation_fee' => 500,
                 'min_driver_age' => 21,
                 'min_driving_experience' => 1,
-                'pickup_latitude' => 10.3157,
-                'pickup_longitude' => 123.8854,
+                'pickup_latitude' => 13.4115,
+                'pickup_longitude' => 121.1803,
                 'description' => 'Clean and comfortable city car.',
             ]);
 
@@ -219,7 +218,7 @@ class AuthenticationTest extends TestCase
             ->assertJsonPath('data.0.name', 'City sedan')
             ->assertJsonPath('data.0.is_available', true);
 
-        $this->getJson('/api/v1/vehicles?latitude=10.3157&longitude=123.8854&radius=1')
+        $this->getJson('/api/v1/vehicles?latitude=13.4115&longitude=121.1803&radius=1')
             ->assertOk()
             ->assertJsonPath('data.0.distance_km', 0);
     }

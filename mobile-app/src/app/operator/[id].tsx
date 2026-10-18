@@ -1,4 +1,4 @@
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -14,10 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ProCardSkeleton, Skeleton } from "@/components/common/Skeleton";
 import { Colors } from "@/constants/colors";
-import {
-  MUNICIPALITY_COORDINATES,
-  resolveCoordinatesFromAddress,
-} from "@/constants/orientalMindoroLocations";
+import { resolveCoordinatesFromAddress } from "@/constants/orientalMindoroLocations";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";
 import { useFavorites } from "@/context/FavoritesContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
@@ -31,26 +28,31 @@ export default function OperatorProfileScreen() {
 
   const [operator, setOperator] = useState<any>(null);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadedId, setLoadedId] = useState<string | null>(null);
+  const validId = !!id && /^\d+$/.test(String(id));
+  const loading = validId && loadedId !== String(id);
 
   useEffect(() => {
     if (!id || !/^\d+$/.test(String(id))) {
-      setLoading(false);
       return;
     }
-    setLoading(true);
+    let active = true;
     getOperatorFleet(id)
       .then((res) => {
+        if (!active) return;
         setOperator(res?.operator || null);
         setVehicles(Array.isArray(res?.vehicles) ? res.vehicles : []);
       })
       .catch((err) => {
         console.log("Could not load operator fleet:", err?.message || err);
-        setVehicles([]);
+        if (active) setVehicles([]);
       })
       .finally(() => {
-        setLoading(false);
+        if (active) setLoadedId(String(id));
       });
+    return () => {
+      active = false;
+    };
   }, [id]);
 
   const handleChatPress = () => {
@@ -74,14 +76,21 @@ export default function OperatorProfileScreen() {
     return (
       <SafeAreaView edges={["top", "bottom"]} style={styles.container}>
         <View style={styles.headerBar}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
             <Ionicons name="arrow-back" size={22} color={Colors.dark} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Host Profile</Text>
           <View style={{ width: 40 }} />
         </View>
         <View style={{ padding: Spacing.lg }}>
-          <Skeleton height={150} borderRadius={20} style={{ marginBottom: 20 }} />
+          <Skeleton
+            height={150}
+            borderRadius={20}
+            style={{ marginBottom: 20 }}
+          />
           <ProCardSkeleton />
           <ProCardSkeleton />
         </View>
@@ -93,7 +102,10 @@ export default function OperatorProfileScreen() {
     return (
       <SafeAreaView edges={["top", "bottom"]} style={styles.container}>
         <View style={styles.headerBar}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
             <Ionicons name="arrow-back" size={22} color={Colors.dark} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Host Profile</Text>
@@ -102,24 +114,32 @@ export default function OperatorProfileScreen() {
         <View style={styles.emptyWrap}>
           <Text style={styles.emptyText}>Host Profile Unavailable</Text>
           <Text style={styles.emptySubtext}>
-            This host does not have any active public profile details or listings yet.
+            This host does not have any active public profile details or
+            listings yet.
           </Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  const businessName = operator?.business_name || operator?.name || "Verified Operator";
+  const businessName =
+    operator?.business_name || operator?.name || "Verified Operator";
   const addressParts = [
     operator?.street_address,
     operator?.barangay,
     operator?.municipality,
   ].filter(Boolean);
-  const fullAddress = addressParts.length > 0 ? addressParts.join(", ") : operator?.address || null;
+  const fullAddress =
+    addressParts.length > 0
+      ? addressParts.join(", ")
+      : operator?.address || null;
   const profilePhoto = operator?.profile_photo;
 
   const vehicleWithCoords = vehicles.find(
-    (v) => v.pickup_latitude && v.pickup_longitude && Number(v.pickup_latitude) !== 0
+    (v) =>
+      v.pickup_latitude &&
+      v.pickup_longitude &&
+      Number(v.pickup_latitude) !== 0,
   );
   const effectiveAddress =
     vehicleWithCoords?.pickup_address ||
@@ -169,7 +189,10 @@ export default function OperatorProfileScreen() {
     <SafeAreaView edges={["top", "bottom"]} style={styles.container}>
       {/* Top Header */}
       <View style={styles.headerBar}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
           <Ionicons name="arrow-back" size={22} color={Colors.dark} />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>
@@ -195,7 +218,10 @@ export default function OperatorProfileScreen() {
             <View style={styles.avatarRowWrapper}>
               <View style={styles.avatarWrap}>
                 {profilePhoto ? (
-                  <Image source={{ uri: profilePhoto }} style={styles.avatarImg} />
+                  <Image
+                    source={{ uri: profilePhoto }}
+                    style={styles.avatarImg}
+                  />
                 ) : (
                   <Ionicons name="business" size={36} color={Colors.dark} />
                 )}
@@ -219,7 +245,11 @@ export default function OperatorProfileScreen() {
 
               {fullAddress ? (
                 <View style={styles.addressContainer}>
-                  <Ionicons name="location-sharp" size={15} color={Colors.primary} />
+                  <Ionicons
+                    name="location-sharp"
+                    size={15}
+                    color={Colors.primary}
+                  />
                   <Text style={styles.addressText} numberOfLines={2}>
                     {fullAddress}
                   </Text>
@@ -233,15 +263,22 @@ export default function OperatorProfileScreen() {
                   onPress={handleChatPress}
                   activeOpacity={0.85}
                 >
-                  <Ionicons name="chatbubble-ellipses" size={18} color={Colors.dark} />
+                  <Ionicons
+                    name="chatbubble-ellipses"
+                    size={18}
+                    color={Colors.dark}
+                  />
                   <Text style={styles.chatActionText}>Message Host</Text>
                 </TouchableOpacity>
 
-                {operator?.business_contact_number || operator?.mobile_number ? (
+                {operator?.business_contact_number ||
+                operator?.mobile_number ? (
                   <TouchableOpacity
                     style={styles.contactBadge}
                     onPress={() => {
-                      const phone = operator.business_contact_number || operator.mobile_number;
+                      const phone =
+                        operator.business_contact_number ||
+                        operator.mobile_number;
                       if (phone) {
                         Linking.openURL(`tel:${phone}`);
                       }
@@ -250,7 +287,8 @@ export default function OperatorProfileScreen() {
                   >
                     <Ionicons name="call" size={15} color={Colors.dark} />
                     <Text style={styles.contactText}>
-                      {operator.business_contact_number || operator.mobile_number}
+                      {operator.business_contact_number ||
+                        operator.mobile_number}
                     </Text>
                   </TouchableOpacity>
                 ) : null}
@@ -269,7 +307,13 @@ export default function OperatorProfileScreen() {
                 </View>
 
                 <View style={styles.statPill}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 3,
+                    }}
+                  >
                     <Text style={styles.statNumber}>5.0</Text>
                     <Ionicons name="star" size={13} color={Colors.primary} />
                   </View>
@@ -279,14 +323,18 @@ export default function OperatorProfileScreen() {
 
               {/* Pickup & Garage Location - Exactly matching vehicle details card */}
               <View style={styles.sectionDivider} />
-              <Text style={styles.sectionHeading}>Pickup & Garage Location</Text>
+              <Text style={styles.sectionHeading}>
+                Pickup & Garage Location
+              </Text>
               <View style={styles.locationCard}>
                 <View style={styles.locationInfoRow}>
-                  <Ionicons name="location-sharp" size={22} color={Colors.primary} />
+                  <Ionicons
+                    name="location-sharp"
+                    size={22}
+                    color={Colors.primary}
+                  />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.locationTitle}>
-                      {effectiveAddress}
-                    </Text>
+                    <Text style={styles.locationTitle}>{effectiveAddress}</Text>
                     <Text style={styles.locationSubtitle}>
                       Official garage & vehicle meetup point for this host.
                     </Text>
@@ -299,19 +347,25 @@ export default function OperatorProfileScreen() {
                   activeOpacity={0.8}
                 >
                   <Ionicons name="map-outline" size={16} color={Colors.dark} />
-                  <Text style={styles.directionsButtonText}>View Location on Map</Text>
+                  <Text style={styles.directionsButtonText}>
+                    View Location on Map
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
 
             <View style={styles.dividerLine} />
-            <Text style={styles.fleetHeader}>Fleet Listings ({vehicles.length})</Text>
+            <Text style={styles.fleetHeader}>
+              Fleet Listings ({vehicles.length})
+            </Text>
           </View>
         }
         ListEmptyComponent={
           <View style={styles.emptyWrap}>
             <Text style={styles.emptyText}>No Vehicles Currently Listed</Text>
-            <Text style={styles.emptySubtext}>This host has no active vehicle listings available at the moment.</Text>
+            <Text style={styles.emptySubtext}>
+              This host has no active vehicle listings available at the moment.
+            </Text>
           </View>
         }
         renderItem={({ item }) => {
@@ -336,7 +390,8 @@ export default function OperatorProfileScreen() {
                   {item.name}
                 </Text>
                 <Text style={styles.carSpecs}>
-                  {item.transmission || "Auto"} • {item.seats || 4} Seats • {item.vehicle_type || "Sedan"}
+                  {item.transmission || "Auto"} • {item.seats || 4} Seats •{" "}
+                  {item.vehicle_type || "Sedan"}
                 </Text>
 
                 <View style={styles.priceRow}>

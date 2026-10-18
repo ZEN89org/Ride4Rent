@@ -6,3 +6,12 @@ web-build/
 android/
 ios/
 *.log
+
+# Fetch user uploads from the server; never include them in app build archives.
+assets/storage/chat_images/
+assets/storage/driver_licenses/
+assets/storage/operator-documents/
+assets/storage/operator_documents/
+assets/storage/secondary_driver_licenses/
+assets/storage/payment_qr_codes/
+assets/storage/profile-photos/

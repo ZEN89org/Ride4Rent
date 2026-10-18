@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   whiteFade: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "#FFFFFF",
   },
 });

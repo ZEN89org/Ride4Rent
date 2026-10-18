@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -26,17 +26,11 @@ import { getSavedLocation, saveLocation } from "@/storage/locationStorage";
 export default function ProfileScreen() {
   const { user, isGuest, updateUser, refreshUser } = useAuth();
   const { showSuccess, showError, showModal } = useAppToast();
-  const [profileImage, setProfileImage] = useState<string | null>(
-    resolveImageUrl(user?.profile_photo) || null
-  );
+  const [profileImageDraft, setProfileImage] = useState<string | null>(null);
+  const profileImage =
+    profileImageDraft ?? resolveImageUrl(user?.profile_photo);
   const [uploading, setUploading] = useState(false);
   const [savedAddress, setSavedAddress] = useState<string>("Not set");
-
-  useEffect(() => {
-    if (user?.profile_photo) {
-      setProfileImage(resolveImageUrl(user.profile_photo));
-    }
-  }, [user?.profile_photo]);
 
   useFocusEffect(
     useCallback(() => {
@@ -71,16 +65,18 @@ export default function ProfileScreen() {
               });
               const g = geo?.[0];
               const addr = g
-                ? [g.street, g.district, g.city, g.region].filter(Boolean).join(", ")
+                ? [g.street, g.district, g.city, g.region]
+                    .filter(Boolean)
+                    .join(", ")
                 : "";
               if (addr && active) {
-                setSavedAddress(addr);
                 await saveLocation({
                   latitude: loc.coords.latitude,
                   longitude: loc.coords.longitude,
                   address: addr,
                   confirmed: true,
                 });
+                if (active) setSavedAddress(addr);
               }
             }
           } catch {
@@ -98,24 +94,28 @@ export default function ProfileScreen() {
 
       return () => {
         active = false;
-        if (typeof cancelIdleCallback === "function" && typeof idleId === "number") {
+        if (
+          typeof cancelIdleCallback === "function" &&
+          typeof idleId === "number"
+        ) {
           cancelIdleCallback(idleId);
         } else {
           clearTimeout(idleId as any);
         }
       };
-    }, [])
+    }, [refreshUser]),
   );
 
   const handlePickImage = async () => {
     try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permission =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
         showModal(
           "Permission Required",
           "Please grant camera roll permissions to update your profile photo.",
           [{ text: "OK" }],
-          "warning"
+          "warning",
         );
         return;
       }
@@ -172,7 +172,7 @@ export default function ProfileScreen() {
           </View>
           <Text style={styles.guestTitle}>Guest Mode</Text>
           <Text style={styles.guestSubtitle}>
-            Sign in to view your profile and driver's license.
+            Sign in to view your profile and driver&apos;s license.
           </Text>
           <TouchableOpacity
             style={styles.signInButton}
@@ -186,7 +186,12 @@ export default function ProfileScreen() {
     );
   }
 
-  const fullName = [user.first_name, user.middle_name, user.last_name, user.suffix]
+  const fullName = [
+    user.first_name,
+    user.middle_name,
+    user.last_name,
+    user.suffix,
+  ]
     .filter(Boolean)
     .join(" ");
 
@@ -219,7 +224,8 @@ export default function ProfileScreen() {
   const isLicensePending =
     !isLicenseVerified &&
     (user.license_verification_status === "pending" ||
-      (!user.license_verification_status && Boolean(user.drivers_license_front)));
+      (!user.license_verification_status &&
+        Boolean(user.drivers_license_front)));
   const isLicenseRejected =
     !isLicenseVerified && user.license_verification_status === "rejected";
 
@@ -232,28 +238,28 @@ export default function ProfileScreen() {
         actionText: "View",
       }
     : isLicensePending
-    ? {
-        badgeText: "Pending Review",
-        badgeColor: "#92400E",
-        badgeBg: "#FEF3C7",
-        subtext: "Under review by host/admin",
-        actionText: "Check",
-      }
-    : isLicenseRejected
-    ? {
-        badgeText: "Rejected",
-        badgeColor: "#B91C1C",
-        badgeBg: "#FEE2E2",
-        subtext: "Please upload a clear photo",
-        actionText: "Update",
-      }
-    : {
-        badgeText: "Unverified",
-        badgeColor: "#92400E",
-        badgeBg: Colors.logoBackground,
-        subtext: "Required before booking a vehicle",
-        actionText: "Upload",
-      };
+      ? {
+          badgeText: "Pending Review",
+          badgeColor: "#92400E",
+          badgeBg: "#FEF3C7",
+          subtext: "Under review by host/admin",
+          actionText: "Check",
+        }
+      : isLicenseRejected
+        ? {
+            badgeText: "Rejected",
+            badgeColor: "#B91C1C",
+            badgeBg: "#FEE2E2",
+            subtext: "Please upload a clear photo",
+            actionText: "Update",
+          }
+        : {
+            badgeText: "Unverified",
+            badgeColor: "#92400E",
+            badgeBg: Colors.logoBackground,
+            subtext: "Required before booking a vehicle",
+            actionText: "Upload",
+          };
 
   const formattedSex = user.sex
     ? user.sex.charAt(0).toUpperCase() + user.sex.slice(1)
@@ -310,11 +316,16 @@ export default function ProfileScreen() {
         <View style={styles.profileHeader}>
           <View style={styles.avatarWrapper}>
             {profileImage ? (
-              <Image source={{ uri: profileImage }} style={styles.avatarImage} />
+              <Image
+                source={{ uri: profileImage }}
+                style={styles.avatarImage}
+              />
             ) : (
               <View style={styles.avatarPlaceholder}>
                 <Text style={styles.avatarLetter}>
-                  {user.first_name ? user.first_name.charAt(0).toUpperCase() : "U"}
+                  {user.first_name
+                    ? user.first_name.charAt(0).toUpperCase()
+                    : "U"}
                 </Text>
               </View>
             )}
@@ -376,7 +387,7 @@ export default function ProfileScreen() {
             </View>
 
             <View style={styles.licenseTextCol}>
-              <Text style={styles.licenseTitle}>Driver's License</Text>
+              <Text style={styles.licenseTitle}>Driver&apos;s License</Text>
               <Text style={styles.licenseSubtext}>{licenseInfo.subtext}</Text>
             </View>
 
@@ -408,11 +419,17 @@ export default function ProfileScreen() {
           {user.role !== "operator" && (
             <TouchableOpacity
               style={styles.personalRow}
-              onPress={() => router.push("/current-location?from=profile" as any)}
+              onPress={() =>
+                router.push("/current-location?from=profile" as any)
+              }
               activeOpacity={0.8}
             >
               <View style={styles.personalIconBox}>
-                <Ionicons name="location-outline" size={18} color={Colors.dark} />
+                <Ionicons
+                  name="location-outline"
+                  size={18}
+                  color={Colors.dark}
+                />
               </View>
               <View style={styles.personalTextCol}>
                 <Text style={styles.personalLabel}>Current Location</Text>

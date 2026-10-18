@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Ride4Rent System Entity-Relationship Diagram (ERD)</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: #FFFFFF;
+      color: #000000;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      padding: 24px;
+      overflow-x: auto;
+    }
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      max-width: 3000px;
+      margin: 0 auto 16px auto;
+      padding-bottom: 12px;
+      border-bottom: 2px solid #000000;
+    }
+    .title-area h1 {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: #000000;
+    }
+    .title-area p {
+      font-size: 13px;
+      color: #000000;
+      margin-top: 4px;
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+    }
+    .btn {
+      background-color: #FFFFFF;
+      color: #000000;
+      border: 1.5px solid #000000;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: background-color 0.15s ease;
+    }
+    .btn:hover {
+      background-color: #F0F0F0;
+    }
+    .canvas-container {
+      max-width: 3000px;
+      margin: 0 auto;
+      background: #FFFFFF;
+    }
+    svg text {
+      user-select: none;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header Bar -->
+  <div class="header-bar">
+    <div class="title-area">
+      <h1>Ride4Rent System Entity-Relationship Diagram (ERD)</h1>
+      <p>Complete Database Schema (28 Tables: 21 Application Domain Tables + 7 Framework Infrastructure Tables)</p>
+    </div>
+    <div class="actions">
+      <button class="btn" onclick="downloadImage('png')">Download PNG</button>
+      <button class="btn" onclick="downloadImage('jpeg')">Download JPEG</button>
+      <button class="btn" onclick="downloadSVG()">Download SVG</button>
+    </div>
+  </div>
+
+  <!-- SVG Diagram Canvas -->
+  <div class="canvas-container">
+    <svg id="erd-svg" width="3000" height="1750" viewBox="0 0 3000 1750" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <!-- Standard Arrow Marker -->
+        <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#000000" />
+        </marker>
+      </defs>
+
+      <!-- Canvas Background -->
+      <rect width="3000" height="1750" fill="#FFFFFF"/>
+
+      <!-- ================= RELATIONSHIP CONNECTOR PATHS ================= -->
+      <!-- USERS -> ADMIN_AUDIT_LOGS (1 : N) -->
+      <path d="M 470 220 L 390 220" fill="none" stroke="#000000" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="411" y="208" width="38" height="18" fill="#FFFFFF" stroke="#000000" stroke-width="0.8"/>
+      <text x="430" y="221" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">1 : N</text>
+
+      <!-- USERS -> DRIVER_LICENSES (1 : 1) -->
+      <path d="M 470 460 L 390 460" fill="none" stroke="#000000" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="411" y="448" width="38" height="18" fill="#FFFFFF" stroke="#000000" stroke-width="0.8"/>
+      <text x="430" y="461" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">1 : 1</text>
+
+      <!-- USERS -> OPERATOR_PROFILES (1 : 1) -->
+      <path d="M 470 500 L 430 500 L 430 780 L 390 780" fill="none" stroke="#000000" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="411" y="640" width="38" height="18" fill="#FFFFFF" stroke="#000000" stroke-width="0.8"/>
+      <text x="430" y="653" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">1 : 1</text>
+
+      <!-- USERS -> NOTIFICATIONS (1 : N) -->
+      <path d="M 470 520 L 410 520 L 410 1120 L 390 1120" fill="none" stroke="#000000" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="391" y="940" width="38" height="18" fill="#FFFFFF" stroke="#000000" stroke-width="0.8"/>
+      <text x="410" y="953" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">1 : N</text>
+
+      <!-- USERS -> STORED_FILES (1 : N) -->
+      <path d="M 470 535 L 390 535 L 390 1310" fill="none" stroke="#000000" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="371" y="1250" width="38" height="18" fill="#FFFFFF" stroke="#000000" stroke-width="0.8"/>
+      <text x="390" y="1263" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">1 : N</text>
+
+      <!-- USERS -> EMAIL_VERIFICATION_OTPS (1 : N) -->
+      <path d="M 660 540 L 660 580" fill="none" stroke="#000000" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="641" y="550" width="38" height="18" fill="#FFFFFF" stroke="#000000" stroke-width="0.8"/>
+      <text x="660" y="563" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">1 : N</text>
+
+      <!-- USERS -> PERSONAL_ACCESS_TOKENS (1 : N) -->
+      <path d="M 660 760 L 660 800" fill="none" stroke="#000000" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="641" y="770" width="38" height="18" fill="#FFFFFF" stroke="#000000" stroke-width="0.8"/>
+      <text x="660" y="783" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">1 : N</text>
+
+      <!-- USERS -> VEHICLES (1 : N) -->
+      <path d="M 850 250 L 950 250" fill="none" stroke="#000000" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="881" y="238" width="38" height="18" fill="#FFFFFF" stroke="#000000" stroke-width="0.8"/>
+      <text x="900" y="251" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">1 : N</text>
+
+      <!-- USERS -> BOOKINGS (1 : N) -->
+      <path d="M 850 450 L 900 450 L 900 750 L 950 750" fill="none" stroke="#000000" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="881" y="590" width="38" height="18" fill="#FFFFFF" stroke="#000000" stroke-width="0.8"/>
+      <text x="900" y="603" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">1 : N</text>
+
+      <!-- VEHICLES -> BOOKINGS (1 : N) -->
+      <path d="M 1150 600 L 1150 650" fill="none" stroke="#000000" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="1131" y="615" width="38" height="18" fill="#FFFFFF" stroke="#000000" stroke-width="0.8"/>
+      <text x="1150" y="628" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">1 : N</text>
+
+      <!-- VEHICLES -> VEHICLE_IMAGES (1 : N) -->
+      <path d="M 1350 200 L 1450 200" fill="none" stroke="#000000" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="1381" y="188" width="38" height="18" fill="#FFFFFF" stroke="#000000" stroke-width="0.8"/>
+      <text x="1400" y="201" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">1 : N</text>
+
+      <!-- VEHICLES -> VEHICLE_MAINTENANCES (1 : N) -->
+      <path d="M 1350 420 L 1450 420" fill="none" stroke="#000000" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="1381" y="408" width="38" height="18" fill="#FFFFFF" stroke="#000000" stroke-width="0.8"/>
+      <text x="1400" y="421" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">1 : N</text>
+
+      <!-- BOOKINGS -> CALLS (1 : N) -->
+      <path d="M 1350 740 L 1450 740" fill="none" stroke="#000000" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="1381" y="728" width="38" height="18" fill="#FFFFFF" stroke="#000000" stroke-width="0.8"/>
+      <text x="1400" y="741" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">1 : N</text>
+
+      <!-- BOOKINGS -> MESSAGES (1 : N) -->
+      <path d="M 1350 1020 L 1450 1020" fill="none" stroke="#000000" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="1381" y="1008" width="38" height="18" fill="#FFFFFF" stroke="#000000" stroke-width="0.8"/>
+      <text x="1400" y="1021" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">1 : N</text>
+
+      <!-- MESSAGES -> CONVERSATION_STATES (1 : N) -->
+      <path d="M 1790 1020 L 1890 1020" fill="none" stroke="#000000" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="1821" y="1008" width="38" height="18" fill="#FFFFFF" stroke="#000000" stroke-width="0.8"/>
+      <text x="1840" y="1021" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">1 : N</text>
+
+      <!-- VEHICLES -> VEHICLE_TYPES (N : 1) -->
+      <path d="M 1250 130 L 1250 80 L 1980 80 L 1980 130" fill="none" stroke="#000000" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="1600" y="69" width="38" height="18" fill="#FFFFFF" stroke="#000000" stroke-width="0.8"/>
+      <text x="1619" y="82" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">N : 1</text>
+
+      <!-- VEHICLES -> VEHICLE_BRANDS (N : 1) -->
+      <path d="M 1280 130 L 1280 60 L 2020 60 L 2020 330" fill="none" stroke="#000000" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="1680" y="49" width="38" height="18" fill="#FFFFFF" stroke="#000000" stroke-width="0.8"/>
+      <text x="1699" y="62" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">N : 1</text>
+
+      <!-- VEHICLES -> BODY_TYPES (N : 1) -->
+      <path d="M 1310 130 L 1310 40 L 2060 40 L 2060 530" fill="none" stroke="#000000" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="1760" y="29" width="38" height="18" fill="#FFFFFF" stroke="#000000" stroke-width="0.8"/>
+      <text x="1779" y="42" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">N : 1</text>
+
+      <!-- VEHICLES -> TRANSMISSION_TYPES (N : 1) -->
+      <path d="M 1330 130 L 1330 20 L 2100 20 L 2100 730" fill="none" stroke="#000000" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="1840" y="9" width="38" height="18" fill="#FFFFFF" stroke="#000000" stroke-width="0.8"/>
+      <text x="1859" y="22" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">N : 1</text>
+
+      <!-- VEHICLES -> FUEL_TYPES (N : 1) -->
+      <path d="M 1350 140 L 1370 140 L 1370 5 L 2430 5 L 2430 130" fill="none" stroke="#000000" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="1940" y="-3" width="38" height="18" fill="#FFFFFF" stroke="#000000" stroke-width="0.8"/>
+      <text x="1959" y="10" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">N : 1</text>
+
+      <!-- USERS -> SESSIONS (1 : N) -->
+      <path d="M 700 130 L 700 45 L 2350 45 L 2350 330" fill="none" stroke="#000000" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <rect x="1480" y="34" width="38" height="18" fill="#FFFFFF" stroke="#000000" stroke-width="0.8"/>
+      <text x="1499" y="47" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">1 : N</text>
+
+      <!-- ================= ENTITY TABLES ================= -->
+
+      <!-- COLUMN 1: USERS ADJACENT ENTITIES -->
+
+      <!-- 1. ADMIN_AUDIT_LOGS -->
+      <g transform="translate(70, 130)">
+        <rect width="320" height="220" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="320" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">ADMIN_AUDIT_LOGS</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="210" y="0">bigint</text>
+          <text x="0" y="21">admin_id [FK]</text><text x="210" y="21">bigint</text>
+          <text x="0" y="42">action</text><text x="210" y="42">varchar(100)</text>
+          <text x="0" y="63">target_type</text><text x="210" y="63">varchar(100)</text>
+          <text x="0" y="84">target_id</text><text x="210" y="84">bigint</text>
+          <text x="0" y="105">details</text><text x="210" y="105">text</text>
+          <text x="0" y="126">ip_address</text><text x="210" y="126">varchar(45)</text>
+          <text x="0" y="147">created_at</text><text x="210" y="147">timestamp</text>
+        </g>
+      </g>
+
+      <!-- 2. DRIVER_LICENSES -->
+      <g transform="translate(70, 390)">
+        <rect width="320" height="265" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="320" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">DRIVER_LICENSES</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="210" y="0">bigint</text>
+          <text x="0" y="21">user_id [FK]</text><text x="210" y="21">bigint</text>
+          <text x="0" y="42">license_number</text><text x="210" y="42">varchar(50)</text>
+          <text x="0" y="63">front_image</text><text x="210" y="63">varchar(255)</text>
+          <text x="0" y="84">back_image</text><text x="210" y="84">varchar(255)</text>
+          <text x="0" y="105">expiration_date</text><text x="210" y="105">date</text>
+          <text x="0" y="126">status</text><text x="210" y="126">varchar(50)</text>
+          <text x="0" y="147">rejection_reason</text><text x="210" y="147">text</text>
+          <text x="0" y="168">verified_at</text><text x="210" y="168">timestamp</text>
+          <text x="0" y="189">created_at</text><text x="210" y="189">timestamp</text>
+        </g>
+      </g>
+
+      <!-- 3. OPERATOR_PROFILES -->
+      <g transform="translate(70, 690)">
+        <rect width="320" height="305" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="320" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">OPERATOR_PROFILES</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="210" y="0">bigint</text>
+          <text x="0" y="20">user_id [FK, UK]</text><text x="210" y="20">bigint</text>
+          <text x="0" y="40">business_name</text><text x="210" y="40">varchar(150)</text>
+          <text x="0" y="60">business_contact_number</text><text x="210" y="60">varchar(50)</text>
+          <text x="0" y="80">municipality</text><text x="210" y="80">varchar(100)</text>
+          <text x="0" y="100">barangay</text><text x="210" y="100">varchar(100)</text>
+          <text x="0" y="120">business_address</text><text x="210" y="120">text</text>
+          <text x="0" y="140">latitude / longitude</text><text x="210" y="140">decimal(10,7)</text>
+          <text x="0" y="160">business_permit</text><text x="210" y="160">varchar(255)</text>
+          <text x="0" y="180">dti_sec_registration</text><text x="210" y="180">varchar(255)</text>
+          <text x="0" y="200">status</text><text x="210" y="200">varchar(50)</text>
+          <text x="0" y="220">rejection_reason</text><text x="210" y="220">text</text>
+          <text x="0" y="240">created_at</text><text x="210" y="240">timestamp</text>
+        </g>
+      </g>
+
+      <!-- 4. NOTIFICATIONS -->
+      <g transform="translate(70, 1030)">
+        <rect width="320" height="240" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="320" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">NOTIFICATIONS</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="210" y="0">bigint</text>
+          <text x="0" y="21">user_id [FK]</text><text x="210" y="21">bigint</text>
+          <text x="0" y="42">title</text><text x="210" y="42">varchar(150)</text>
+          <text x="0" y="63">message</text><text x="210" y="63">text</text>
+          <text x="0" y="84">type (call, booking, chat)</text><text x="210" y="84">varchar(50)</text>
+          <text x="0" y="105">action_url</text><text x="210" y="105">varchar(255)</text>
+          <text x="0" y="126">is_read</text><text x="210" y="126">boolean</text>
+          <text x="0" y="147">created_at</text><text x="210" y="147">timestamp</text>
+        </g>
+      </g>
+
+      <!-- 5. STORED_FILES -->
+      <g transform="translate(70, 1310)">
+        <rect width="320" height="180" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="320" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">STORED_FILES</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="210" y="0">bigint</text>
+          <text x="0" y="21">path [UK]</text><text x="210" y="21">varchar(255)</text>
+          <text x="0" y="42">mime_type</text><text x="210" y="42">varchar(100)</text>
+          <text x="0" y="63">content_base64</text><text x="210" y="63">longtext</text>
+          <text x="0" y="84">created_at</text><text x="210" y="84">timestamp</text>
+          <text x="0" y="105">updated_at</text><text x="210" y="105">timestamp</text>
+        </g>
+      </g>
+
+      <!-- COLUMN 2: USERS & AUTH -->
+
+      <!-- 6. USERS -->
+      <g transform="translate(470, 130)">
+        <rect width="380" height="410" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="380" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">USERS</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="250" y="0">bigint</text>
+          <text x="0" y="21">first_name / last_name</text><text x="250" y="21">varchar(100)</text>
+          <text x="0" y="42">email [UK]</text><text x="250" y="42">varchar(150)</text>
+          <text x="0" y="63">mobile_number</text><text x="250" y="63">varchar(50)</text>
+          <text x="0" y="84">password</text><text x="250" y="84">varchar(255)</text>
+          <text x="0" y="105">role (renter, operator, admin)</text><text x="250" y="105">varchar(20)</text>
+          <text x="0" y="126">sex / birthdate</text><text x="250" y="126">varchar / date</text>
+          <text x="0" y="147">municipality / barangay</text><text x="250" y="147">varchar(100)</text>
+          <text x="0" y="168">account_status</text><text x="250" y="168">varchar(50)</text>
+          <text x="0" y="189">profile_photo</text><text x="250" y="189">varchar(255)</text>
+          <text x="0" y="210">driver_license_status</text><text x="250" y="210">varchar(50)</text>
+          <text x="0" y="231">email_verified_at</text><text x="250" y="231">timestamp</text>
+          <text x="0" y="252">remember_token</text><text x="250" y="252">varchar(100)</text>
+          <text x="0" y="273">created_at</text><text x="250" y="273">timestamp</text>
+          <text x="0" y="294">updated_at</text><text x="250" y="294">timestamp</text>
+        </g>
+      </g>
+
+      <!-- 7. EMAIL_VERIFICATION_OTPS -->
+      <g transform="translate(470, 580)">
+        <rect width="380" height="180" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="380" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">EMAIL_VERIFICATION_OTPS</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="250" y="0">bigint</text>
+          <text x="0" y="22">email</text><text x="250" y="22">varchar(150)</text>
+          <text x="0" y="44">otp_code</text><text x="250" y="44">varchar(6)</text>
+          <text x="0" y="66">expires_at</text><text x="250" y="66">timestamp</text>
+          <text x="0" y="88">created_at</text><text x="250" y="88">timestamp</text>
+        </g>
+      </g>
+
+      <!-- 8. PERSONAL_ACCESS_TOKENS -->
+      <g transform="translate(470, 800)">
+        <rect width="380" height="240" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="380" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">PERSONAL_ACCESS_TOKENS</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="250" y="0">bigint</text>
+          <text x="0" y="21">tokenable_type / tokenable_id</text><text x="250" y="21">varchar / bigint</text>
+          <text x="0" y="42">name</text><text x="250" y="42">varchar(255)</text>
+          <text x="0" y="63">token [UK]</text><text x="250" y="63">varchar(64)</text>
+          <text x="0" y="84">abilities</text><text x="250" y="84">text</text>
+          <text x="0" y="105">last_used_at</text><text x="250" y="105">timestamp</text>
+          <text x="0" y="126">expires_at</text><text x="250" y="126">timestamp</text>
+          <text x="0" y="147">created_at / updated_at</text><text x="250" y="147">timestamp</text>
+        </g>
+      </g>
+
+      <!-- 9. PLATFORM_SETTINGS -->
+      <g transform="translate(470, 1080)">
+        <rect width="380" height="210" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="380" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">PLATFORM_SETTINGS</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="250" y="0">bigint</text>
+          <text x="0" y="21">key [UK]</text><text x="250" y="21">varchar(100)</text>
+          <text x="0" y="42">value</text><text x="250" y="42">text</text>
+          <text x="0" y="63">description</text><text x="250" y="63">varchar(255)</text>
+          <text x="0" y="84">type</text><text x="250" y="84">varchar(50)</text>
+          <text x="0" y="105">is_public</text><text x="250" y="105">boolean</text>
+          <text x="0" y="126">created_at / updated_at</text><text x="250" y="126">timestamp</text>
+        </g>
+      </g>
+
+      <!-- COLUMN 3: VEHICLES & BOOKINGS -->
+
+      <!-- 10. VEHICLES -->
+      <g transform="translate(950, 130)">
+        <rect width="400" height="470" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="400" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">VEHICLES</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="270" y="0">bigint</text>
+          <text x="0" y="20">operator_id [FK]</text><text x="270" y="20">bigint</text>
+          <text x="0" y="40">vehicle_type_id [FK]</text><text x="270" y="40">bigint</text>
+          <text x="0" y="60">brand_id [FK]</text><text x="270" y="60">bigint</text>
+          <text x="0" y="80">body_type_id [FK]</text><text x="270" y="80">bigint</text>
+          <text x="0" y="100">transmission_type_id [FK]</text><text x="270" y="100">bigint</text>
+          <text x="0" y="120">fuel_type_id [FK]</text><text x="270" y="120">bigint</text>
+          <text x="0" y="140">name / model</text><text x="270" y="140">varchar(150)</text>
+          <text x="0" y="160">year_model / plate_number</text><text x="270" y="160">int / varchar</text>
+          <text x="0" y="180">daily_rate / reservation_fee</text><text x="270" y="180">decimal(10,2)</text>
+          <text x="0" y="200">seating_capacity / mileage</text><text x="270" y="200">int</text>
+          <text x="0" y="220">quantity</text><text x="270" y="220">int</text>
+          <text x="0" y="240">features / amenities</text><text x="270" y="240">json</text>
+          <text x="0" y="260">availability_status</text><text x="270" y="260">varchar(50)</text>
+          <text x="0" y="280">pickup_address</text><text x="270" y="280">text</text>
+          <text x="0" y="300">pickup_latitude / pickup_longitude</text><text x="270" y="300">decimal(10,7)</text>
+          <text x="0" y="320">rating / rating_count</text><text x="270" y="320">decimal / int</text>
+          <text x="0" y="340">created_at / updated_at</text><text x="270" y="340">timestamp</text>
+        </g>
+      </g>
+
+      <!-- 11. BOOKINGS -->
+      <g transform="translate(950, 650)">
+        <rect width="400" height="540" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="400" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">BOOKINGS</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="270" y="0">bigint</text>
+          <text x="0" y="20">renter_id [FK]</text><text x="270" y="20">bigint</text>
+          <text x="0" y="40">operator_id [FK]</text><text x="270" y="40">bigint</text>
+          <text x="0" y="60">vehicle_id [FK]</text><text x="270" y="60">bigint</text>
+          <text x="0" y="80">start_date / end_date</text><text x="270" y="80">date</text>
+          <text x="0" y="100">total_days</text><text x="270" y="100">int</text>
+          <text x="0" y="120">daily_rate / reservation_fee</text><text x="270" y="120">decimal(10,2)</text>
+          <text x="0" y="140">total_price</text><text x="270" y="140">decimal(10,2)</text>
+          <text x="0" y="160">status / payment_status</text><text x="270" y="160">varchar(50)</text>
+          <text x="0" y="180">paymongo_payment_id</text><text x="270" y="180">varchar(150)</text>
+          <text x="0" y="200">pickup_location</text><text x="270" y="200">text</text>
+          <text x="0" y="220">extension_status / price / end_date</text><text x="270" y="220">varchar/dec/date</text>
+          <text x="0" y="240">start_mileage / end_mileage</text><text x="270" y="240">int</text>
+          <text x="0" y="260">start_fuel_level / end_fuel_level</text><text x="270" y="260">int</text>
+          <text x="0" y="280">inspection_photos</text><text x="270" y="280">json</text>
+          <text x="0" y="300">current_latitude / longitude</text><text x="270" y="300">decimal(10,7)</text>
+          <text x="0" y="320">current_speed</text><text x="270" y="320">decimal(5,2)</text>
+          <text x="0" y="340">current_street / brgy / city</text><text x="270" y="340">varchar</text>
+          <text x="0" y="360">current_location_address</text><text x="270" y="360">text</text>
+          <text x="0" y="380">rating / review</text><text x="270" y="380">int / text</text>
+          <text x="0" y="400">created_at / updated_at</text><text x="270" y="400">timestamp</text>
+        </g>
+      </g>
+
+      <!-- COLUMN 4: IMAGES, MAINTENANCES & CALLS/CHATS -->
+
+      <!-- 12. VEHICLE_IMAGES -->
+      <g transform="translate(1450, 130)">
+        <rect width="340" height="180" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="340" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">VEHICLE_IMAGES</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="230" y="0">bigint</text>
+          <text x="0" y="22">vehicle_id [FK]</text><text x="230" y="22">bigint</text>
+          <text x="0" y="44">image_path</text><text x="230" y="44">varchar(255)</text>
+          <text x="0" y="66">is_cover</text><text x="230" y="66">boolean</text>
+          <text x="0" y="88">created_at / updated_at</text><text x="230" y="88">timestamp</text>
+        </g>
+      </g>
+
+      <!-- 13. VEHICLE_MAINTENANCES -->
+      <g transform="translate(1450, 350)">
+        <rect width="340" height="265" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="340" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">VEHICLE_MAINTENANCES</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="230" y="0">bigint</text>
+          <text x="0" y="21">vehicle_id [FK]</text><text x="230" y="21">bigint</text>
+          <text x="0" y="42">operator_id [FK]</text><text x="230" y="42">bigint</text>
+          <text x="0" y="63">service_type</text><text x="230" y="63">varchar(100)</text>
+          <text x="0" y="84">service_date</text><text x="230" y="84">date</text>
+          <text x="0" y="105">mileage_at_service</text><text x="230" y="105">int</text>
+          <text x="0" y="126">cost</text><text x="230" y="126">decimal(10,2)</text>
+          <text x="0" y="147">status</text><text x="230" y="147">varchar(50)</text>
+          <text x="0" y="168">notes</text><text x="230" y="168">text</text>
+          <text x="0" y="189">created_at / updated_at</text><text x="230" y="189">timestamp</text>
+        </g>
+      </g>
+
+      <!-- 14. CALLS -->
+      <g transform="translate(1450, 650)">
+        <rect width="340" height="240" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="340" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">CALLS</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="230" y="0">bigint</text>
+          <text x="0" y="21">caller_id [FK]</text><text x="230" y="21">bigint</text>
+          <text x="0" y="42">receiver_id [FK]</text><text x="230" y="42">bigint</text>
+          <text x="0" y="63">booking_id [FK]</text><text x="230" y="63">bigint</text>
+          <text x="0" y="84">channel_name (LiveKit)</text><text x="230" y="84">varchar(100)</text>
+          <text x="0" y="105">status (ringing, ended, missed)</text><text x="230" y="105">varchar(50)</text>
+          <text x="0" y="126">started_at / ended_at</text><text x="230" y="126">timestamp</text>
+          <text x="0" y="147">duration (seconds)</text><text x="230" y="147">int</text>
+        </g>
+      </g>
+
+      <!-- 15. MESSAGES -->
+      <g transform="translate(1450, 930)">
+        <rect width="340" height="240" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="340" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">MESSAGES</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="230" y="0">bigint</text>
+          <text x="0" y="21">sender_id [FK]</text><text x="230" y="21">bigint</text>
+          <text x="0" y="42">receiver_id [FK]</text><text x="230" y="42">bigint</text>
+          <text x="0" y="63">vehicle_id [FK]</text><text x="230" y="63">bigint</text>
+          <text x="0" y="84">message</text><text x="230" y="84">text</text>
+          <text x="0" y="105">image_url</text><text x="230" y="105">varchar(255)</text>
+          <text x="0" y="126">is_read</text><text x="230" y="126">boolean</text>
+          <text x="0" y="147">created_at / updated_at</text><text x="230" y="147">timestamp</text>
+        </g>
+      </g>
+
+      <!-- COLUMN 5: CONVERSATIONS & LOOKUP TABLES -->
+
+      <!-- 16. CONVERSATION_STATES -->
+      <g transform="translate(1890, 930)">
+        <rect width="340" height="180" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="340" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">CONVERSATION_STATES</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="230" y="0">bigint</text>
+          <text x="0" y="22">user_id [FK]</text><text x="230" y="22">bigint</text>
+          <text x="0" y="44">other_user_id [FK]</text><text x="230" y="44">bigint</text>
+          <text x="0" y="66">archived_at / deleted_at</text><text x="230" y="66">timestamp</text>
+          <text x="0" y="88">created_at / updated_at</text><text x="230" y="88">timestamp</text>
+        </g>
+      </g>
+
+      <!-- 17. VEHICLE_TYPES -->
+      <g transform="translate(1890, 130)">
+        <rect width="340" height="170" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="340" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">VEHICLE_TYPES</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="230" y="0">bigint</text>
+          <text x="0" y="21">name</text><text x="230" y="21">varchar(100)</text>
+          <text x="0" y="42">slug [UK]</text><text x="230" y="42">varchar(100)</text>
+          <text x="0" y="63">icon</text><text x="230" y="63">varchar(150)</text>
+          <text x="0" y="84">is_active</text><text x="230" y="84">boolean</text>
+        </g>
+      </g>
+
+      <!-- 18. VEHICLE_BRANDS -->
+      <g transform="translate(1890, 330)">
+        <rect width="340" height="170" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="340" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">VEHICLE_BRANDS</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="230" y="0">bigint</text>
+          <text x="0" y="21">name</text><text x="230" y="21">varchar(100)</text>
+          <text x="0" y="42">slug [UK]</text><text x="230" y="42">varchar(100)</text>
+          <text x="0" y="63">is_active</text><text x="230" y="63">boolean</text>
+          <text x="0" y="84">created_at / updated_at</text><text x="230" y="84">timestamp</text>
+        </g>
+      </g>
+
+      <!-- 19. BODY_TYPES -->
+      <g transform="translate(1890, 530)">
+        <rect width="340" height="170" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="340" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">BODY_TYPES</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="230" y="0">bigint</text>
+          <text x="0" y="21">name</text><text x="230" y="21">varchar(100)</text>
+          <text x="0" y="42">slug [UK]</text><text x="230" y="42">varchar(100)</text>
+          <text x="0" y="63">is_active</text><text x="230" y="63">boolean</text>
+          <text x="0" y="84">created_at / updated_at</text><text x="230" y="84">timestamp</text>
+        </g>
+      </g>
+
+      <!-- 20. TRANSMISSION_TYPES -->
+      <g transform="translate(1890, 730)">
+        <rect width="340" height="170" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="340" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">TRANSMISSION_TYPES</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="230" y="0">bigint</text>
+          <text x="0" y="21">name</text><text x="230" y="21">varchar(100)</text>
+          <text x="0" y="42">slug [UK]</text><text x="230" y="42">varchar(100)</text>
+          <text x="0" y="63">is_active</text><text x="230" y="63">boolean</text>
+          <text x="0" y="84">created_at / updated_at</text><text x="230" y="84">timestamp</text>
+        </g>
+      </g>
+
+      <!-- COLUMN 6: FUEL_TYPES & LARAVEL INFRASTRUCTURE TABLES -->
+
+      <!-- 21. FUEL_TYPES -->
+      <g transform="translate(2330, 130)">
+        <rect width="320" height="170" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="320" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">FUEL_TYPES</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="210" y="0">bigint</text>
+          <text x="0" y="21">name</text><text x="210" y="21">varchar(100)</text>
+          <text x="0" y="42">slug [UK]</text><text x="210" y="42">varchar(100)</text>
+          <text x="0" y="63">is_active</text><text x="210" y="63">boolean</text>
+          <text x="0" y="84">created_at / updated_at</text><text x="210" y="84">timestamp</text>
+        </g>
+      </g>
+
+      <!-- 22. SESSIONS -->
+      <g transform="translate(2330, 330)">
+        <rect width="320" height="190" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="320" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">SESSIONS</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="210" y="0">varchar(255)</text>
+          <text x="0" y="21">user_id [FK]</text><text x="210" y="21">bigint</text>
+          <text x="0" y="42">ip_address</text><text x="210" y="42">varchar(45)</text>
+          <text x="0" y="63">user_agent</text><text x="210" y="63">text</text>
+          <text x="0" y="84">payload</text><text x="210" y="84">longtext</text>
+          <text x="0" y="105">last_activity</text><text x="210" y="105">int</text>
+        </g>
+      </g>
+
+      <!-- 23. PASSWORD_RESET_TOKENS -->
+      <g transform="translate(2330, 550)">
+        <rect width="320" height="140" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="320" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">PASSWORD_RESET_TOKENS</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">email [PK]</text><text x="210" y="0">varchar(255)</text>
+          <text x="0" y="22">token</text><text x="210" y="22">varchar(255)</text>
+          <text x="0" y="44">created_at</text><text x="210" y="44">timestamp</text>
+        </g>
+      </g>
+
+      <!-- 24. JOBS -->
+      <g transform="translate(2330, 720)">
+        <rect width="320" height="190" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="320" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">JOBS</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="210" y="0">bigint</text>
+          <text x="0" y="21">queue</text><text x="210" y="21">varchar(255)</text>
+          <text x="0" y="42">payload</text><text x="210" y="42">longtext</text>
+          <text x="0" y="63">attempts</text><text x="210" y="63">tinyint</text>
+          <text x="0" y="84">reserved_at / available_at</text><text x="210" y="84">int</text>
+          <text x="0" y="105">created_at</text><text x="210" y="105">int</text>
+        </g>
+      </g>
+
+      <!-- 25. JOB_BATCHES -->
+      <g transform="translate(2330, 940)">
+        <rect width="320" height="210" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="320" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">JOB_BATCHES</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="210" y="0">varchar(255)</text>
+          <text x="0" y="21">name</text><text x="210" y="21">varchar(255)</text>
+          <text x="0" y="42">total_jobs / pending_jobs</text><text x="210" y="42">int</text>
+          <text x="0" y="63">failed_jobs / failed_job_ids</text><text x="210" y="63">int / longtext</text>
+          <text x="0" y="84">options</text><text x="210" y="84">mediumtext</text>
+          <text x="0" y="105">cancelled_at / finished_at</text><text x="210" y="105">int</text>
+          <text x="0" y="126">created_at</text><text x="210" y="126">int</text>
+        </g>
+      </g>
+
+      <!-- 26. FAILED_JOBS -->
+      <g transform="translate(2330, 1180)">
+        <rect width="320" height="190" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="320" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">FAILED_JOBS</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">id [PK]</text><text x="210" y="0">bigint</text>
+          <text x="0" y="21">uuid [UK]</text><text x="210" y="21">varchar(255)</text>
+          <text x="0" y="42">connection / queue</text><text x="210" y="42">text</text>
+          <text x="0" y="63">payload</text><text x="210" y="63">longtext</text>
+          <text x="0" y="84">exception</text><text x="210" y="84">longtext</text>
+          <text x="0" y="105">failed_at</text><text x="210" y="105">timestamp</text>
+        </g>
+      </g>
+
+      <!-- 27 & 28. CACHE & CACHE_LOCKS -->
+      <g transform="translate(2330, 1400)">
+        <rect width="320" height="180" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+        <line x1="0" y1="36" x2="320" y2="36" stroke="#000000" stroke-width="1.5"/>
+        <text x="16" y="24" font-size="13" font-weight="700" fill="#000000">CACHE &amp; CACHE_LOCKS</text>
+        <g transform="translate(16, 58)" font-size="11">
+          <text x="0" y="0" font-weight="700">cache.key [PK]</text><text x="210" y="0">varchar(255)</text>
+          <text x="0" y="21">cache.value / expiration</text><text x="210" y="21">mediumtext/int</text>
+          <text x="0" y="42">---------------------------------------</text><text x="210" y="42">---------</text>
+          <text x="0" y="63" font-weight="700">locks.key [PK]</text><text x="210" y="63">varchar(255)</text>
+          <text x="0" y="84">locks.owner / expiration</text><text x="210" y="84">varchar/int</text>
+        </g>
+      </g>
+
+      <!-- Footer Note -->
+      <g transform="translate(70, 1680)">
+        <text x="0" y="0" font-size="12" font-weight="600" fill="#000000">Ride4Rent Capstone Project - Relational Entity-Relationship Diagram (28 Tables Complete)</text>
+        <text x="2500" y="0" font-size="12" fill="#000000">October 2026</text>
+      </g>
+
+    </svg>
+  </div>
+
+  <!-- Download Scripts -->
+  <script>
+    function getSvgBlob() {
+      const svgElement = document.getElementById("erd-svg");
+      const serializer = new XMLSerializer();
+      let source = serializer.serializeToString(svgElement);
+
+      if (!source.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)) {
+        source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+      }
+      if (!source.match(/^<svg[^>]+xmlns\:xlink="http\:\/\/www\.w3\.org\/1999\/xlink"/)) {
+        source = source.replace(/^<svg/, '<svg xmlns:xlink="http://www.w3.org/1999/xlink"');
+      }
+      return new Blob([source], { type: "image/svg+xml;charset=utf-8" });
+    }
+
+    function downloadSVG() {
+      const blob = getSvgBlob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "ride4rent_er_diagram.svg";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function downloadImage(format) {
+      const svgElement = document.getElementById("erd-svg");
+      const width = parseInt(svgElement.getAttribute("width"));
+      const height = parseInt(svgElement.getAttribute("height"));
+
+      const blob = getSvgBlob();
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+
+      img.onload = function() {
+        const canvas = document.createElement("canvas");
+        const scale = 1.5;
+        canvas.width = width * scale;
+        canvas.height = height * scale;
+
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.scale(scale, scale);
+        ctx.drawImage(img, 0, 0);
+
+        URL.revokeObjectURL(url);
+
+        const mime = format === "jpeg" ? "image/jpeg" : "image/png";
+        const filename = format === "jpeg" ? "ride4rent_er_diagram.jpg" : "ride4rent_er_diagram.png";
+
+        const imageURI = canvas.toDataURL(mime, 0.95);
+        const link = document.createElement("a");
+        link.download = filename;
+        link.href = imageURI;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      };
+
+      img.src = url;
+    }
+  </script>
+</body>
+</html>

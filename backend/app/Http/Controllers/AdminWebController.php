@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\AdminAuditLog;
 use App\Models\Booking;
 use App\Models\Notification;
-use App\Models\OperatorProfile;
 use App\Models\PlatformSetting;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
@@ -75,9 +74,9 @@ class AdminWebController extends Controller
             $search = trim($request->input('search'));
             $usersQuery->where(function ($q) use ($search) {
                 $q->where('first_name', 'like', "%{$search}%")
-                  ->orWhere('last_name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%")
-                  ->orWhere('mobile_number', 'like', "%{$search}%");
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('mobile_number', 'like', "%{$search}%");
             });
         }
 
@@ -137,10 +136,10 @@ class AdminWebController extends Controller
         $disputes = Booking::with(['renter', 'operator', 'vehicle'])
             ->where(function ($q) {
                 $q->where('status', 'cancelled')
-                  ->orWhere('damage_charge', '>', 0)
-                  ->orWhere('fuel_charge', '>', 0)
-                  ->orWhere('late_fee', '>', 0)
-                  ->orWhereNotNull('admin_memo');
+                    ->orWhere('damage_charge', '>', 0)
+                    ->orWhere('fuel_charge', '>', 0)
+                    ->orWhere('late_fee', '>', 0)
+                    ->orWhereNotNull('admin_memo');
             })
             ->latest()
             ->get();
@@ -194,8 +193,8 @@ class AdminWebController extends Controller
             action: 'account_status_changed',
             targetType: 'User',
             targetId: $user->id,
-            targetName: trim($user->first_name . ' ' . $user->last_name),
-            details: "Changed status from {$previousStatus} to " . strtoupper($newStatus) . ($reason ? " (Reason: {$reason})" : "")
+            targetName: trim($user->first_name.' '.$user->last_name),
+            details: "Changed status from {$previousStatus} to ".strtoupper($newStatus).($reason ? " (Reason: {$reason})" : '')
         );
 
         if ($newStatus === 'suspended') {
@@ -216,7 +215,7 @@ class AdminWebController extends Controller
             ]);
         }
 
-        return back()->with('status', "Account status for {$user->first_name} {$user->last_name} ({$user->email}) updated to " . strtoupper($newStatus) . ".");
+        return back()->with('status', "Account status for {$user->first_name} {$user->last_name} ({$user->email}) updated to ".strtoupper($newStatus).'.');
     }
 
     /**
@@ -235,7 +234,7 @@ class AdminWebController extends Controller
             action: 'account_status_toggled',
             targetType: 'User',
             targetId: $user->id,
-            targetName: trim($user->first_name . ' ' . $user->last_name),
+            targetName: trim($user->first_name.' '.$user->last_name),
             details: "Account access toggled to {$newStatus}"
         );
 
@@ -263,7 +262,7 @@ class AdminWebController extends Controller
 
         try {
             $email = $user->email;
-            $name = trim($user->first_name . ' ' . $user->last_name);
+            $name = trim($user->first_name.' '.$user->last_name);
             $user->delete();
 
             AdminAuditLog::record(
@@ -281,8 +280,8 @@ class AdminWebController extends Controller
                 action: 'user_suspended_on_delete',
                 targetType: 'User',
                 targetId: $user->id,
-                targetName: trim($user->first_name . ' ' . $user->last_name),
-                details: "Attempted delete had associated records. Account was suspended instead."
+                targetName: trim($user->first_name.' '.$user->last_name),
+                details: 'Attempted delete had associated records. Account was suspended instead.'
             );
 
             return back()->with('status', "User {$user->email} has active records on the platform. The account was suspended instead.");
@@ -385,6 +384,8 @@ class AdminWebController extends Controller
             $booking->review_moderation_note = $validated['review_moderation_note'];
         }
         $booking->save();
+        $visible = Booking::where('vehicle_id', $booking->vehicle_id)->whereNotNull('rating')->where('is_review_hidden', false);
+        $booking->vehicle?->update(['rating' => round((float) (clone $visible)->avg('rating'), 2), 'rating_count' => $visible->count()]);
 
         AdminAuditLog::record(
             action: 'review_moderated',
@@ -395,6 +396,7 @@ class AdminWebController extends Controller
         );
 
         $state = $booking->is_review_hidden ? 'hidden' : 'visible';
+
         return back()->with('status', "Booking #{$booking->id} review is now {$state}.");
     }
 
@@ -415,7 +417,7 @@ class AdminWebController extends Controller
             targetType: 'Booking',
             targetId: $booking->id,
             targetName: "Booking #{$booking->id}",
-            details: "Added resolution memo: " . $validated['admin_memo']
+            details: 'Added resolution memo: '.$validated['admin_memo']
         );
 
         return back()->with('status', "Official resolution memo logged for Booking #{$booking->id}.");
@@ -428,7 +430,7 @@ class AdminWebController extends Controller
     {
         $headers = [
             'Content-Type' => 'text/csv; charset=utf-8',
-            'Content-Disposition' => 'attachment; filename="Ride4Rent_Renters_KYC_Audit_' . date('Y-m-d') . '.csv"',
+            'Content-Disposition' => 'attachment; filename="Ride4Rent_Renters_KYC_Audit_'.date('Y-m-d').'.csv"',
         ];
 
         return response()->stream(function () {
@@ -439,7 +441,7 @@ class AdminWebController extends Controller
                 foreach ($renters as $r) {
                     fputcsv($handle, [
                         $r->id,
-                        trim($r->first_name . ' ' . $r->middle_name . ' ' . $r->last_name . ' ' . $r->suffix),
+                        trim($r->first_name.' '.$r->middle_name.' '.$r->last_name.' '.$r->suffix),
                         $r->email,
                         $r->mobile_number ?: 'N/A',
                         $r->date_of_birth ? $r->date_of_birth->format('Y-m-d') : 'N/A',
@@ -459,7 +461,7 @@ class AdminWebController extends Controller
     {
         $headers = [
             'Content-Type' => 'text/csv; charset=utf-8',
-            'Content-Disposition' => 'attachment; filename="Ride4Rent_Operators_Directory_' . date('Y-m-d') . '.csv"',
+            'Content-Disposition' => 'attachment; filename="Ride4Rent_Operators_Directory_'.date('Y-m-d').'.csv"',
         ];
 
         return response()->stream(function () {
@@ -472,10 +474,10 @@ class AdminWebController extends Controller
                     fputcsv($handle, [
                         $op->id,
                         $prof?->business_name ?: 'N/A',
-                        trim($op->first_name . ' ' . $op->last_name),
+                        trim($op->first_name.' '.$op->last_name),
                         $op->email,
                         $op->mobile_number ?: 'N/A',
-                        $prof ? ($prof->street_address . ', ' . $prof->barangay . ', ' . $prof->municipality) : 'N/A',
+                        $prof ? ($prof->street_address.', '.$prof->barangay.', '.$prof->municipality) : 'N/A',
                         ucfirst($op->account_status),
                         $op->created_at?->format('Y-m-d H:i:s'),
                     ]);
@@ -490,7 +492,7 @@ class AdminWebController extends Controller
     {
         $headers = [
             'Content-Type' => 'text/csv; charset=utf-8',
-            'Content-Disposition' => 'attachment; filename="Ride4Rent_Admin_Audit_Logs_' . date('Y-m-d') . '.csv"',
+            'Content-Disposition' => 'attachment; filename="Ride4Rent_Admin_Audit_Logs_'.date('Y-m-d').'.csv"',
         ];
 
         return response()->stream(function () {
@@ -533,8 +535,8 @@ class AdminWebController extends Controller
             action: 'operator_approved',
             targetType: 'User',
             targetId: $user->id,
-            targetName: trim($user->first_name . ' ' . $user->last_name),
-            details: "Accredited operator and approved business permit for " . ($user->operatorProfile?->business_name ?: $user->first_name)
+            targetName: trim($user->first_name.' '.$user->last_name),
+            details: 'Accredited operator and approved business permit for '.($user->operatorProfile?->business_name ?: $user->first_name)
         );
 
         Notification::create([
@@ -569,8 +571,8 @@ class AdminWebController extends Controller
             action: 'operator_rejected',
             targetType: 'User',
             targetId: $user->id,
-            targetName: trim($user->first_name . ' ' . $user->last_name),
-            details: "Rejected operator application: " . $validated['rejection_reason']
+            targetName: trim($user->first_name.' '.$user->last_name),
+            details: 'Rejected operator application: '.$validated['rejection_reason']
         );
 
         Notification::create([
@@ -601,7 +603,7 @@ class AdminWebController extends Controller
             action: 'license_approved',
             targetType: 'User',
             targetId: $user->id,
-            targetName: trim($user->first_name . ' ' . $user->last_name),
+            targetName: trim($user->first_name.' '.$user->last_name),
             details: "Verified and approved renter's driver's license"
         );
 
@@ -637,8 +639,8 @@ class AdminWebController extends Controller
             action: 'license_rejected',
             targetType: 'User',
             targetId: $user->id,
-            targetName: trim($user->first_name . ' ' . $user->last_name),
-            details: "Rejected driver's license: " . $validated['rejection_reason']
+            targetName: trim($user->first_name.' '.$user->last_name),
+            details: "Rejected driver's license: ".$validated['rejection_reason']
         );
 
         Notification::create([

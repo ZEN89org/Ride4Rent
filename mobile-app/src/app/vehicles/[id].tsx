@@ -1,7 +1,4 @@
-import {
-  Ionicons,
-  MaterialCommunityIcons,
-} from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -15,7 +12,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -48,7 +45,8 @@ export default function VehicleDetailsScreen() {
   const { showSuccess, showError, showWarning, showModal } = useAppToast();
 
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loadedId, setLoadedId] = useState<string | null>(null);
+  const loading = !!id && loadedId !== String(id);
   const [showAuthSheet, setShowAuthSheet] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
@@ -83,20 +81,16 @@ export default function VehicleDetailsScreen() {
 
   // Multi-Car / Concurrent Rental Designated Driver State
   const [hasActiveTripOverlap, setHasActiveTripOverlap] = useState(false);
-  const [activeTripVehicleName, setActiveTripVehicleName] = useState<string>("");
+  const [activeTripVehicleName, setActiveTripVehicleName] =
+    useState<string>("");
   const [secondaryDriverName, setSecondaryDriverName] = useState("");
   const [secondaryDriverPhone, setSecondaryDriverPhone] = useState("");
 
   // Operator vehicle management state
   const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => {
-    if (!id) return;
-    loadVehicle();
-  }, [id]);
-
   const loadVehicle = () => {
-    setLoading(true);
+    setLoadedId(null);
     getVehicleById(id)
       .then((data) => {
         setVehicle(data);
@@ -105,21 +99,40 @@ export default function VehicleDetailsScreen() {
         console.error("Failed to load vehicle details:", err);
       })
       .finally(() => {
-        setLoading(false);
+        setLoadedId(String(id));
       });
   };
+
+  useEffect(() => {
+    if (!id) return;
+    let active = true;
+    getVehicleById(id)
+      .then((data) => {
+        if (active) setVehicle(data);
+      })
+      .catch((error) => console.error("Failed to load vehicle details:", error))
+      .finally(() => {
+        if (active) setLoadedId(String(id));
+      });
+    return () => {
+      active = false;
+    };
+  }, [id]);
 
   const handleBack = () => {
     if (router.canGoBack()) {
       router.back();
     } else {
-      router.replace(user?.role === "operator" ? "/operator-home" : "/(tabs)/home");
+      router.replace(
+        user?.role === "operator" ? "/operator-home" : "/(tabs)/home",
+      );
     }
   };
 
   const isOwner =
     user?.role === "operator" &&
-    ((vehicle as any)?.operator_id === user?.id || (vehicle as any)?.operator?.id === user?.id);
+    ((vehicle as any)?.operator_id === user?.id ||
+      (vehicle as any)?.operator?.id === user?.id);
 
   const handleDeleteVehicle = () => {
     showModal(
@@ -134,29 +147,41 @@ export default function VehicleDetailsScreen() {
             try {
               setDeleting(true);
               await api.delete(`/operator/vehicles/${vehicle?.id}`);
-              showSuccess("Listing Removed", "Vehicle deleted from your fleet.");
+              showSuccess(
+                "Listing Removed",
+                "Vehicle deleted from your fleet.",
+              );
               router.replace("/operator-vehicles" as any);
             } catch (e: any) {
-              showError("Error", e.response?.data?.message || "Could not delete vehicle.");
+              showError(
+                "Error",
+                e.response?.data?.message || "Could not delete vehicle.",
+              );
             } finally {
               setDeleting(false);
             }
           },
         },
       ],
-      "confirm"
+      "confirm",
     );
   };
 
   const handleToggleAvailability = async () => {
     if (!vehicle) return;
-    const newStatus = vehicle.availability_status === "available" ? "unavailable" : "available";
+    const newStatus =
+      vehicle.availability_status === "available" ? "unavailable" : "available";
     try {
-      await api.patch(`/operator/vehicles/${vehicle.id}`, { availability_status: newStatus });
+      await api.patch(`/operator/vehicles/${vehicle.id}`, {
+        availability_status: newStatus,
+      });
       showSuccess("Status Updated", `Vehicle set to ${newStatus}.`);
       loadVehicle();
     } catch (e: any) {
-      showError("Availability Notice", e.response?.data?.message || "Could not update availability.");
+      showError(
+        "Availability Notice",
+        e.response?.data?.message || "Could not update availability.",
+      );
     }
   };
 
@@ -167,7 +192,10 @@ export default function VehicleDetailsScreen() {
     }
 
     if (user?.role === "operator") {
-      showWarning("Operator Account", "Operators cannot rent vehicles. Use a customer account.");
+      showWarning(
+        "Operator Account",
+        "Operators cannot rent vehicles. Use a customer account.",
+      );
       return;
     }
 
@@ -176,17 +204,22 @@ export default function VehicleDetailsScreen() {
         "Driver's License Required",
         "To ensure rental safety, you must upload your Driver's License before booking a vehicle.",
         [
-          { text: "Upload Now", style: "default", onPress: () => router.push("/driver-license" as any) },
+          {
+            text: "Upload Now",
+            style: "default",
+            onPress: () => router.push("/driver-license" as any),
+          },
           { text: "Later", style: "cancel" },
         ],
-        "warning"
+        "warning",
       );
       return;
     }
 
     const isVerified = Boolean(user?.is_drivers_license_verified);
     const verificationStatus =
-      user?.license_verification_status || (isVerified ? "approved" : "pending");
+      user?.license_verification_status ||
+      (isVerified ? "approved" : "pending");
 
     if (verificationStatus === "rejected") {
       showModal(
@@ -194,10 +227,14 @@ export default function VehicleDetailsScreen() {
         user?.license_rejection_reason ||
           "Your driver's license was rejected. Please re-upload clear, valid photos of your license to proceed.",
         [
-          { text: "Re-upload Now", style: "default", onPress: () => router.push("/driver-license" as any) },
+          {
+            text: "Re-upload Now",
+            style: "default",
+            onPress: () => router.push("/driver-license" as any),
+          },
           { text: "Close", style: "cancel" },
         ],
-        "error"
+        "error",
       );
       return;
     }
@@ -207,19 +244,24 @@ export default function VehicleDetailsScreen() {
       .then((myBookings) => {
         const pendingUnpaid = myBookings.find(
           (b) =>
-            (b.status === "pending_payment" || (b.status as string) === "pending") &&
+            (b.status === "pending_payment" ||
+              (b.status as string) === "pending") &&
             b.payment_status !== "paid_reservation" &&
-            b.payment_status !== "paid_full"
+            b.payment_status !== "paid_full",
         );
         if (pendingUnpaid) {
           showModal(
             "Pending Reservation Notice",
             "You already have a pending vehicle reservation awaiting payment. Please settle or cancel your existing request in 'My Bookings' before reserving another vehicle.",
             [
-              { text: "View Bookings", style: "default", onPress: () => router.navigate("/(tabs)/bookings") },
+              {
+                text: "View Bookings",
+                style: "default",
+                onPress: () => router.navigate("/(tabs)/bookings"),
+              },
               { text: "Close", style: "cancel" },
             ],
-            "warning"
+            "warning",
           );
           return;
         }
@@ -228,17 +270,29 @@ export default function VehicleDetailsScreen() {
         const existingVehicleBooking = myBookings.find(
           (b) =>
             Number(b.vehicle_id) === Number(vehicle?.id) &&
-            ["pending_payment", "pending_verification", "approved", "awaiting_pickup", "pickup_in_progress", "trip_in_progress", "ongoing"].includes(b.status)
+            [
+              "pending_payment",
+              "pending_verification",
+              "approved",
+              "awaiting_pickup",
+              "pickup_in_progress",
+              "trip_in_progress",
+              "ongoing",
+            ].includes(b.status),
         );
         if (existingVehicleBooking) {
           showModal(
             "Existing Reservation",
             "You already have an active reservation request for this vehicle. Please manage your trip in 'My Bookings'.",
             [
-              { text: "View Bookings", style: "default", onPress: () => router.navigate("/(tabs)/bookings") },
+              {
+                text: "View Bookings",
+                style: "default",
+                onPress: () => router.navigate("/(tabs)/bookings"),
+              },
               { text: "Close", style: "cancel" },
             ],
-            "warning"
+            "warning",
           );
           return;
         }
@@ -253,7 +307,16 @@ export default function VehicleDetailsScreen() {
         const selectedEndStr = formatDateForCheck(selectedEndDate);
 
         const activeTrip = myBookings.find((b) => {
-          if (["completed", "cancelled", "rejected", "refunded", "no_show"].includes(b.status)) return false;
+          if (
+            [
+              "completed",
+              "cancelled",
+              "rejected",
+              "refunded",
+              "no_show",
+            ].includes(b.status)
+          )
+            return false;
           const isActiveStatus = [
             "pending_verification",
             "approved",
@@ -267,13 +330,20 @@ export default function VehicleDetailsScreen() {
           if (!isActiveStatus) return false;
 
           const bStart = (b.start_date || "").split("T")[0];
-          const bEnd = (b.extension_end_date || b.extended_end_date || b.end_date || "").split("T")[0];
+          const bEnd = (
+            b.extension_end_date ||
+            b.extended_end_date ||
+            b.end_date ||
+            ""
+          ).split("T")[0];
           return bStart <= selectedEndStr && bEnd >= selectedStartStr;
         });
 
         if (activeTrip) {
           setHasActiveTripOverlap(true);
-          setActiveTripVehicleName(activeTrip.vehicle?.name || "Active Vehicle");
+          setActiveTripVehicleName(
+            activeTrip.vehicle?.name || "Active Vehicle",
+          );
         } else {
           setHasActiveTripOverlap(false);
           setActiveTripVehicleName("");
@@ -293,9 +363,21 @@ export default function VehicleDetailsScreen() {
       return `${y}-${m}-${day}`;
     };
 
-    const sDay = selectedStartDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    const eDay = selectedEndDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    const tripDays = Math.max(1, Math.round((selectedEndDate.getTime() - selectedStartDate.getTime()) / (1000 * 60 * 60 * 24)));
+    const sDay = selectedStartDate.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+    const eDay = selectedEndDate.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+    const tripDays = Math.max(
+      1,
+      Math.round(
+        (selectedEndDate.getTime() - selectedStartDate.getTime()) /
+          (1000 * 60 * 60 * 24),
+      ),
+    );
 
     return {
       startDateStr: formatDate(selectedStartDate),
@@ -311,10 +393,13 @@ export default function VehicleDetailsScreen() {
     if (submittingBooking) return;
     const { startDateStr, endDateStr } = calculateFormattedDates();
 
-    if (hasActiveTripOverlap && (!secondaryDriverName.trim() || !secondaryDriverPhone.trim())) {
+    if (
+      hasActiveTripOverlap &&
+      (!secondaryDriverName.trim() || !secondaryDriverPhone.trim())
+    ) {
       showError(
         "Designated Driver Required",
-        "Because you currently have an active rental trip, please enter the name and contact number of the authorized secondary driver."
+        "Because you currently have an active rental trip, please enter the name and contact number of the authorized secondary driver.",
       );
       return;
     }
@@ -326,14 +411,15 @@ export default function VehicleDetailsScreen() {
       const myBookings = await getMyBookings();
       const pendingUnpaid = myBookings.find(
         (b) =>
-          (b.status === "pending_payment" || (b.status as string) === "pending") &&
+          (b.status === "pending_payment" ||
+            (b.status as string) === "pending") &&
           b.payment_status !== "paid_reservation" &&
-          b.payment_status !== "paid_full"
+          b.payment_status !== "paid_full",
       );
       if (pendingUnpaid) {
         showError(
           "Pending Reservation Notice",
-          "You already have a pending booking request awaiting payment. Please settle or cancel it before booking another vehicle."
+          "You already have a pending booking request awaiting payment. Please settle or cancel it before booking another vehicle.",
         );
         setShowBookingModal(false);
         return;
@@ -347,21 +433,31 @@ export default function VehicleDetailsScreen() {
           ? `${bookingNotes.trim()} • Schedule: ${selectedStartTime} pickup → ${selectedEndTime} return`
           : `Schedule: ${selectedStartTime} pickup → ${selectedEndTime} return`,
         is_multi_vehicle_rental: hasActiveTripOverlap ? true : undefined,
-        secondary_driver_name: hasActiveTripOverlap ? secondaryDriverName.trim() : undefined,
-        secondary_driver_phone: hasActiveTripOverlap ? secondaryDriverPhone.trim() : undefined,
+        secondary_driver_name: hasActiveTripOverlap
+          ? secondaryDriverName.trim()
+          : undefined,
+        secondary_driver_phone: hasActiveTripOverlap
+          ? secondaryDriverPhone.trim()
+          : undefined,
       } as any);
 
       scheduleBookingReminders(createdBooking, true).catch(() => {});
 
       setShowBookingModal(false);
-      showSuccess("Reservation Created", "Booking request sent to host. Please settle reservation payment.");
+      showSuccess(
+        "Reservation Created",
+        "Booking request sent to host. Please settle reservation payment.",
+      );
       router.navigate("/(tabs)/bookings");
     } catch (e: any) {
       if (e.response?.data?.code === "LICENSE_REQUIRED") {
         setShowBookingModal(false);
         router.push("/driver-license" as any);
       } else {
-        showError("Booking Notice", e.response?.data?.message || "Failed to create booking.");
+        showError(
+          "Booking Notice",
+          e.response?.data?.message || "Failed to create booking.",
+        );
       }
     } finally {
       setSubmittingBooking(false);
@@ -379,7 +475,11 @@ export default function VehicleDetailsScreen() {
           <View style={{ width: 40 }} />
         </View>
         <View style={{ padding: Spacing.lg }}>
-          <Skeleton height={220} borderRadius={20} style={{ marginBottom: 20 }} />
+          <Skeleton
+            height={220}
+            borderRadius={20}
+            style={{ marginBottom: 20 }}
+          />
           <Skeleton width="60%" height={24} style={{ marginBottom: 10 }} />
           <Skeleton width="40%" height={16} style={{ marginBottom: 20 }} />
           <Skeleton height={100} borderRadius={16} />
@@ -401,13 +501,18 @@ export default function VehicleDetailsScreen() {
 
   const isFav = isFavorite(vehicle.id);
   const operator = (vehicle as any).operator;
-  const { startDateStr, endDateStr, displaySummary, displayStart, displayEnd } = calculateFormattedDates();
+  const { startDateStr, endDateStr, displaySummary, displayStart, displayEnd } =
+    calculateFormattedDates();
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.container}>
       {/* Header Bar */}
       <View style={styles.headerBar}>
-        <TouchableOpacity style={styles.circleButton} onPress={handleBack} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={styles.circleButton}
+          onPress={handleBack}
+          activeOpacity={0.8}
+        >
           <Ionicons name="arrow-back" size={22} color={Colors.dark} />
         </TouchableOpacity>
 
@@ -441,12 +546,21 @@ export default function VehicleDetailsScreen() {
         )}
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         {/* Multi-Image Showcase Carousel */}
         {(() => {
-          const allImages = (vehicle.images && vehicle.images.length > 0)
-            ? vehicle.images.map((img) => resolveImageUrl(img.image_url) || img.image_url)
-            : [resolveImageUrl(vehicle.image_url) || "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=60"];
+          const allImages =
+            vehicle.images && vehicle.images.length > 0
+              ? vehicle.images.map(
+                  (img) => resolveImageUrl(img.image_url) || img.image_url,
+                )
+              : [
+                  resolveImageUrl(vehicle.image_url) ||
+                    "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=60",
+                ];
 
           const screenWidth = Dimensions.get("window").width;
 
@@ -457,7 +571,9 @@ export default function VehicleDetailsScreen() {
                 pagingEnabled
                 showsHorizontalScrollIndicator={false}
                 onMomentumScrollEnd={(e) => {
-                  const newIndex = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
+                  const newIndex = Math.round(
+                    e.nativeEvent.contentOffset.x / screenWidth,
+                  );
                   setActiveImageIndex(newIndex);
                 }}
               >
@@ -479,7 +595,11 @@ export default function VehicleDetailsScreen() {
               {/* Counter / Pagination badge */}
               {allImages.length > 1 && (
                 <View style={styles.photoCounterBadge}>
-                  <Ionicons name="images-outline" size={13} color={Colors.white} />
+                  <Ionicons
+                    name="images-outline"
+                    size={13}
+                    color={Colors.white}
+                  />
                   <Text style={styles.photoCounterText}>
                     {activeImageIndex + 1} / {allImages.length}
                   </Text>
@@ -487,18 +607,35 @@ export default function VehicleDetailsScreen() {
               )}
 
               {/* Status Tag */}
-              <View style={[styles.statusTag, vehicle.availability_status === "available" ? styles.statusAvail : styles.statusUnavail]}>
+              <View
+                style={[
+                  styles.statusTag,
+                  vehicle.availability_status === "available"
+                    ? styles.statusAvail
+                    : styles.statusUnavail,
+                ]}
+              >
                 <Text style={styles.statusTagText}>
-                  {vehicle.availability_status === "available" ? "Available" : "Unavailable / Rented"}
+                  {vehicle.availability_status === "available"
+                    ? "Available"
+                    : "Unavailable / Rented"}
                 </Text>
               </View>
 
               {/* Tap to expand hint */}
               <TouchableOpacity
                 style={styles.expandIconBtn}
-                onPress={() => setFullscreenImage(allImages[activeImageIndex] || allImages[0])}
+                onPress={() =>
+                  setFullscreenImage(
+                    allImages[activeImageIndex] || allImages[0],
+                  )
+                }
               >
-                <Ionicons name="expand-outline" size={16} color={Colors.white} />
+                <Ionicons
+                  name="expand-outline"
+                  size={16}
+                  color={Colors.white}
+                />
               </TouchableOpacity>
             </View>
           );
@@ -512,7 +649,8 @@ export default function VehicleDetailsScreen() {
             contentContainerStyle={styles.thumbnailStrip}
           >
             {vehicle.images.map((img, idx) => {
-              const resolvedThumb = resolveImageUrl(img.image_url) || img.image_url;
+              const resolvedThumb =
+                resolveImageUrl(img.image_url) || img.image_url;
               return (
                 <TouchableOpacity
                   key={img.id}
@@ -525,7 +663,10 @@ export default function VehicleDetailsScreen() {
                     activeImageIndex === idx && styles.thumbItemActive,
                   ]}
                 >
-                  <Image source={{ uri: resolvedThumb }} style={styles.thumbImage} />
+                  <Image
+                    source={{ uri: resolvedThumb }}
+                    style={styles.thumbImage}
+                  />
                 </TouchableOpacity>
               );
             })}
@@ -537,15 +678,24 @@ export default function VehicleDetailsScreen() {
           <View style={styles.titleRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.vehicleName}>{vehicle.name}</Text>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 3 }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                  marginTop: 3,
+                }}
+              >
                 <Text style={styles.vehicleModel}>
-                  {vehicle.brand || "Sedan"} - {vehicle.transmission || "Automatic"}
+                  {vehicle.brand || "Sedan"} -{" "}
+                  {vehicle.transmission || "Automatic"}
                 </Text>
                 {vehicle.rating && (vehicle.rating_count ?? 0) > 0 ? (
                   <View style={styles.inlineRatingBadge}>
                     <Ionicons name="star" size={12} color="#F59E0B" />
                     <Text style={styles.inlineRatingText}>
-                      {Number(vehicle.rating).toFixed(1)} ({vehicle.rating_count})
+                      {Number(vehicle.rating).toFixed(1)} (
+                      {vehicle.rating_count})
                     </Text>
                   </View>
                 ) : (
@@ -556,7 +706,9 @@ export default function VehicleDetailsScreen() {
               </View>
             </View>
             <View style={styles.priceBadge}>
-              <Text style={styles.priceAmount}>₱{Number(vehicle.price_per_day).toLocaleString()}</Text>
+              <Text style={styles.priceAmount}>
+                ₱{Number(vehicle.price_per_day).toLocaleString()}
+              </Text>
               <Text style={styles.priceUnit}>/ day</Text>
             </View>
           </View>
@@ -569,26 +721,52 @@ export default function VehicleDetailsScreen() {
             style={styles.specsScrollView}
           >
             <View style={styles.specPill}>
-              <MaterialCommunityIcons name="car-seat" size={18} color={Colors.dark} />
+              <MaterialCommunityIcons
+                name="car-seat"
+                size={18}
+                color={Colors.dark}
+              />
               <Text style={styles.specText}>{vehicle.seats || 4} Seats</Text>
             </View>
             <View style={styles.specPill}>
-              <MaterialCommunityIcons name="car-shift-pattern" size={18} color={Colors.dark} />
-              <Text style={styles.specText}>{vehicle.transmission || "Auto"}</Text>
+              <MaterialCommunityIcons
+                name="car-shift-pattern"
+                size={18}
+                color={Colors.dark}
+              />
+              <Text style={styles.specText}>
+                {vehicle.transmission || "Auto"}
+              </Text>
             </View>
             <View style={styles.specPill}>
-              <MaterialCommunityIcons name="gas-station" size={18} color={Colors.dark} />
-              <Text style={styles.specText}>{vehicle.fuel_type || "Gasoline"}</Text>
+              <MaterialCommunityIcons
+                name="gas-station"
+                size={18}
+                color={Colors.dark}
+              />
+              <Text style={styles.specText}>
+                {vehicle.fuel_type || "Gasoline"}
+              </Text>
             </View>
             {vehicle.mileage ? (
               <View style={styles.specPill}>
-                <MaterialCommunityIcons name="speedometer" size={18} color={Colors.dark} />
-                <Text style={styles.specText}>{Number(vehicle.mileage).toLocaleString()} km</Text>
+                <MaterialCommunityIcons
+                  name="speedometer"
+                  size={18}
+                  color={Colors.dark}
+                />
+                <Text style={styles.specText}>
+                  {Number(vehicle.mileage).toLocaleString()} km
+                </Text>
               </View>
             ) : null}
             {vehicle.vehicle_type ? (
               <View style={styles.specPill}>
-                <MaterialCommunityIcons name="car-side" size={18} color={Colors.dark} />
+                <MaterialCommunityIcons
+                  name="car-side"
+                  size={18}
+                  color={Colors.dark}
+                />
                 <Text style={styles.specText}>{vehicle.vehicle_type}</Text>
               </View>
             ) : null}
@@ -597,9 +775,15 @@ export default function VehicleDetailsScreen() {
           {/* Key Amenities & Features Grid - Dynamically Tailored or Operator-Selected */}
           {(() => {
             const vType = (vehicle.vehicle_type || "").toLowerCase();
-            const hasCustomFeatures = Array.isArray(vehicle.features) && vehicle.features.length > 0;
+            const hasCustomFeatures =
+              Array.isArray(vehicle.features) && vehicle.features.length > 0;
 
-            let amenities: { icon: any; iconType?: "ion" | "mci"; color: string; label: string }[] = [];
+            let amenities: {
+              icon: any;
+              iconType?: "ion" | "mci";
+              color: string;
+              label: string;
+            }[] = [];
 
             if (hasCustomFeatures) {
               amenities = vehicle.features!.map((feat: string) => {
@@ -627,14 +811,24 @@ export default function VehicleDetailsScreen() {
             return (
               <>
                 <View style={styles.sectionDivider} />
-                <Text style={styles.sectionHeading}>Vehicle Highlights & Amenities</Text>
+                <Text style={styles.sectionHeading}>
+                  Vehicle Highlights & Amenities
+                </Text>
                 <View style={styles.amenitiesGrid}>
                   {amenities.map((item, idx) => (
                     <View key={idx} style={styles.amenityItem}>
                       {item.iconType === "mci" ? (
-                        <MaterialCommunityIcons name={item.icon as any} size={18} color={item.color} />
+                        <MaterialCommunityIcons
+                          name={item.icon as any}
+                          size={18}
+                          color={item.color}
+                        />
                       ) : (
-                        <Ionicons name={item.icon as any} size={18} color={item.color} />
+                        <Ionicons
+                          name={item.icon as any}
+                          size={18}
+                          color={item.color}
+                        />
                       )}
                       <Text style={styles.amenityText} numberOfLines={2}>
                         {item.label}
@@ -650,19 +844,32 @@ export default function VehicleDetailsScreen() {
           <TouchableOpacity
             style={styles.aiInsightCard}
             onPress={() => {
-              setAssistantPrompt(`Tell me more about renting the ${vehicle.name}. Is it good for travel in Mindoro and what are the requirements?`);
+              setAssistantPrompt(
+                `Tell me more about renting the ${vehicle.name}. Is it good for travel in Mindoro and what are the requirements?`,
+              );
               setShowAssistantModal(true);
             }}
             activeOpacity={0.85}
           >
             <View style={styles.aiIconBadge}>
-              <MaterialCommunityIcons name="robot-excited-outline" size={22} color={Colors.white} />
+              <MaterialCommunityIcons
+                name="robot-excited-outline"
+                size={22}
+                color={Colors.white}
+              />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.aiCardTitle}>Ask AI About This Vehicle</Text>
-              <Text style={styles.aiCardSubtitle}>Get instant answers on suitability, fuel cost, and Mindoro routes.</Text>
+              <Text style={styles.aiCardSubtitle}>
+                Get instant answers on suitability, fuel cost, and Mindoro
+                routes.
+              </Text>
             </View>
-            <Ionicons name="chatbubbles-outline" size={20} color={Colors.primary} />
+            <Ionicons
+              name="chatbubbles-outline"
+              size={20}
+              color={Colors.primary}
+            />
           </TouchableOpacity>
 
           {/* Transparent Price & Fee Breakdown */}
@@ -671,18 +878,29 @@ export default function VehicleDetailsScreen() {
           <View style={styles.priceBreakdownCard}>
             <View style={styles.breakdownRow}>
               <Text style={styles.breakdownLabel}>Daily Rental Rate</Text>
-              <Text style={styles.breakdownValue}>₱{Number(vehicle.price_per_day).toLocaleString()} / day</Text>
+              <Text style={styles.breakdownValue}>
+                ₱{Number(vehicle.price_per_day).toLocaleString()} / day
+              </Text>
             </View>
             <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Required Reservation Fee</Text>
+              <Text style={styles.breakdownLabel}>
+                Required Reservation Fee
+              </Text>
               <Text style={[styles.breakdownValue, { color: Colors.primary }]}>
                 ₱{Number(vehicle.reservation_fee || 500).toLocaleString()}
               </Text>
             </View>
             <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Remaining Balance on Handover</Text>
+              <Text style={styles.breakdownLabel}>
+                Remaining Balance on Handover
+              </Text>
               <Text style={styles.breakdownValue}>
-                ₱{Math.max(0, Number(vehicle.price_per_day) - Number(vehicle.reservation_fee || 500)).toLocaleString()}
+                ₱
+                {Math.max(
+                  0,
+                  Number(vehicle.price_per_day) -
+                    Number(vehicle.reservation_fee || 500),
+                ).toLocaleString()}
               </Text>
             </View>
           </View>
@@ -693,23 +911,35 @@ export default function VehicleDetailsScreen() {
           <View style={styles.policiesCard}>
             <View style={styles.policyRow}>
               <View style={styles.policyIconCircle}>
-                <Ionicons name="id-card-outline" size={18} color={Colors.dark} />
+                <Ionicons
+                  name="id-card-outline"
+                  size={18}
+                  color={Colors.dark}
+                />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.policyTitle}>Driver Requirements</Text>
                 <Text style={styles.policyDesc}>
-                  Age {vehicle.min_driver_age || 21}+ with valid Philippine or International Driver's License and 1 secondary ID.
+                  Age {vehicle.min_driver_age || 21}+ with valid Philippine or
+                  International Driver&apos;s License and 1 secondary ID.
                 </Text>
               </View>
             </View>
 
             <View style={styles.policyRow}>
               <View style={styles.policyIconCircle}>
-                <MaterialCommunityIcons name="gas-station" size={18} color={Colors.dark} />
+                <MaterialCommunityIcons
+                  name="gas-station"
+                  size={18}
+                  color={Colors.dark}
+                />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.policyTitle}>Fuel Policy</Text>
-                <Text style={styles.policyDesc}>{vehicle.fuel_policy || "Same-to-Same (Return with identical fuel level at pickup)."}</Text>
+                <Text style={styles.policyDesc}>
+                  {vehicle.fuel_policy ||
+                    "Same-to-Same (Return with identical fuel level at pickup)."}
+                </Text>
               </View>
             </View>
 
@@ -719,7 +949,10 @@ export default function VehicleDetailsScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.policyTitle}>Late Return & Extension</Text>
-                <Text style={styles.policyDesc}>{vehicle.late_return_policy || "Inform host 3 hours prior to extension. Overtime rates apply."}</Text>
+                <Text style={styles.policyDesc}>
+                  {vehicle.late_return_policy ||
+                    "Inform host 3 hours prior to extension. Overtime rates apply."}
+                </Text>
               </View>
             </View>
           </View>
@@ -731,18 +964,28 @@ export default function VehicleDetailsScreen() {
             <View style={styles.locationInfoRow}>
               <Ionicons name="location-sharp" size={22} color={Colors.dark} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.locationTitle}>{vehicle.pickup_address || "Pinamalayan, Oriental Mindoro"}</Text>
-                <Text style={styles.locationSubtitle}>Exact meetup coordination provided upon booking confirmation.</Text>
+                <Text style={styles.locationTitle}>
+                  {vehicle.pickup_address || "Pinamalayan, Oriental Mindoro"}
+                </Text>
+                <Text style={styles.locationSubtitle}>
+                  Exact meetup coordination provided upon booking confirmation.
+                </Text>
               </View>
             </View>
 
             <TouchableOpacity
               style={styles.directionsButton}
               onPress={() => {
-                const addressToUse = vehicle.pickup_address || "Calapan City, Oriental Mindoro";
-                const fallbackGeocoded = resolveCoordinatesFromAddress(addressToUse);
-                const rawLat = vehicle.pickup_latitude || (vehicle.operator as any)?.latitude;
-                const rawLng = vehicle.pickup_longitude || (vehicle.operator as any)?.longitude;
+                const addressToUse =
+                  vehicle.pickup_address || "Calapan City, Oriental Mindoro";
+                const fallbackGeocoded =
+                  resolveCoordinatesFromAddress(addressToUse);
+                const rawLat =
+                  vehicle.pickup_latitude ||
+                  (vehicle.operator as any)?.latitude;
+                const rawLng =
+                  vehicle.pickup_longitude ||
+                  (vehicle.operator as any)?.longitude;
                 const finalLat =
                   rawLat && Number(rawLat) !== 0 && !isNaN(Number(rawLat))
                     ? Number(rawLat)
@@ -770,20 +1013,22 @@ export default function VehicleDetailsScreen() {
               activeOpacity={0.8}
             >
               <Ionicons name="map-outline" size={16} color={Colors.dark} />
-              <Text style={styles.directionsButtonText}>View Pickup Location</Text>
+              <Text style={styles.directionsButtonText}>
+                View Pickup Location
+              </Text>
             </TouchableOpacity>
           </View>
 
           {/* Rating & Renter Reviews Section */}
           <View style={styles.sectionDivider} />
           <View style={styles.sectionHeadingRow}>
-            <Text style={styles.sectionHeading}>
-              Ratings & Reviews
-            </Text>
+            <Text style={styles.sectionHeading}>Ratings & Reviews</Text>
             {vehicle.rating ? (
               <View style={styles.ratingBadgePill}>
                 <Ionicons name="star" size={14} color="#F59E0B" />
-                <Text style={styles.ratingBadgeText}>{Number(vehicle.rating).toFixed(1)}</Text>
+                <Text style={styles.ratingBadgeText}>
+                  {Number(vehicle.rating).toFixed(1)}
+                </Text>
               </View>
             ) : null}
           </View>
@@ -794,7 +1039,14 @@ export default function VehicleDetailsScreen() {
                 <View key={rev.id} style={styles.reviewCard}>
                   <View style={styles.reviewHeader}>
                     {rev.renter_photo ? (
-                      <Image source={{ uri: resolveImageUrl(rev.renter_photo) || rev.renter_photo }} style={styles.reviewerAvatarImage} />
+                      <Image
+                        source={{
+                          uri:
+                            resolveImageUrl(rev.renter_photo) ||
+                            rev.renter_photo,
+                        }}
+                        style={styles.reviewerAvatarImage}
+                      />
                     ) : (
                       <View style={styles.reviewerAvatar}>
                         <Text style={styles.reviewerInitial}>
@@ -804,7 +1056,9 @@ export default function VehicleDetailsScreen() {
                     )}
                     <View style={{ flex: 1 }}>
                       <Text style={styles.reviewerName}>{rev.renter_name}</Text>
-                      <Text style={styles.reviewDate}>{rev.created_at || "Verified Renter"}</Text>
+                      <Text style={styles.reviewDate}>
+                        {rev.created_at || "Verified Renter"}
+                      </Text>
                     </View>
                     <View style={styles.reviewStars}>
                       {[1, 2, 3, 4, 5].map((s) => (
@@ -820,7 +1074,12 @@ export default function VehicleDetailsScreen() {
                   {rev.review ? (
                     <Text style={styles.reviewContent}>{rev.review}</Text>
                   ) : (
-                    <Text style={[styles.reviewContent, { fontStyle: "italic", color: Colors.secondary }]}>
+                    <Text
+                      style={[
+                        styles.reviewContent,
+                        { fontStyle: "italic", color: Colors.secondary },
+                      ]}
+                    >
                       Rated {rev.rating} out of 5 stars
                     </Text>
                   )}
@@ -831,7 +1090,8 @@ export default function VehicleDetailsScreen() {
             <View style={styles.newListingReviewCard}>
               <Text style={styles.newListingReviewTitle}>No Reviews Yet</Text>
               <Text style={styles.newListingReviewText}>
-                Be among the first renters to book this vehicle and share your experience!
+                Be among the first renters to book this vehicle and share your
+                experience!
               </Text>
             </View>
           )}
@@ -842,19 +1102,30 @@ export default function VehicleDetailsScreen() {
               <Text style={styles.ownerTitle}>Operator Management Actions</Text>
 
               {vehicle.is_rented && (
-                <View style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  backgroundColor: "#FEF3C7",
-                  paddingHorizontal: 12,
-                  paddingVertical: 8,
-                  borderRadius: 8,
-                  marginBottom: 12,
-                  gap: 8,
-                }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    backgroundColor: "#FEF3C7",
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderRadius: 8,
+                    marginBottom: 12,
+                    gap: 8,
+                  }}
+                >
                   <Ionicons name="lock-closed" size={16} color="#D97706" />
-                  <Text style={{ fontSize: 12, color: "#92400E", flex: 1, fontFamily: FontFamily?.medium || undefined }}>
-                    This vehicle is currently on an active rental trip. Availability cannot be manually altered until the booking completes.
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      color: "#92400E",
+                      flex: 1,
+                      fontFamily: FontFamily?.medium || undefined,
+                    }}
+                  >
+                    This vehicle is currently on an active rental trip.
+                    Availability cannot be manually altered until the booking
+                    completes.
                   </Text>
                 </View>
               )}
@@ -879,8 +1150,8 @@ export default function VehicleDetailsScreen() {
                     {vehicle.is_rented
                       ? "Currently Rented"
                       : vehicle.availability_status === "available"
-                      ? "Set Unavailable"
-                      : "Set Available"}
+                        ? "Set Unavailable"
+                        : "Set Available"}
                   </Text>
                 </TouchableOpacity>
 
@@ -894,8 +1165,14 @@ export default function VehicleDetailsScreen() {
                   disabled={vehicle.is_rented || deleting}
                   activeOpacity={0.8}
                 >
-                  <Ionicons name="trash-outline" size={16} color={Colors.error} />
-                  <Text style={[styles.ownerBtnText, { color: Colors.error }]}>Delete</Text>
+                  <Ionicons
+                    name="trash-outline"
+                    size={16}
+                    color={Colors.error}
+                  />
+                  <Text style={[styles.ownerBtnText, { color: Colors.error }]}>
+                    Delete
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -904,10 +1181,14 @@ export default function VehicleDetailsScreen() {
               {/* Operator / Location Info with Avatar & Chat Button */}
               <View style={styles.sectionDivider} />
               <View style={styles.sectionHeadingRow}>
-                <Text style={styles.sectionHeading}>Verified Host & Operator</Text>
+                <Text style={styles.sectionHeading}>
+                  Verified Host & Operator
+                </Text>
                 {operator?.id && (
                   <TouchableOpacity
-                    onPress={() => router.push(`/operator/${operator?.id}` as any)}
+                    onPress={() =>
+                      router.push(`/operator/${operator?.id}` as any)
+                    }
                     activeOpacity={0.7}
                   >
                     <Text style={styles.viewFleetText}>View Fleet</Text>
@@ -917,14 +1198,28 @@ export default function VehicleDetailsScreen() {
 
               <View style={styles.operatorRow}>
                 <TouchableOpacity
-                  style={{ flexDirection: "row", alignItems: "center", flex: 1, gap: 12, minWidth: 0 }}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    flex: 1,
+                    gap: 12,
+                    minWidth: 0,
+                  }}
                   onPress={() => {
-                    if (operator?.id) router.push(`/operator/${operator.id}` as any);
+                    if (operator?.id)
+                      router.push(`/operator/${operator.id}` as any);
                   }}
                   activeOpacity={0.8}
                 >
                   {operator?.profile_photo ? (
-                    <Image source={{ uri: resolveImageUrl(operator.profile_photo) || operator.profile_photo }} style={styles.operatorAvatar} />
+                    <Image
+                      source={{
+                        uri:
+                          resolveImageUrl(operator.profile_photo) ||
+                          operator.profile_photo,
+                      }}
+                      style={styles.operatorAvatar}
+                    />
                   ) : (
                     <View style={styles.operatorIconWrap}>
                       <Ionicons name="business" size={20} color={Colors.dark} />
@@ -932,11 +1227,22 @@ export default function VehicleDetailsScreen() {
                   )}
 
                   <View style={{ flex: 1, minWidth: 0, paddingRight: 4 }}>
-                    <Text style={styles.operatorName} numberOfLines={1} ellipsizeMode="tail">
-                      {operator?.business_name || operator?.name || "Verified Host"}
+                    <Text
+                      style={styles.operatorName}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
+                      {operator?.business_name ||
+                        operator?.name ||
+                        "Verified Host"}
                     </Text>
-                    <Text style={styles.operatorAddress} numberOfLines={1} ellipsizeMode="tail">
-                      {vehicle.pickup_address || "Pickup address available upon booking"}
+                    <Text
+                      style={styles.operatorAddress}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
+                      {vehicle.pickup_address ||
+                        "Pickup address available upon booking"}
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -951,12 +1257,19 @@ export default function VehicleDetailsScreen() {
                       }
                       router.push({
                         pathname: `/chat/${operator.id}`,
-                        params: { name: operator?.business_name || operator?.name || "Host" },
+                        params: {
+                          name:
+                            operator?.business_name || operator?.name || "Host",
+                        },
                       } as any);
                     }}
                     activeOpacity={0.8}
                   >
-                    <Ionicons name="chatbubble-ellipses-outline" size={18} color={Colors.dark} />
+                    <Ionicons
+                      name="chatbubble-ellipses-outline"
+                      size={18}
+                      color={Colors.dark}
+                    />
                     <Text style={styles.chatHostButtonText}>Message</Text>
                   </TouchableOpacity>
                 )}
@@ -980,7 +1293,9 @@ export default function VehicleDetailsScreen() {
         <View style={styles.bottomBookingBar}>
           <View>
             <Text style={styles.bottomPriceLabel}>Total estimate</Text>
-            <Text style={styles.bottomPrice}>₱{Number(vehicle.price_per_day).toLocaleString()} / day</Text>
+            <Text style={styles.bottomPrice}>
+              ₱{Number(vehicle.price_per_day).toLocaleString()} / day
+            </Text>
           </View>
 
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -994,26 +1309,35 @@ export default function VehicleDetailsScreen() {
                   }
                   router.push({
                     pathname: `/chat/${operator.id}`,
-                    params: { name: operator?.business_name || operator?.name || "Host" },
+                    params: {
+                      name: operator?.business_name || operator?.name || "Host",
+                    },
                   } as any);
                 }}
                 activeOpacity={0.8}
               >
-                <Ionicons name="chatbubble-outline" size={20} color={Colors.dark} />
+                <Ionicons
+                  name="chatbubble-outline"
+                  size={20}
+                  color={Colors.dark}
+                />
               </TouchableOpacity>
             )}
 
             <TouchableOpacity
               style={[
                 styles.bookNowButton,
-                vehicle.availability_status !== "available" && styles.bookNowDisabled,
+                vehicle.availability_status !== "available" &&
+                  styles.bookNowDisabled,
               ]}
               onPress={handleBookNow}
               disabled={vehicle.availability_status !== "available"}
               activeOpacity={0.85}
             >
               <Text style={styles.bookNowText}>
-                {vehicle.availability_status === "available" ? "Book Vehicle" : "Currently Unavailable"}
+                {vehicle.availability_status === "available"
+                  ? "Book Vehicle"
+                  : "Currently Unavailable"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1041,153 +1365,194 @@ export default function VehicleDetailsScreen() {
       >
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Select Trip Dates</Text>
-              <TouchableOpacity onPress={() => setShowBookingModal(false)}>
-                <Ionicons name="close-circle" size={24} color={Colors.secondary} />
-              </TouchableOpacity>
-            </View>
+          <TouchableOpacity onPress={() => setShowBookingModal(false)}>
+            <Ionicons name="close-circle" size={24} color={Colors.secondary} />
+          </TouchableOpacity>
+        </View>
 
-            <Text style={styles.modalSubtitle}>
-              {vehicle.name} - ₱{Number(vehicle.price_per_day).toLocaleString()}/day
-            </Text>
+        <Text style={styles.modalSubtitle}>
+          {vehicle.name} - ₱{Number(vehicle.price_per_day).toLocaleString()}/day
+        </Text>
 
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={{ paddingBottom: Spacing.md }}
-              style={{ maxHeight: Dimensions.get("window").height * 0.65 }}
-            >
-              {/* Responsive Trip Date & Time Selection Cards & Modal (Images 1 & 2) */}
-              <Text style={styles.fieldLabel}>Pick Trip Schedule</Text>
-              <TripDateTimeSelector
-                startDate={selectedStartDate}
-                endDate={selectedEndDate}
-                startTime={selectedStartTime}
-                endTime={selectedEndTime}
-                onDateTimeChange={(start, end, sTime, eTime) => {
-                  setSelectedStartDate(start);
-                  setSelectedEndDate(end);
-                  setSelectedStartTime(sTime);
-                  setSelectedEndTime(eTime);
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingBottom: Spacing.md }}
+          style={{ maxHeight: Dimensions.get("window").height * 0.65 }}
+        >
+          {/* Responsive Trip Date & Time Selection Cards & Modal (Images 1 & 2) */}
+          <Text style={styles.fieldLabel}>Pick Trip Schedule</Text>
+          <TripDateTimeSelector
+            startDate={selectedStartDate}
+            endDate={selectedEndDate}
+            startTime={selectedStartTime}
+            endTime={selectedEndTime}
+            onDateTimeChange={(start, end, sTime, eTime) => {
+              setSelectedStartDate(start);
+              setSelectedEndDate(end);
+              setSelectedStartTime(sTime);
+              setSelectedEndTime(eTime);
+            }}
+          />
+
+          {/* Quick Duration Shortcuts */}
+          <Text style={[styles.fieldLabel, { marginTop: Spacing.sm }]}>
+            Quick Duration
+          </Text>
+          <View style={styles.pickerRow}>
+            {[
+              { label: "1 Day", days: 1 },
+              { label: "2 Days", days: 2 },
+              { label: "3 Days", days: 3 },
+              { label: "5 Days", days: 5 },
+              { label: "1 Week", days: 7 },
+            ].map((opt) => (
+              <TouchableOpacity
+                key={opt.days}
+                style={[
+                  styles.pickerPill,
+                  tripDurationDays === opt.days && styles.pickerPillActive,
+                ]}
+                onPress={() => {
+                  const newEnd = new Date(selectedStartDate);
+                  newEnd.setDate(selectedStartDate.getDate() + opt.days);
+                  setSelectedEndDate(newEnd);
                 }}
-              />
-
-              {/* Quick Duration Shortcuts */}
-              <Text style={[styles.fieldLabel, { marginTop: Spacing.sm }]}>Quick Duration</Text>
-              <View style={styles.pickerRow}>
-                {[
-                  { label: "1 Day", days: 1 },
-                  { label: "2 Days", days: 2 },
-                  { label: "3 Days", days: 3 },
-                  { label: "5 Days", days: 5 },
-                  { label: "1 Week", days: 7 },
-                ].map((opt) => (
-                  <TouchableOpacity
-                    key={opt.days}
-                    style={[styles.pickerPill, tripDurationDays === opt.days && styles.pickerPillActive]}
-                    onPress={() => {
-                      const newEnd = new Date(selectedStartDate);
-                      newEnd.setDate(selectedStartDate.getDate() + opt.days);
-                      setSelectedEndDate(newEnd);
-                    }}
-                  >
-                    <Text style={[styles.pickerPillText, tripDurationDays === opt.days && styles.pickerPillTextActive]}>
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {/* Selected Date Summary */}
-              <View style={styles.dateSummaryBox}>
-                <Ionicons name="calendar-outline" size={18} color={Colors.dark} />
-                <Text style={styles.dateSummaryText}>
-                  {displaySummary}
+              >
+                <Text
+                  style={[
+                    styles.pickerPillText,
+                    tripDurationDays === opt.days &&
+                      styles.pickerPillTextActive,
+                  ]}
+                >
+                  {opt.label}
                 </Text>
-              </View>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-              {/* Minimal reservation fee summary */}
-              <View style={styles.reservationSummaryCard}>
-                <View style={styles.reservationSummaryHeader}>
-                  <View style={styles.reservationSummaryIcon}>
-                    <Ionicons name="shield-checkmark-outline" size={18} color={Colors.dark} />
-                  </View>
-                  <View style={styles.reservationSummaryHeading}>
-                    <Text style={styles.reservationSummaryTitle}>Reservation fee</Text>
-                    <Text style={styles.reservationSummaryCaption}>Pay now via GCash only</Text>
-                  </View>
-                  <Text style={styles.reservationDepositAmount}>
-                    ₱{Number(vehicle.reservation_fee || 500).toLocaleString()}
-                  </Text>
-                </View>
+          {/* Selected Date Summary */}
+          <View style={styles.dateSummaryBox}>
+            <Ionicons name="calendar-outline" size={18} color={Colors.dark} />
+            <Text style={styles.dateSummaryText}>{displaySummary}</Text>
+          </View>
 
-                <View style={styles.reservationSummaryDivider} />
-
-                <View style={styles.reservationSummaryRow}>
-                  <Text style={styles.reservationSummaryLabel}>
-                    Rental total for {tripDurationDays} {tripDurationDays === 1 ? "day" : "days"}
-                  </Text>
-                  <Text style={styles.reservationSummaryValue}>
-                    ₱{(Number(vehicle.price_per_day) * tripDurationDays).toLocaleString()}
-                  </Text>
-                </View>
-                <View style={styles.reservationSummaryRow}>
-                  <Text style={styles.reservationSummaryLabel}>Balance at meetup</Text>
-                  <Text style={styles.reservationSummaryValue}>
-                    ₱{Math.max(0, Number(vehicle.price_per_day) * tripDurationDays - Number(vehicle.reservation_fee || 500)).toLocaleString()}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Multi-Vehicle Rental Verification Notice */}
-              {hasActiveTripOverlap && (
-                <View style={styles.multiCarNoticeCard}>
-                  <View style={styles.multiCarNoticeHeader}>
-                    <Ionicons name="shield-checkmark" size={16} color="#B45309" />
-                    <Text style={styles.multiCarNoticeTitle}>Multi-Vehicle Rental</Text>
-                  </View>
-                  <Text style={styles.multiCarNoticeText}>
-                    You have an active ongoing trip ({activeTripVehicleName}). For insurance and verification, please designate the authorized secondary driver for this vehicle.
-                  </Text>
-
-                  <Text style={[styles.fieldLabel, { marginTop: 10 }]}>Driver Name *</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={secondaryDriverName}
-                    onChangeText={setSecondaryDriverName}
-                    placeholder="Full name"
-                  />
-
-                  <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Driver Mobile Number</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    value={secondaryDriverPhone}
-                    onChangeText={setSecondaryDriverPhone}
-                    keyboardType="phone-pad"
-                    placeholder="phonenumber"
-                  />
-                </View>
-              )}
-
-              {/* Trip Notes */}
-              <Text style={styles.fieldLabel}>Trip Notes</Text>
-              <TextInput
-                style={styles.modalInput}
-                value={bookingNotes}
-                onChangeText={setBookingNotes}
-                placeholder="Special requests or pickup preferences..."
-              />
-
-              <View style={{ marginTop: Spacing.lg }}>
-                <PrimaryButton
-                  title={submittingBooking ? "Creating Booking..." : "Proceed to Payment"}
-                  onPress={handleConfirmReservation}
-                  loading={submittingBooking}
+          {/* Minimal reservation fee summary */}
+          <View style={styles.reservationSummaryCard}>
+            <View style={styles.reservationSummaryHeader}>
+              <View style={styles.reservationSummaryIcon}>
+                <Ionicons
+                  name="shield-checkmark-outline"
+                  size={18}
+                  color={Colors.dark}
                 />
               </View>
-            </ScrollView>
+              <View style={styles.reservationSummaryHeading}>
+                <Text style={styles.reservationSummaryTitle}>
+                  Reservation fee
+                </Text>
+                <Text style={styles.reservationSummaryCaption}>
+                  Pay now via GCash only
+                </Text>
+              </View>
+              <Text style={styles.reservationDepositAmount}>
+                ₱{Number(vehicle.reservation_fee || 500).toLocaleString()}
+              </Text>
+            </View>
+
+            <View style={styles.reservationSummaryDivider} />
+
+            <View style={styles.reservationSummaryRow}>
+              <Text style={styles.reservationSummaryLabel}>
+                Rental total for {tripDurationDays}{" "}
+                {tripDurationDays === 1 ? "day" : "days"}
+              </Text>
+              <Text style={styles.reservationSummaryValue}>
+                ₱
+                {(
+                  Number(vehicle.price_per_day) * tripDurationDays
+                ).toLocaleString()}
+              </Text>
+            </View>
+            <View style={styles.reservationSummaryRow}>
+              <Text style={styles.reservationSummaryLabel}>
+                Balance at meetup
+              </Text>
+              <Text style={styles.reservationSummaryValue}>
+                ₱
+                {Math.max(
+                  0,
+                  Number(vehicle.price_per_day) * tripDurationDays -
+                    Number(vehicle.reservation_fee || 500),
+                ).toLocaleString()}
+              </Text>
+            </View>
+          </View>
+
+          {/* Multi-Vehicle Rental Verification Notice */}
+          {hasActiveTripOverlap && (
+            <View style={styles.multiCarNoticeCard}>
+              <View style={styles.multiCarNoticeHeader}>
+                <Ionicons name="shield-checkmark" size={16} color="#B45309" />
+                <Text style={styles.multiCarNoticeTitle}>
+                  Multi-Vehicle Rental
+                </Text>
+              </View>
+              <Text style={styles.multiCarNoticeText}>
+                You have an active ongoing trip ({activeTripVehicleName}). For
+                insurance and verification, please designate the authorized
+                secondary driver for this vehicle.
+              </Text>
+
+              <Text style={[styles.fieldLabel, { marginTop: 10 }]}>
+                Driver Name *
+              </Text>
+              <TextInput
+                style={styles.modalInput}
+                value={secondaryDriverName}
+                onChangeText={setSecondaryDriverName}
+                placeholder="Full name"
+              />
+
+              <Text style={[styles.fieldLabel, { marginTop: 8 }]}>
+                Driver Mobile Number
+              </Text>
+              <TextInput
+                style={styles.modalInput}
+                value={secondaryDriverPhone}
+                onChangeText={setSecondaryDriverPhone}
+                keyboardType="phone-pad"
+                placeholder="phonenumber"
+              />
+            </View>
+          )}
+
+          {/* Trip Notes */}
+          <Text style={styles.fieldLabel}>Trip Notes</Text>
+          <TextInput
+            style={styles.modalInput}
+            value={bookingNotes}
+            onChangeText={setBookingNotes}
+            placeholder="Special requests or pickup preferences..."
+          />
+
+          <View style={{ marginTop: Spacing.lg }}>
+            <PrimaryButton
+              title={
+                submittingBooking ? "Creating Booking..." : "Proceed to Payment"
+              }
+              onPress={handleConfirmReservation}
+              loading={submittingBooking}
+            />
+          </View>
+        </ScrollView>
       </AppBottomSheet>
 
-      <AuthRequiredBottomSheet visible={showAuthSheet} onClose={() => setShowAuthSheet(false)} />
+      <AuthRequiredBottomSheet
+        visible={showAuthSheet}
+        onClose={() => setShowAuthSheet(false)}
+      />
 
       {/* Fullscreen Photo Viewer Modal */}
       <Modal

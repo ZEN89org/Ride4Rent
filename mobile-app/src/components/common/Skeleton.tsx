@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { Animated, StyleSheet, View, ViewStyle } from "react-native";
 import { Colors } from "@/constants/colors";
 
@@ -15,7 +15,7 @@ export function Skeleton({
   borderRadius = 8,
   style,
 }: SkeletonProps) {
-  const opacity = useRef(new Animated.Value(0.3)).current;
+  const opacity = useState(() => new Animated.Value(0.3))[0];
 
   useEffect(() => {
     const pulse = Animated.loop(
@@ -30,7 +30,7 @@ export function Skeleton({
           duration: 700,
           useNativeDriver: true,
         }),
-      ])
+      ]),
     );
     pulse.start();
 
@@ -53,7 +53,13 @@ export function Skeleton({
   );
 }
 
-export function VehicleCardSkeleton({ width = 300, height = 230 }: { width?: number; height?: number }) {
+export function VehicleCardSkeleton({
+  width = 300,
+  height = 230,
+}: {
+  width?: number;
+  height?: number;
+}) {
   return (
     <View style={[styles.cardSkeleton, { width, height }]}>
       <Skeleton width="100%" height={height} borderRadius={20} />

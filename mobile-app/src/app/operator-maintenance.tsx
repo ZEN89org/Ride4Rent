@@ -1,4 +1,4 @@
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -18,7 +18,7 @@ import { Image } from "expo-image";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Colors } from "@/constants/colors";
-import { FontFamily, FontSize, Spacing } from "@/constants/theme";
+import { FontFamily, Spacing } from "@/constants/theme";
 import { useAppToast } from "@/context/ToastContext";
 import {
   getOperatorMaintenanceList,
@@ -33,7 +33,8 @@ export default function OperatorMaintenanceScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   // Log Service Modal state
-  const [selectedVehicle, setSelectedVehicle] = useState<VehicleHealthInfo | null>(null);
+  const [selectedVehicle, setSelectedVehicle] =
+    useState<VehicleHealthInfo | null>(null);
   const [serviceType, setServiceType] = useState("Oil & Filter Change");
   const [mileageInput, setMileageInput] = useState("");
   const [costInput, setCostInput] = useState("");
@@ -43,7 +44,6 @@ export default function OperatorMaintenanceScreen() {
 
   const loadData = async (silent = false) => {
     try {
-      if (!silent) setLoading(true);
       const data = await getOperatorMaintenanceList();
       setVehicles(data);
     } catch (e) {
@@ -55,7 +55,18 @@ export default function OperatorMaintenanceScreen() {
   };
 
   useEffect(() => {
-    loadData();
+    let active = true;
+    getOperatorMaintenanceList()
+      .then((data) => {
+        if (active) setVehicles(data);
+      })
+      .catch((error) => console.log("Error loading maintenance data:", error))
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   const openLogModal = (v: VehicleHealthInfo) => {
@@ -87,29 +98,47 @@ export default function OperatorMaintenanceScreen() {
         notes: notesInput.trim() || undefined,
       });
 
-      showSuccess("Maintenance Logged", `${serviceType} recorded for ${selectedVehicle.name}.`);
+      showSuccess(
+        "Maintenance Logged",
+        `${serviceType} recorded for ${selectedVehicle.name}.`,
+      );
       setSelectedVehicle(null);
       loadData(true);
     } catch (e: any) {
-      showError("Error", e.response?.data?.message || "Failed to log maintenance.");
+      showError(
+        "Error",
+        e.response?.data?.message || "Failed to log maintenance.",
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
-  const overdueCount = vehicles.filter((v) => v.health_status === "overdue").length;
-  const dueSoonCount = vehicles.filter((v) => v.health_status === "due_soon").length;
+  const overdueCount = vehicles.filter(
+    (v) => v.health_status === "overdue",
+  ).length;
+  const dueSoonCount = vehicles.filter(
+    (v) => v.health_status === "due_soon",
+  ).length;
   const goodCount = vehicles.filter((v) => v.health_status === "good").length;
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => router.back()}
+          activeOpacity={0.7}
+        >
           <Ionicons name="chevron-back" size={22} color={Colors.dark} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Fleet Maintenance & Health</Text>
-        <TouchableOpacity style={styles.refreshBtn} onPress={() => loadData(false)} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.refreshBtn}
+          onPress={() => loadData(false)}
+          activeOpacity={0.7}
+        >
           <Ionicons name="refresh" size={18} color={Colors.dark} />
         </TouchableOpacity>
       </View>
@@ -121,11 +150,15 @@ export default function OperatorMaintenanceScreen() {
           <Text style={styles.statLabel}>Optimal</Text>
         </View>
         <View style={[styles.statCard, { borderLeftColor: "#F59E0B" }]}>
-          <Text style={[styles.statNumber, { color: "#D97706" }]}>{dueSoonCount}</Text>
+          <Text style={[styles.statNumber, { color: "#D97706" }]}>
+            {dueSoonCount}
+          </Text>
           <Text style={styles.statLabel}>Due Soon</Text>
         </View>
         <View style={[styles.statCard, { borderLeftColor: Colors.error }]}>
-          <Text style={[styles.statNumber, { color: Colors.error }]}>{overdueCount}</Text>
+          <Text style={[styles.statNumber, { color: Colors.error }]}>
+            {overdueCount}
+          </Text>
           <Text style={styles.statLabel}>Overdue</Text>
         </View>
       </View>
@@ -138,7 +171,10 @@ export default function OperatorMaintenanceScreen() {
       ) : vehicles.length === 0 ? (
         <View style={styles.emptyWrap}>
           <Text style={styles.emptyTitle}>No Vehicles Registered</Text>
-          <Text style={styles.emptySub}>Upload vehicles to your fleet to begin tracking mileage and preventive maintenance recommendations.</Text>
+          <Text style={styles.emptySub}>
+            Upload vehicles to your fleet to begin tracking mileage and
+            preventive maintenance recommendations.
+          </Text>
         </View>
       ) : (
         <FlatList
@@ -157,7 +193,13 @@ export default function OperatorMaintenanceScreen() {
             />
           }
           renderItem={({ item }) => {
-            const progress = Math.min(1, Math.max(0, item.km_since_last_service / item.service_interval_km));
+            const progress = Math.min(
+              1,
+              Math.max(
+                0,
+                item.km_since_last_service / item.service_interval_km,
+              ),
+            );
             const isAlert = item.health_status !== "good";
 
             return (
@@ -165,25 +207,46 @@ export default function OperatorMaintenanceScreen() {
                 {/* Top vehicle info row */}
                 <View style={styles.vehicleHeaderRow}>
                   <Image
-                    source={item.image_url ? { uri: item.image_url } : { uri: "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800" }}
+                    source={
+                      item.image_url
+                        ? { uri: item.image_url }
+                        : {
+                            uri: "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800",
+                          }
+                    }
                     style={styles.vehicleThumb}
                     contentFit="cover"
                   />
                   <View style={styles.vehicleInfoCol}>
-                    <Text style={styles.vehicleName} numberOfLines={1}>{item.name}</Text>
-                    <Text style={styles.vehiclePlate}>{item.plate_number ? `Plate: ${item.plate_number}` : `${item.brand || ""} ${item.model || ""}`}</Text>
-                    <View style={[
-                      styles.healthBadgePill,
-                      item.health_status === "overdue" && styles.badgeOverdue,
-                      item.health_status === "due_soon" && styles.badgeDueSoon,
-                      item.health_status === "good" && styles.badgeGood,
-                    ]}>
-                      <Text style={[
-                        styles.healthBadgeText,
-                        item.health_status === "overdue" && { color: "#DC2626" },
-                        item.health_status === "due_soon" && { color: "#D97706" },
-                        item.health_status === "good" && { color: "#059669" },
-                      ]}>
+                    <Text style={styles.vehicleName} numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                    <Text style={styles.vehiclePlate}>
+                      {item.plate_number
+                        ? `Plate: ${item.plate_number}`
+                        : `${item.brand || ""} ${item.model || ""}`}
+                    </Text>
+                    <View
+                      style={[
+                        styles.healthBadgePill,
+                        item.health_status === "overdue" && styles.badgeOverdue,
+                        item.health_status === "due_soon" &&
+                          styles.badgeDueSoon,
+                        item.health_status === "good" && styles.badgeGood,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.healthBadgeText,
+                          item.health_status === "overdue" && {
+                            color: "#DC2626",
+                          },
+                          item.health_status === "due_soon" && {
+                            color: "#D97706",
+                          },
+                          item.health_status === "good" && { color: "#059669" },
+                        ]}
+                      >
                         {item.health_badge}
                       </Text>
                     </View>
@@ -193,31 +256,62 @@ export default function OperatorMaintenanceScreen() {
                 {/* Mileage Tracker Progress Bar */}
                 <View style={styles.mileageSection}>
                   <View style={styles.mileageLabelsRow}>
-                    <Text style={styles.mileageLabel}>ODOMETER: {item.current_odometer.toLocaleString()} km</Text>
-                    <Text style={styles.mileageLabel}>Next Milestone: {(item.last_service_odometer + item.service_interval_km).toLocaleString()} km</Text>
+                    <Text style={styles.mileageLabel}>
+                      ODOMETER: {item.current_odometer.toLocaleString()} km
+                    </Text>
+                    <Text style={styles.mileageLabel}>
+                      Next Milestone:{" "}
+                      {(
+                        item.last_service_odometer + item.service_interval_km
+                      ).toLocaleString()}{" "}
+                      km
+                    </Text>
                   </View>
                   <View style={styles.progressBarTrack}>
                     <View
                       style={[
                         styles.progressBarFill,
                         { width: `${progress * 100}%` },
-                        item.health_status === "overdue" ? { backgroundColor: Colors.error } : item.health_status === "due_soon" ? { backgroundColor: "#F59E0B" } : { backgroundColor: Colors.primary },
+                        item.health_status === "overdue"
+                          ? { backgroundColor: Colors.error }
+                          : item.health_status === "due_soon"
+                            ? { backgroundColor: "#F59E0B" }
+                            : { backgroundColor: Colors.primary },
                       ]}
                     />
                   </View>
-                  <Text style={styles.healthStatusLabelText}>{item.health_label}</Text>
+                  <Text style={styles.healthStatusLabelText}>
+                    {item.health_label}
+                  </Text>
                 </View>
 
                 {/* AI / Algorithm Maintenance Recommendations */}
                 {item.recommendations && item.recommendations.length > 0 && (
                   <View style={styles.recoSection}>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 4 }}>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 5,
+                        marginBottom: 4,
+                      }}
+                    >
                       <Ionicons name="bulb-outline" size={14} color="#D97706" />
-                      <Text style={styles.recoHeaderTitle}>Maintenance Recommendation:</Text>
+                      <Text style={styles.recoHeaderTitle}>
+                        Maintenance Recommendation:
+                      </Text>
                     </View>
                     {item.recommendations.map((rec, idx) => (
                       <View key={idx} style={styles.recoItemBox}>
-                        <Ionicons name="warning" size={15} color={rec.urgency === "critical" ? Colors.error : "#D97706"} />
+                        <Ionicons
+                          name="warning"
+                          size={15}
+                          color={
+                            rec.urgency === "critical"
+                              ? Colors.error
+                              : "#D97706"
+                          }
+                        />
                         <Text style={styles.recoItemText}>{rec.message}</Text>
                       </View>
                     ))}
@@ -231,8 +325,14 @@ export default function OperatorMaintenanceScreen() {
                     onPress={() => openLogModal(item)}
                     activeOpacity={0.8}
                   >
-                    <Ionicons name="add-circle-outline" size={16} color={Colors.dark} />
-                    <Text style={styles.logServiceBtnText}>Log Service Record</Text>
+                    <Ionicons
+                      name="add-circle-outline"
+                      size={16}
+                      color={Colors.dark}
+                    />
+                    <Text style={styles.logServiceBtnText}>
+                      Log Service Record
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -249,23 +349,47 @@ export default function OperatorMaintenanceScreen() {
         onRequestClose={() => setSelectedVehicle(null)}
       >
         <View style={styles.modalBackdrop}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedVehicle(null)} />
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setSelectedVehicle(null)}
+          />
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>Log Service Record</Text>
             <Text style={styles.modalSubtitle}>{selectedVehicle?.name}</Text>
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingBottom: 24 }}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ gap: 12, paddingBottom: 24 }}
+            >
               <View>
-                <Text style={styles.inputLabel}>Service / Maintenance Type</Text>
+                <Text style={styles.inputLabel}>
+                  Service / Maintenance Type
+                </Text>
                 <View style={styles.serviceChipsRow}>
-                  {["Oil & Filter Change", "Brake Pad Check", "Tire Rotation", "Engine Tune-up", "Battery Change"].map((t) => (
+                  {[
+                    "Oil & Filter Change",
+                    "Brake Pad Check",
+                    "Tire Rotation",
+                    "Engine Tune-up",
+                    "Battery Change",
+                  ].map((t) => (
                     <TouchableOpacity
                       key={t}
-                      style={[styles.serviceChip, serviceType === t && styles.serviceChipActive]}
+                      style={[
+                        styles.serviceChip,
+                        serviceType === t && styles.serviceChipActive,
+                      ]}
                       onPress={() => setServiceType(t)}
                     >
-                      <Text style={[styles.serviceChipText, serviceType === t && styles.serviceChipTextActive]}>{t}</Text>
+                      <Text
+                        style={[
+                          styles.serviceChipText,
+                          serviceType === t && styles.serviceChipTextActive,
+                        ]}
+                      >
+                        {t}
+                      </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -296,7 +420,9 @@ export default function OperatorMaintenanceScreen() {
               </View>
 
               <View>
-                <Text style={styles.inputLabel}>Performed By / Service Center</Text>
+                <Text style={styles.inputLabel}>
+                  Performed By / Service Center
+                </Text>
                 <TextInput
                   style={styles.textInput}
                   value={performedByInput}
@@ -307,9 +433,14 @@ export default function OperatorMaintenanceScreen() {
               </View>
 
               <View>
-                <Text style={styles.inputLabel}>Notes / Replaced Parts (Optional)</Text>
+                <Text style={styles.inputLabel}>
+                  Notes / Replaced Parts (Optional)
+                </Text>
                 <TextInput
-                  style={[styles.textInput, { height: 64, textAlignVertical: "top" }]}
+                  style={[
+                    styles.textInput,
+                    { height: 64, textAlignVertical: "top" },
+                  ]}
                   multiline
                   value={notesInput}
                   onChangeText={setNotesInput}
