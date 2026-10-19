@@ -56,7 +56,8 @@ class VehicleController extends Controller
             })
             ->whereHas('operator', fn ($q) => $q
                 ->where('role', 'operator')
-                ->where('account_status', 'active'));
+                ->where('account_status', 'active')
+                ->where('is_frozen', false));
 
         $searchTerm = trim($request->input('search') ?? $request->input('query') ?? $request->input('q') ?? '');
         if ($searchTerm !== '') {
@@ -90,7 +91,7 @@ class VehicleController extends Controller
         }
 
         if ($request->query('sort') === 'top_rated') {
-            $query->orderBy('rating', 'desc')->orderBy('rating_count', 'desc');
+            $query->where('rating_count', '>', 0)->orderBy('rating', 'desc')->orderBy('rating_count', 'desc');
         } elseif ($request->boolean('random', true) && $searchTerm === '') {
             $query->inRandomOrder();
         } else {
@@ -158,7 +159,7 @@ class VehicleController extends Controller
         ]);
     }
 
-    public function byOperator($id): JsonResponse
+    public function byOperator(Request $request, $id): JsonResponse
     {
         if (! is_numeric($id)) {
             return response()->json([
@@ -178,19 +179,21 @@ class VehicleController extends Controller
             ], 404);
         }
 
-        $vehicles = Vehicle::with([
-            'operator.operatorProfile',
-            'vehicleType',
-            'brand',
-            'bodyType',
-            'transmissionType',
-            'fuelType',
-            'images',
-        ])
-            ->where('operator_id', $id)
-            ->where('is_active', true)
-            ->latest()
-            ->get();
+        $vehicles = ($operatorUser->is_frozen && $request->user()?->id !== $operatorUser->id)
+            ? collect()
+            : Vehicle::with([
+                'operator.operatorProfile',
+                'vehicleType',
+                'brand',
+                'bodyType',
+                'transmissionType',
+                'fuelType',
+                'images',
+            ])
+                ->where('operator_id', $id)
+                ->where('is_active', true)
+                ->latest()
+                ->get();
 
         $profile = $operatorUser->operatorProfile;
         $displayName = trim(($operatorUser->first_name ?? '').' '.($operatorUser->last_name ?? ''));
@@ -202,6 +205,7 @@ class VehicleController extends Controller
                 'id' => $operatorUser->id,
                 'name' => $displayName ?: 'Verified Operator',
                 'email' => $operatorUser->email,
+                'is_frozen' => (bool) $operatorUser->is_frozen,
                 'mobile_number' => $operatorUser->mobile_number,
                 'profile_photo' => $operatorUser->profile_photo
                     ? (str_starts_with($operatorUser->profile_photo, 'http')
@@ -229,6 +233,7 @@ class VehicleController extends Controller
     public function myVehicles(Request $request): JsonResponse
     {
         $vehicles = Vehicle::with([
+            'operator.operatorProfile',
             'vehicleType',
             'brand',
             'bodyType',
@@ -267,32 +272,35 @@ class VehicleController extends Controller
             ], 422);
         }
 
+        if ($request->has('plate_number')) {
+            $request->merge(['plate_number' => strtoupper(preg_replace('/[\s-]+/', '', trim((string) $request->input('plate_number'))))]);
+        }
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255', 'regex:/[\p{L}]/u'],
             'vehicle_type_id' => ['required', 'exists:vehicle_types,id'],
             'brand_id' => ['nullable', 'exists:vehicle_brands,id'],
-            'custom_brand' => ['nullable', 'string', 'max:100'],
-            'model' => ['required', 'string', 'max:255'],
+            'custom_brand' => ['nullable', 'string', 'max:100', 'regex:/[\p{L}]/u'],
+            'model' => ['required', 'string', 'max:255', 'regex:/[\p{L}]/u'],
             'year_model' => ['required', 'integer', 'min:1990', 'max:'.(date('Y') + 1)],
-            'plate_number' => ['required', 'string', 'max:20', 'unique:vehicles,plate_number'],
+            'plate_number' => ['required', 'string', 'max:20', 'regex:/^(?:[A-Z]{2,3}[ -]?[0-9]{3,4}|[0-9]{3}[ -]?[A-Z]{3}|[0-9]{15})$/', 'unique:vehicles,plate_number'],
             'body_type_id' => ['nullable', 'exists:body_types,id'],
             'transmission_type_id' => ['required', 'exists:transmission_types,id'],
             'fuel_type_id' => ['required', 'exists:fuel_types,id'],
             'seating_capacity' => ['required', 'integer', 'min:1', 'max:50'],
             'quantity' => ['nullable', 'integer', 'min:1', 'max:50'],
             'number_of_doors' => ['nullable', 'integer', 'min:0', 'max:10'],
-            'mileage' => ['nullable', 'integer', 'min:0'],
-            'interior_color' => ['nullable', 'string', 'max:50'],
-            'exterior_color' => ['nullable', 'string', 'max:50'],
-            'daily_rate' => ['required', 'numeric', 'min:1'],
+            'mileage' => ['nullable', 'integer', 'min:0', 'max:9999999'],
+            'interior_color' => ['nullable', 'string', 'max:50', 'regex:/^[\p{L}][\p{L} \/-]*$/u'],
+            'exterior_color' => ['nullable', 'string', 'max:50', 'regex:/^[\p{L}][\p{L} \/-]*$/u'],
+            'daily_rate' => ['required', 'numeric', 'min:1', 'max:1000000', 'decimal:0,2'],
             'reservation_fee' => ['nullable', 'numeric', 'min:0'],
             'features' => ['nullable'],
-            'description' => ['nullable', 'string'],
-            'pickup_address' => ['nullable', 'string'],
-            'pickup_latitude' => ['nullable', 'numeric'],
-            'pickup_longitude' => ['nullable', 'numeric'],
+            'description' => ['nullable', 'string', 'max:3000'],
+            'pickup_address' => ['nullable', 'string', 'max:500'],
+            'pickup_latitude' => ['nullable', 'numeric', 'between:-90,90'],
+            'pickup_longitude' => ['nullable', 'numeric', 'between:-180,180'],
             'cover_photo' => ['nullable', 'image', 'max:10240'],
-            'images' => ['nullable', 'array'],
+            'images' => ['nullable', 'array', 'max:10'],
             'images.*' => ['image', 'max:10240'],
         ]);
 
@@ -429,28 +437,31 @@ class VehicleController extends Controller
     {
         $vehicle = Vehicle::where('operator_id', $request->user()->id)->findOrFail($id);
 
+        if ($request->has('plate_number')) {
+            $request->merge(['plate_number' => strtoupper(preg_replace('/[\s-]+/', '', trim((string) $request->input('plate_number'))))]);
+        }
         $validated = $request->validate([
-            'name' => ['sometimes', 'required', 'string', 'max:255'],
+            'name' => ['sometimes', 'required', 'string', 'max:255', 'regex:/[\p{L}]/u'],
             'vehicle_type_id' => ['sometimes', 'required', 'exists:vehicle_types,id'],
             'brand_id' => ['sometimes', 'required', 'exists:vehicle_brands,id'],
-            'model' => ['sometimes', 'required', 'string', 'max:255'],
-            'year_model' => ['sometimes', 'required', 'integer'],
-            'plate_number' => ['sometimes', 'required', 'string', 'max:20', 'unique:vehicles,plate_number,'.$vehicle->id],
+            'model' => ['sometimes', 'required', 'string', 'max:255', 'regex:/[\p{L}]/u'],
+            'year_model' => ['sometimes', 'required', 'integer', 'min:1990', 'max:'.(date('Y') + 1)],
+            'plate_number' => ['sometimes', 'required', 'string', 'max:20', 'regex:/^(?:[A-Z]{2,3}[ -]?[0-9]{3,4}|[0-9]{3}[ -]?[A-Z]{3}|[0-9]{15})$/', 'unique:vehicles,plate_number,'.$vehicle->id],
             'body_type_id' => ['nullable', 'exists:body_types,id'],
             'transmission_type_id' => ['sometimes', 'required', 'exists:transmission_types,id'],
             'fuel_type_id' => ['sometimes', 'required', 'exists:fuel_types,id'],
-            'seating_capacity' => ['sometimes', 'required', 'integer'],
-            'quantity' => ['nullable', 'integer', 'min:1'],
-            'daily_rate' => ['sometimes', 'required', 'numeric', 'min:1'],
+            'seating_capacity' => ['sometimes', 'required', 'integer', 'min:1', 'max:50'],
+            'quantity' => ['nullable', 'integer', 'min:1', 'max:50'],
+            'daily_rate' => ['sometimes', 'required', 'numeric', 'min:1', 'max:1000000', 'decimal:0,2'],
             'reservation_fee' => ['nullable', 'numeric', 'min:0'],
             'features' => ['nullable'],
-            'description' => ['nullable', 'string'],
-            'pickup_address' => ['nullable', 'string'],
-            'pickup_latitude' => ['nullable', 'numeric'],
-            'pickup_longitude' => ['nullable', 'numeric'],
+            'description' => ['nullable', 'string', 'max:3000'],
+            'pickup_address' => ['nullable', 'string', 'max:500'],
+            'pickup_latitude' => ['nullable', 'numeric', 'between:-90,90'],
+            'pickup_longitude' => ['nullable', 'numeric', 'between:-180,180'],
             'availability_status' => ['sometimes', 'in:available,unavailable,maintenance'],
             'cover_photo' => ['nullable', 'image', 'max:10240'],
-            'images' => ['nullable', 'array'],
+            'images' => ['nullable', 'array', 'max:10'],
             'images.*' => ['image', 'max:10240'],
         ]);
 
@@ -507,6 +518,7 @@ class VehicleController extends Controller
             $validated['available_units'] = max(0, ($vehicle->available_units ?? 1) + $diff);
         }
 
+        if (isset($validated['daily_rate'])) $validated['base_price_per_day'] = $validated['daily_rate'];
         $vehicle->update($validated);
 
         if ($request->hasFile('images')) {

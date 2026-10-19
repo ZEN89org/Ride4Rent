@@ -62,6 +62,12 @@ class CommissionService
                 ->first();
 
             if ($tripsCount > 0 || $existing) {
+                if ($existing?->status === 'verified') {
+                    $synced->push($existing);
+                    continue;
+                }
+                $statementRate = $existing ? (float) $existing->commission_rate : $commissionPercent;
+                $commissionDue = round($grossRevenue * ($statementRate / 100), 2);
                 $status = $existing?->status ?? 'pending';
 
                 // If already verified, do not alter status
@@ -76,7 +82,7 @@ class CommissionService
                     ],
                     [
                         'gross_revenue' => $grossRevenue,
-                        'commission_rate' => $commissionPercent,
+                        'commission_rate' => $statementRate,
                         'commission_due' => $commissionDue,
                         'completed_trips_count' => $tripsCount,
                         'grace_period_expires_at' => $existing?->grace_period_expires_at ?? $graceDeadline,
@@ -96,6 +102,8 @@ class CommissionService
      */
     public function checkAndProcessGraceExpirations(): int
     {
+        // Operators cannot remit while the platform has no destination account.
+        if (!PlatformSetting::get('commission_gcash_number', '') || !PlatformSetting::get('commission_gcash_name', '')) return 0;
         $now = now()->setTimezone('Asia/Manila');
         $frozenCount = 0;
 
@@ -115,14 +123,14 @@ class CommissionService
             // Mark remittance as frozen
             $remittance->update(['status' => 'frozen']);
 
-            // Freeze the operator account so they cannot accept new bookings
-            if ($operator->account_status !== 'suspended') {
-                $operator->update(['account_status' => 'suspended']);
+            // Freeze the operator so they cannot receive new bookings (can still open app and manage existing trips)
+            if (! $operator->is_frozen) {
+                $operator->freeze("Automated 48-hour grace period expired for cycle {$remittance->billing_month}. Commission due: ₱".number_format((float) $remittance->commission_due, 2));
 
                 Notification::create([
                     'user_id' => $operator->id,
-                    'title' => 'Account Temporarily On Hold',
-                    'message' => "Your account has been paused due to an unsettled {$remittance->billing_month} platform commission statement. Submit your remittance to resume receiving bookings.",
+                    'title' => 'Bookings Temporarily Frozen',
+                    'message' => "Your account is temporarily frozen from receiving new bookings due to an unsettled {$remittance->billing_month} platform commission. Submit your remittance to restore incoming bookings.",
                     'type' => 'warning',
                     'action_url' => '/operator-profile',
                 ]);
@@ -132,7 +140,7 @@ class CommissionService
                     targetType: 'User',
                     targetId: $operator->id,
                     targetName: trim($operator->first_name.' '.$operator->last_name),
-                    details: "Automated 48-hour grace period expired for cycle {$remittance->billing_month}. Commission due: ₱".number_format((float) $remittance->commission_due, 2)
+                    details: "Automated 48-hour grace period expired for cycle {$remittance->billing_month}. Commission due: ₱".number_format((float) $remittance->commission_due, 2).". Listed vehicles set to unavailable."
                 );
 
                 $frozenCount++;
@@ -147,6 +155,9 @@ class CommissionService
      */
     public function verifyRemittance(OperatorRemittance $remittance, User $admin, ?string $notes = null): void
     {
+        if ($remittance->status !== 'submitted') {
+            throw \Illuminate\Validation\ValidationException::withMessages(['remittance' => 'Only a submitted payment proof can be verified.']);
+        }
         $remittance->update([
             'status' => 'verified',
             'verified_at' => now(),
@@ -155,16 +166,19 @@ class CommissionService
         ]);
 
         $operator = $remittance->operator;
-        if ($operator && $operator->account_status === 'suspended') {
-            // Restore operator to active status
-            $operator->update(['account_status' => 'active']);
+        $hasOtherDebt = OperatorRemittance::where('operator_id', $operator?->id)->where('id', '!=', $remittance->id)
+            ->whereIn('status', ['pending', 'overdue', 'frozen'])->where('commission_due', '>', 0)
+            ->where('grace_period_expires_at', '<=', now())->exists();
+        if ($operator && $operator->is_frozen && !$hasOtherDebt) {
+            // Restore operator to unfrozen status so they can receive bookings again
+            $operator->unfreeze();
 
             AdminAuditLog::record(
                 action: 'operator_unfrozen_remittance_verified',
                 targetType: 'User',
                 targetId: $operator->id,
                 targetName: trim($operator->first_name.' '.$operator->last_name),
-                details: "Operator reactivated after verifying ₱".number_format((float) $remittance->commission_due, 2)." remittance for {$remittance->billing_month}."
+                details: "Operator unfrozen and listings restored after verifying ₱".number_format((float) $remittance->commission_due, 2)." remittance for {$remittance->billing_month}."
             );
         }
 
@@ -172,7 +186,7 @@ class CommissionService
             Notification::create([
                 'user_id' => $operator->id,
                 'title' => 'Commission Remittance Verified',
-                'message' => "Your platform commission for {$remittance->billing_month} has been confirmed. Your account is active and accepting new bookings!",
+                'message' => "Your platform commission for {$remittance->billing_month} has been confirmed. Check your account for any other outstanding statements.",
                 'type' => 'success',
                 'action_url' => '/operator-profile',
             ]);

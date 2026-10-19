@@ -17,6 +17,8 @@ class Booking extends Model
     ];
 
     protected $fillable = [
+        'rental_paid_amount', 'rental_balance_paid_at', 'return_collected_amount',
+        'pickup_at', 'return_at', 'no_show_at',
         'renter_id',
         'vehicle_id',
         'operator_id',
@@ -91,6 +93,12 @@ class Booking extends Model
     protected function casts(): array
     {
         return [
+            'rental_paid_amount' => 'decimal:2',
+            'return_collected_amount' => 'decimal:2',
+            'rental_balance_paid_at' => 'datetime',
+            'pickup_at' => 'datetime',
+            'return_at' => 'datetime',
+            'no_show_at' => 'datetime',
             'start_date' => 'date:Y-m-d',
             'end_date' => 'date:Y-m-d',
             'extension_end_date' => 'date:Y-m-d',
@@ -128,7 +136,26 @@ class Booking extends Model
 
     protected $appends = [
         'operator_payment_info',
+        'balance_due',
     ];
+
+    public function getBalanceDueAttribute(): float
+    {
+        if (in_array($this->status, ['cancelled', 'rejected', 'no_show'])) return 0;
+        if ($this->payment_status === 'paid_full' && $this->status === 'completed') return 0;
+        $rentalPaid = (float) $this->rental_paid_amount;
+        if ($rentalPaid <= 0 && in_array($this->payment_status, ['paid_reservation', 'paid_full'])) {
+            $rentalPaid = (float) $this->reservation_fee;
+        }
+        return round(max(0, (float) $this->total_price - $rentalPaid - (float) $this->extension_paid_total), 2);
+    }
+
+    public function scheduledPickup(): \Carbon\Carbon
+    {
+        if ($this->pickup_at) return $this->pickup_at->copy();
+        preg_match('/Schedule:\s*((?:0?[1-9]|1[0-2]):[0-5][0-9] (?:AM|PM)) pickup/', $this->notes ?? '', $matches);
+        return \Carbon\Carbon::parse($this->start_date->format('Y-m-d').' '.($matches[1] ?? '10:00 AM'), 'Asia/Manila');
+    }
 
     public function getOperatorPaymentInfoAttribute(): ?array
     {

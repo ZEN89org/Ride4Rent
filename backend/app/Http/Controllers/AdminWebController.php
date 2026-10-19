@@ -94,7 +94,7 @@ class AdminWebController extends Controller
         $currentMonthCollected = (float) $currentMonthRemittances->where('status', 'verified')->sum('commission_due');
         $currentMonthPending = (float) $currentMonthRemittances->whereIn('status', ['pending', 'submitted', 'overdue', 'frozen'])->sum('commission_due');
 
-        $frozenOperatorsCount = User::where('role', 'operator')->where('account_status', 'suspended')->count();
+        $frozenOperatorsCount = User::where('role', 'operator')->where('is_frozen', true)->count();
         $inGraceRemittances = OperatorRemittance::where('status', 'pending')
             ->whereNotNull('grace_period_expires_at')
             ->where('grace_period_expires_at', '>', $now)
@@ -272,19 +272,19 @@ class AdminWebController extends Controller
         // 4. Platform Statistics
         $totalRenters = User::whereIn('role', ['customer', 'renter'])->count();
         $totalOperators = User::where('role', 'operator')->count();
-        $activeOperators = User::where('role', 'operator')->where('account_status', 'active')->count();
+        $activeOperators = User::where('role', 'operator')->where('account_status', 'active')->where('is_frozen', false)->count();
+        $frozenOperators = User::where('role', 'operator')->where('is_frozen', true)->count();
         $pendingOperators = User::where('role', 'operator')->where('account_status', 'pending')->count();
         $activeAccounts = User::where('role', '!=', 'admin')->where('account_status', 'active')->count();
-        $suspendedAccounts = User::where('role', '!=', 'admin')->where('account_status', 'suspended')->count();
 
         $stats = [
             'total_platform_users' => User::where('role', '!=', 'admin')->count(),
             'total_renters' => $totalRenters,
             'total_operators' => $totalOperators,
             'active_operators' => $activeOperators,
+            'frozen_operators' => $frozenOperators,
             'pending_operators' => $pendingOperators,
             'active_accounts' => $activeAccounts,
-            'suspended_accounts' => $suspendedAccounts,
             'pending_verifications' => $operators->count(),
         ];
 
@@ -303,6 +303,7 @@ class AdminWebController extends Controller
         $disputes = Booking::with(['renter', 'operator', 'vehicle'])
             ->where(function ($q) {
                 $q->where('status', 'cancelled')
+                    ->orWhere('status', 'no_show')
                     ->orWhere('damage_charge', '>', 0)
                     ->orWhere('fuel_charge', '>', 0)
                     ->orWhere('late_fee', '>', 0)
@@ -319,6 +320,8 @@ class AdminWebController extends Controller
             'support_email' => PlatformSetting::get('support_email', 'support@ride4rent.ph'),
             'max_advance_days' => PlatformSetting::get('max_advance_days', '30'),
             'platform_fee_percent' => PlatformSetting::get('platform_fee_percent', '10'),
+            'commission_gcash_name' => PlatformSetting::get('commission_gcash_name', ''),
+            'commission_gcash_number' => PlatformSetting::get('commission_gcash_number', ''),
         ];
 
         return view('admin.dashboard', compact(
@@ -342,7 +345,7 @@ class AdminWebController extends Controller
     }
 
     /**
-     * Account Status Management (Active / Suspended / Pending)
+     * Account Accreditation Status Management (Active / Pending / Rejected)
      */
     public function updateAccountStatus(Request $request, User $user): RedirectResponse
     {
@@ -351,7 +354,7 @@ class AdminWebController extends Controller
         }
 
         $validated = $request->validate([
-            'account_status' => ['required', 'in:active,suspended,pending'],
+            'account_status' => ['required', 'in:active,pending,rejected'],
             'status_reason' => ['nullable', 'string', 'max:500'],
         ]);
 
@@ -372,19 +375,19 @@ class AdminWebController extends Controller
             details: "Changed status from {$previousStatus} to ".strtoupper($newStatus).($reason ? " (Reason: {$reason})" : '')
         );
 
-        if ($newStatus === 'suspended') {
+        if ($newStatus === 'rejected') {
             Notification::create([
                 'user_id' => $user->id,
-                'title' => 'Account Suspended',
-                'message' => 'Your account has been suspended by the administrator.',
-                'type' => 'warning',
+                'title' => 'Account Status Update',
+                'message' => 'Your account accreditation was not approved.',
+                'type' => 'error',
                 'action_url' => '/profile',
             ]);
         } elseif ($newStatus === 'active' && $previousStatus !== 'active') {
             Notification::create([
                 'user_id' => $user->id,
-                'title' => 'Account Reactivated',
-                'message' => 'Your account has been restored to active status.',
+                'title' => 'Account Activated',
+                'message' => 'Your account has been activated.',
                 'type' => 'success',
                 'action_url' => '/profile',
             ]);
@@ -394,36 +397,19 @@ class AdminWebController extends Controller
     }
 
     /**
-     * Quick status toggle (Active <-> Suspended)
+     * Toggle Operator Freeze Status (Only applies to operators)
      */
     public function toggleUserStatus(User $user): RedirectResponse
     {
         if ($user->role === 'admin' || $user->id === Auth::id()) {
-            return back()->withErrors(['error' => 'You cannot suspend an administrative account.']);
+            return back()->withErrors(['error' => 'You cannot freeze an administrative account.']);
         }
 
-        $newStatus = $user->account_status === 'active' ? 'suspended' : 'active';
-        $user->update(['account_status' => $newStatus]);
-
-        AdminAuditLog::record(
-            action: 'account_status_toggled',
-            targetType: 'User',
-            targetId: $user->id,
-            targetName: trim($user->first_name.' '.$user->last_name),
-            details: "Account access toggled to {$newStatus}"
-        );
-
-        if ($newStatus === 'suspended') {
-            Notification::create([
-                'user_id' => $user->id,
-                'title' => 'Account Suspended',
-                'message' => 'Your account has been suspended by the administrator.',
-                'type' => 'warning',
-                'action_url' => '/profile',
-            ]);
+        if ($user->role === 'operator') {
+            return $this->toggleOperatorFreeze($user);
         }
 
-        return back()->with('status', "Account for {$user->email} is now {$newStatus}.");
+        return back()->with('status', "User {$user->email} is active. Freeze actions apply exclusively to vehicle hosts (operators).");
     }
 
     /**
@@ -529,6 +515,8 @@ class AdminWebController extends Controller
             'support_email' => ['required', 'email', 'max:100'],
             'max_advance_days' => ['required', 'integer', 'min:1', 'max:365'],
             'platform_fee_percent' => ['required', 'numeric', 'min:0', 'max:50'],
+            'commission_gcash_name' => ['nullable', 'string', 'max:100'],
+            'commission_gcash_number' => ['nullable', 'regex:/^09\d{9}$/'],
         ]);
 
         foreach ($validated as $key => $value) {
@@ -802,32 +790,39 @@ class AdminWebController extends Controller
     }
 
     /**
-     * Toggle Operator Freeze / Suspension
+     * Toggle Operator Freeze (Manual Freeze / Unfreeze by Admin)
      */
     public function toggleOperatorFreeze(User $user): RedirectResponse
     {
         abort_unless($user->role === 'operator', 404);
 
-        $newStatus = $user->account_status === 'suspended' ? 'active' : 'suspended';
-        $user->update(['account_status' => $newStatus]);
-
-        $actionText = $newStatus === 'suspended' ? 'frozen (blocked from new rentals)' : 'unfrozen and reactivated';
+        if ($user->is_frozen) {
+            $user->unfreeze();
+            $actionText = 'unfrozen (listings restored for new bookings)';
+            $notifTitle = 'Operator Account Unfrozen';
+            $notifMessage = 'Your account has been unfrozen by administration. Your vehicles are now open to receive new bookings!';
+            $notifType = 'success';
+        } else {
+            $user->freeze('Manually frozen by platform administrator');
+            $actionText = 'frozen (app access kept, but blocked from receiving new bookings)';
+            $notifTitle = 'Bookings Temporarily Frozen';
+            $notifMessage = 'Your vehicle hosting account has been temporarily frozen from receiving new bookings by administration.';
+            $notifType = 'warning';
+        }
 
         AdminAuditLog::record(
-            action: 'operator_freeze_toggled',
+            action: $user->is_frozen ? 'operator_manually_frozen' : 'operator_manually_unfrozen',
             targetType: 'User',
             targetId: $user->id,
             targetName: trim($user->first_name.' '.$user->last_name),
-            details: "Admin manually set operator account status to {$newStatus}"
+            details: "Admin manually set operator freeze status: {$actionText}"
         );
 
         Notification::create([
             'user_id' => $user->id,
-            'title' => $newStatus === 'suspended' ? 'Operator Account Suspended' : 'Operator Account Activated',
-            'message' => $newStatus === 'suspended'
-                ? 'Your vehicle hosting privileges are temporarily on hold by administration.'
-                : 'Your vehicle hosting privileges have been reactivated. You can accept new bookings!',
-            'type' => $newStatus === 'suspended' ? 'warning' : 'success',
+            'title' => $notifTitle,
+            'message' => $notifMessage,
+            'type' => $notifType,
             'action_url' => '/operator-profile',
         ]);
 

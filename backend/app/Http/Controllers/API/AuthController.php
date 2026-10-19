@@ -240,9 +240,9 @@ class AuthController extends Controller
         }
 
         $validated = $request->validate([
-            'first_name' => ['required', 'string', 'max:100'],
-            'middle_name' => ['nullable', 'string', 'max:100'],
-            'last_name' => ['required', 'string', 'max:100'],
+            'first_name' => ['required', 'string', 'max:100', 'regex:/^[\p{L}\p{M} .’\x27-]+$/u'],
+            'middle_name' => ['nullable', 'string', 'max:100', 'regex:/^[\p{L}\p{M} .’\x27-]+$/u'],
+            'last_name' => ['required', 'string', 'max:100', 'regex:/^[\p{L}\p{M} .’\x27-]+$/u'],
             'suffix' => ['nullable', 'string', 'max:20'],
             'email' => ['required', 'email', 'unique:users,email'],
             'date_of_birth' => [
@@ -255,7 +255,7 @@ class AuthController extends Controller
 
             'business_name' => ['required', 'string', 'max:255'],
             'business_email' => ['required', 'email'],
-            'business_contact_number' => ['required', 'string', 'max:20'],
+            'business_contact_number' => ['required', 'string', 'regex:/^(09\d{9}|\+639\d{9})$/'],
             'street_address' => ['required', 'string', 'max:255'],
             'barangay' => ['required', 'string', 'max:100'],
             'municipality' => ['required', 'string', 'max:100'],

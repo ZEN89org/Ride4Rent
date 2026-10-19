@@ -50,7 +50,7 @@ class MessageController extends Controller
                 ->orWhere(function ($q) use ($userId, $otherId) {
                     $q->where('sender_id', $otherId)->where('receiver_id', $userId);
                 })
-                ->latest()
+                ->orderByDesc('created_at')->orderByDesc('id')
                 ->first();
 
             $unreadCount = Message::where('sender_id', $otherId)
@@ -93,6 +93,8 @@ class MessageController extends Controller
                     : null,
                 'last_message' => $displayMsg ?? '',
                 'last_time' => $lastMsg?->created_at?->diffForHumans() ?? '',
+                'last_message_id' => $lastMsg?->id,
+                'last_message_at' => $lastMsg?->created_at?->toIso8601String(),
                 'unread_count' => $unreadCount,
                 'archived' => (bool) $state?->archived_at,
             ];
@@ -100,7 +102,7 @@ class MessageController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $conversations,
+            'data' => collect($conversations)->sortBy([['last_message_at', 'desc'], ['last_message_id', 'desc']])->values(),
         ]);
     }
 
@@ -187,8 +189,7 @@ class MessageController extends Controller
                     $sub->where('renter_id', $otherUserId)->where('operator_id', $userId);
                 });
             })
-            ->where('status', 'pending_payment')
-            ->where('payment_status', 'unpaid')
+            ->whereIn('status', ['pending_payment', ...Booking::ACTIVE_STATUSES])
             ->latest()
             ->first();
 
@@ -204,7 +205,9 @@ class MessageController extends Controller
                 'total_days' => $booking->total_days,
                 'total_price' => (float) $booking->total_price,
                 'reservation_fee' => (float) ($booking->reservation_fee ?? 500),
-                'balance_due' => max(0, (float) $booking->total_price - (float) ($booking->reservation_fee ?? 500)),
+                'balance_due' => $booking->balance_due,
+                'extension_status' => $booking->extension_status,
+                'extension_price' => (float) $booking->extension_price,
                 'status' => $booking->status,
                 'payment_status' => $booking->payment_status,
                 'operator_payment_info' => $booking->operator_payment_info,

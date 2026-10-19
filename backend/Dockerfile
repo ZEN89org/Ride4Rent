@@ -1,4 +1,5 @@
 FROM php:8.3-apache
+ENV LOG_CHANNEL=stderr
 
 # Install system dependencies & PostgreSQL dev libraries
 RUN apt-get update && apt-get install -y \

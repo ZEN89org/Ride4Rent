@@ -50,4 +50,5 @@ return [
         'api_key' => env('LIVEKIT_API_KEY'),
         'api_secret' => env('LIVEKIT_API_SECRET'),
     ],
+    'expo' => ['access_token' => env('EXPO_ACCESS_TOKEN')],
 ];

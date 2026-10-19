@@ -18,18 +18,21 @@ class RegisterRequest extends FormRequest
                 'required',
                 'string',
                 'max:100',
+                'regex:/^[\p{L}\p{M} .’\x27-]+$/u',
             ],
 
             'middle_name' => [
                 'nullable',
                 'string',
                 'max:100',
+                'regex:/^[\p{L}\p{M} .’\x27-]+$/u',
             ],
 
             'last_name' => [
                 'required',
                 'string',
                 'max:100',
+                'regex:/^[\p{L}\p{M} .’\x27-]+$/u',
             ],
 
             'suffix' => [
@@ -54,13 +57,14 @@ class RegisterRequest extends FormRequest
             'email' => [
                 'required',
                 'email',
+                'max:254',
                 'unique:users,email',
             ],
 
             'mobile_number' => [
                 'required',
                 'string',
-                'max:20',
+                'regex:/^(09\d{9}|\+639\d{9})$/',
             ],
 
             'password' => [

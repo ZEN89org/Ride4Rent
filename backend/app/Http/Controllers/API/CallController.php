@@ -116,7 +116,8 @@ class CallController extends Controller
         ]);
 
         if (! config('services.livekit.url') || ! config('services.livekit.api_key') || ! config('services.livekit.api_secret')) {
-            return response()->json(['message' => 'Voice calling is not configured on this server.'], 503);
+            \Illuminate\Support\Facades\Log::warning('Voice calling unavailable: check LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET on the backend service.');
+            return response()->json(['message' => 'Voice calls are temporarily unavailable. Please use in-app chat while support restores calling.'], 503);
         }
         $caller = $request->user();
         $callerId = $caller->id;

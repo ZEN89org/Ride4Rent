@@ -52,12 +52,156 @@ class RentalIntegrityTest extends TestCase
         ]);
     }
 
+    public function test_verified_renter_can_replace_license_and_requires_new_review(): void
+    {
+        Storage::fake('local');
+        $this->renter->update(['is_drivers_license_verified' => true, 'license_verification_status' => 'approved']);
+        $this->actingAs($this->renter, 'sanctum')->post('/api/v1/user/license', [
+            'front_image' => \Illuminate\Http\UploadedFile::fake()->image('front.jpg'),
+            'back_image' => \Illuminate\Http\UploadedFile::fake()->image('back.jpg'),
+        ], ['Accept' => 'application/json'])->assertOk()->assertJsonPath('data.license_verification_status', 'pending');
+        $updated = $this->renter->fresh();
+        $this->assertFalse((bool) $updated->is_drivers_license_verified);
+        $this->assertNotSame('driver_licenses/front.jpg', $updated->drivers_license_front);
+        $this->assertDatabaseHas('stored_files', ['path' => $updated->drivers_license_front]);
+        $this->assertDatabaseHas('stored_files', ['path' => $updated->drivers_license_back]);
+    }
+
+    public function test_license_update_without_both_photos_preserves_verification(): void
+    {
+        $this->renter->update(['is_drivers_license_verified' => true, 'license_verification_status' => 'approved']);
+        $this->actingAs($this->renter, 'sanctum')->postJson('/api/v1/user/license', [])
+            ->assertUnprocessable()->assertJsonValidationErrors(['front_image', 'back_image']);
+        $this->assertSame('approved', $this->renter->fresh()->license_verification_status);
+    }
+
+    public function test_operator_can_review_pending_license_when_approving_booking(): void
+    {
+        $this->renter->update(['is_drivers_license_verified' => false, 'license_verification_status' => 'pending']);
+        $this->actingAs($this->operator, 'sanctum')->postJson('/api/v1/bookings/'.$this->booking->id.'/confirm-payment')->assertOk();
+        $this->assertSame('approved', $this->renter->fresh()->license_verification_status);
+    }
+
+    public function test_operator_can_request_replacement_license_photos(): void
+    {
+        $this->actingAs($this->operator, 'sanctum')->patchJson('/api/v1/bookings/'.$this->booking->id.'/status', [
+            'status' => 'rejected', 'license_rejected' => true, 'rejection_reason' => 'License photo is unreadable.',
+        ])->assertOk();
+        $this->assertSame('rejected', $this->renter->fresh()->license_verification_status);
+        $this->assertDatabaseHas('notifications', ['user_id' => $this->renter->id, 'action_url' => '/driver-license', 'title' => 'New License Photos Required']);
+    }
+
+    public function test_fleet_returns_only_the_authenticated_operators_vehicles(): void
+    {
+        $this->actingAs($this->operator, 'sanctum')->getJson('/api/v1/operator/vehicles')
+            ->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $this->vehicle->id);
+        $otherOperator = $this->operator->replicate();
+        $otherOperator->email = 'other-operator@example.com';
+        $otherOperator->save();
+        $this->actingAs($otherOperator, 'sanctum')->getJson('/api/v1/operator/vehicles')
+            ->assertOk()->assertJsonCount(0, 'data');
+    }
+
+    public function test_vehicle_edit_rejects_invalid_details_without_saving(): void
+    {
+        $this->actingAs($this->operator, 'sanctum')->putJson('/api/v1/operator/vehicles/'.$this->vehicle->id, [
+            'name' => '12345', 'model' => '!!!', 'year_model' => 9999,
+            'plate_number' => 'random', 'daily_rate' => '1.234', 'quantity' => 1000,
+        ])->assertUnprocessable()->assertJsonValidationErrors(['name', 'model', 'year_model', 'plate_number', 'daily_rate', 'quantity']);
+        $this->assertSame('Test Bike', $this->vehicle->fresh()->name);
+    }
+
+    public function test_plate_is_normalized_before_duplicate_check(): void
+    {
+        $this->vehicle->update(['plate_number' => 'ABC1234']);
+        $other = $this->vehicle->replicate();
+        $other->plate_number = 'XYZ1234';
+        $other->save();
+        $this->actingAs($this->operator, 'sanctum')->putJson('/api/v1/operator/vehicles/'.$other->id, ['plate_number' => ' abc-1234 '])
+            ->assertUnprocessable()->assertJsonValidationErrors('plate_number');
+    }
+
     public function test_operator_cannot_move_pickup_outside_oriental_mindoro(): void
     {
         $this->actingAs($this->operator, 'sanctum')->putJson('/api/v1/operator/vehicles/'.$this->vehicle->id, [
             'pickup_latitude' => 12.352, 'pickup_longitude' => 121.067,
         ])->assertUnprocessable()->assertJsonValidationErrors('pickup_latitude');
         $this->assertNull($this->vehicle->fresh()->pickup_latitude);
+    }
+
+    public function test_handover_requires_collection_and_records_full_base_payment(): void
+    {
+        $this->booking->update(['status' => 'approved']);
+        $url = '/api/v1/bookings/'.$this->booking->id.'/start-trip';
+        $this->actingAs($this->operator, 'sanctum')->postJson($url, ['start_mileage' => 1, 'start_fuel_level' => 100])->assertUnprocessable();
+        $this->postJson($url, ['start_mileage' => 1, 'start_fuel_level' => 100, 'rental_balance_collected' => true])->assertOk();
+        $this->assertEquals(1200, $this->booking->fresh()->rental_paid_amount);
+        $this->assertEquals(0, $this->booking->fresh()->balance_due);
+    }
+
+    public function test_new_booking_uses_five_percent_of_the_entire_rental(): void
+    {
+        $this->booking->update(['status' => 'cancelled']);
+        $this->renter->update(['drivers_license_front' => 'driver_licenses/front.jpg', 'drivers_license_back' => 'driver_licenses/back.jpg', 'license_verification_status' => 'approved']);
+        $this->actingAs($this->renter, 'sanctum')->postJson('/api/v1/bookings', [
+            'vehicle_id' => $this->vehicle->id, 'start_date' => today()->addDay()->toDateString(),
+            'end_date' => today()->addDays(6)->toDateString(), 'pickup_time' => '01:30 PM', 'return_time' => '01:30 PM',
+        ])->assertCreated()->assertJsonPath('data.total_price', '3000.00')->assertJsonPath('data.reservation_fee', '150.00');
+    }
+
+    public function test_new_listing_accepts_an_uploaded_cover_image(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+        $this->operator->operatorProfile()->create(['business_name' => 'Test Fleet', 'business_email' => 'fleet@example.com', 'business_contact_number' => '09171234567', 'street_address' => 'Test Street', 'barangay' => 'Test', 'municipality' => 'Calapan City', 'account_name' => 'Test Operator', 'account_number' => '09171234567', 'latitude' => 13.4108, 'longitude' => 121.1803]);
+        $this->actingAs($this->operator, 'sanctum')->post('/api/v1/operator/vehicles', [
+            'name' => 'New Car', 'vehicle_type_id' => $this->vehicle->vehicle_type_id,
+            'brand_id' => $this->vehicle->brand_id, 'model' => 'Test Model', 'year_model' => 2025,
+            'plate_number' => 'NEW1234', 'transmission_type_id' => $this->vehicle->transmission_type_id,
+            'fuel_type_id' => $this->vehicle->fuel_type_id, 'seating_capacity' => 4, 'daily_rate' => 100,
+            'pickup_latitude' => 13.4108, 'pickup_longitude' => 121.1803,
+            'cover_photo' => \Illuminate\Http\UploadedFile::fake()->image('cover.jpg'),
+        ], ['Accept' => 'application/json'])->assertCreated();
+        $this->assertDatabaseHas('vehicles', ['plate_number' => 'NEW1234', 'operator_id' => $this->operator->id]);
+    }
+
+    public function test_device_tokens_cannot_be_deleted_by_another_account(): void
+    {
+        $payload = ['token' => 'ExpoPushToken[test_device_123]'];
+        $this->actingAs($this->renter, 'sanctum')->postJson('/api/v1/notifications/devices', $payload)->assertOk();
+        $this->actingAs($this->operator, 'sanctum')->deleteJson('/api/v1/notifications/devices', $payload)->assertOk();
+        $this->assertDatabaseHas('notification_devices', ['token' => $payload['token'], 'user_id' => $this->renter->id]);
+    }
+
+    public function test_return_reminders_are_role_aware_and_not_repeated_on_every_run(): void
+    {
+        $this->booking->update(['status' => 'trip_in_progress', 'return_at' => now()->subHour(), 'last_location_updated_at' => now()]);
+        app(\App\Services\BookingReminderService::class)->send();
+        app(\App\Services\BookingReminderService::class)->send();
+        $this->assertSame(2, \App\Models\Notification::where('title', 'Vehicle Return Overdue')->count());
+        $this->assertSame(0, \App\Models\Notification::where('title', 'Pickup Reminder')->count());
+    }
+
+    public function test_no_show_is_cancelled_only_after_24_hours_and_keeps_fee(): void
+    {
+        $this->booking->update(['status' => 'awaiting_pickup', 'start_date' => today()->subDays(2), 'pickup_at' => now()->subHours(23)]);
+        app(BookingExpirationService::class)->expire();
+        $this->assertSame('awaiting_pickup', $this->booking->fresh()->status);
+        $this->booking->update(['pickup_at' => now()->subHours(24)]);
+        app(BookingExpirationService::class)->expire();
+        $this->assertSame('no_show', $this->booking->fresh()->status);
+        $this->assertSame('paid_reservation', $this->booking->fresh()->payment_status);
+        $this->assertNull($this->booking->fresh()->refund_status);
+        $this->assertEquals(1, $this->vehicle->fresh()->available_units);
+    }
+
+    public function test_return_does_not_charge_base_rental_twice(): void
+    {
+        $this->booking->update(['status' => 'trip_in_progress', 'rental_paid_amount' => 1200, 'start_mileage' => 100]);
+        $this->actingAs($this->operator, 'sanctum')->postJson('/api/v1/bookings/'.$this->booking->id.'/complete-trip', [
+            'end_mileage' => 200, 'end_fuel_level' => 100, 'settlement_confirmed' => true, 'damage_charge' => 50,
+        ])->assertOk();
+        $this->assertEquals(50, $this->booking->fresh()->return_collected_amount);
+        $this->assertEquals(0, $this->booking->fresh()->final_amount_due);
     }
 
     private function user(string $role): User
@@ -79,11 +223,11 @@ class RentalIntegrityTest extends TestCase
         }
     }
 
-    public function test_operator_approval_preserves_license_verification(): void
+    public function test_rejected_license_requires_new_upload_before_booking_approval(): void
     {
-        $this->renter->update(['license_verification_status' => 'pending']);
+        $this->renter->update(['license_verification_status' => 'rejected']);
         $this->actingAs($this->operator, 'sanctum')->postJson('/api/v1/bookings/'.$this->booking->id.'/confirm-payment')->assertUnprocessable();
-        $this->assertSame('pending', $this->renter->fresh()->license_verification_status);
+        $this->assertSame('rejected', $this->renter->fresh()->license_verification_status);
         $this->assertSame('pending_verification', $this->booking->fresh()->status);
     }
 
@@ -97,7 +241,7 @@ class RentalIntegrityTest extends TestCase
     public function test_return_inspection_updates_maintenance_odometer(): void
     {
         $this->booking->update(['status' => 'trip_in_progress', 'start_mileage' => 1000]);
-        $this->actingAs($this->operator, 'sanctum')->postJson('/api/v1/bookings/'.$this->booking->id.'/complete-trip', ['end_mileage' => 1200, 'end_fuel_level' => 90])->assertOk();
+        $this->actingAs($this->operator, 'sanctum')->postJson('/api/v1/bookings/'.$this->booking->id.'/complete-trip', ['end_mileage' => 1200, 'end_fuel_level' => 90, 'settlement_confirmed' => true])->assertOk();
         $this->assertSame(1200, $this->vehicle->fresh()->current_odometer);
         $this->assertSame('completed', $this->booking->fresh()->status);
     }
@@ -177,7 +321,7 @@ class RentalIntegrityTest extends TestCase
             'extension_days' => 1, 'extension_price' => 600, 'extension_end_date' => today()->addDays(3),
         ]);
         $originalEnd = $this->booking->end_date->toDateString();
-        $this->actingAs($this->renter, 'sanctum')->postJson('/api/v1/bookings/'.$this->booking->id.'/settle-extension-payment', ['payment_method' => 'cash'])->assertOk();
+        $this->actingAs($this->renter, 'sanctum')->postJson('/api/v1/bookings/'.$this->booking->id.'/settle-extension-payment', ['payment_method' => 'gcash', 'payment_reference' => '1234567890123'])->assertOk();
         $this->assertSame($originalEnd, $this->booking->fresh()->end_date->toDateString());
         $this->assertSame('pending_verification', $this->booking->fresh()->extension_status);
         $this->actingAs($this->renter, 'sanctum')->postJson('/api/v1/bookings/'.$this->booking->id.'/confirm-extension-payment')->assertNotFound();
@@ -200,13 +344,12 @@ class RentalIntegrityTest extends TestCase
         $this->assertSame((float) $price * 2, (float) $response->json('data.total_price'));
     }
 
-    public function test_admin_advance_limit_and_kyc_are_enforced(): void
+    public function test_advance_limit_is_enforced_while_pending_license_can_be_reviewed_by_operator(): void
     {
         $this->booking->delete();
         $this->renter->update(['license_verification_status' => 'pending']);
         $payload = ['vehicle_id' => $this->vehicle->id, 'start_date' => today()->addDays(3)->toDateString(), 'end_date' => today()->addDays(4)->toDateString()];
-        $this->actingAs($this->renter, 'sanctum')->postJson('/api/v1/bookings', $payload)->assertUnprocessable()->assertJsonPath('code', 'LICENSE_PENDING');
-        PlatformSetting::set('require_kyc_for_booking', '0');
+        $this->actingAs($this->renter, 'sanctum');
         PlatformSetting::set('max_advance_days', '2');
         $this->actingAs($this->renter, 'sanctum')->postJson('/api/v1/bookings', $payload)->assertUnprocessable();
         PlatformSetting::set('max_advance_days', '5');

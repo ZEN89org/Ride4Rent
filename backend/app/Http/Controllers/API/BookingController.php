@@ -76,18 +76,24 @@ class BookingController extends Controller
             'vehicle_id' => ['required', 'exists:vehicles,id'],
             'start_date' => ['required', 'date', 'after_or_equal:today'],
             'end_date' => ['required', 'date', 'after_or_equal:start_date'],
+            'pickup_time' => ['nullable', 'regex:/^(0?[1-9]|1[0-2]):[0-5][0-9] (AM|PM)$/'],
+            'return_time' => ['nullable', 'regex:/^(0?[1-9]|1[0-2]):[0-5][0-9] (AM|PM)$/'],
             'notes' => ['nullable', 'string', 'max:500'],
         ]);
 
-        if (PlatformSetting::get('require_kyc_for_booking', '1') === '1' && $user->license_verification_status !== 'approved') {
-            return response()->json(['message' => 'Your driver license must be approved before booking.', 'code' => 'LICENSE_PENDING'], 422);
-        }
         if (Carbon::parse($validated['start_date'])->startOfDay()->gt(now()->startOfDay()->addDays((int) PlatformSetting::get('max_advance_days', '30')))) {
             return response()->json(['message' => 'The pickup date exceeds the maximum advance booking period.'], 422);
         }
         $vehicle = Vehicle::findOrFail($validated['vehicle_id']);
         if ($vehicle->operator?->account_status !== 'active') {
             return response()->json(['message' => 'This operator is not currently active.'], 422);
+        }
+        if ($vehicle->operator?->is_frozen) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This vehicle is currently unavailable because the host is temporarily not accepting new bookings.',
+                'code' => 'OPERATOR_FROZEN',
+            ], 422);
         }
 
         // Anti-Spam Check 1: Max 1 pending unpaid reservation per renter
@@ -196,8 +202,8 @@ class BookingController extends Controller
         $totalDays = max(1, $start->diff($end)->days);
 
         $dailyRate = (float) DemandPricingService::calculateVehicleDemand($vehicle)['effective_price'];
-        $resFee = (float) ($vehicle->reservation_fee ?? 500);
         $totalPrice = $dailyRate * $totalDays;
+        $resFee = round($totalPrice * 0.05, 2);
 
         $booking = Booking::create([
             'renter_id' => $user->id,
@@ -209,6 +215,8 @@ class BookingController extends Controller
             'daily_rate' => $dailyRate,
             'reservation_fee' => $resFee,
             'total_price' => $totalPrice,
+            'pickup_at' => Carbon::parse($validated['start_date'].' '.($validated['pickup_time'] ?? '10:00 AM'), 'Asia/Manila')->utc(),
+            'return_at' => Carbon::parse($validated['end_date'].' '.($validated['return_time'] ?? '10:00 AM'), 'Asia/Manila')->utc(),
             'status' => 'pending_payment',
             'payment_status' => 'unpaid',
             'expires_at' => now()->addHours(24),
@@ -455,9 +463,14 @@ class BookingController extends Controller
         if ($overlap && (! $booking->is_multi_vehicle_rental || ! $booking->secondary_driver_name)) {
             return response()->json(['message' => 'An overlapping rental requires a designated secondary driver.'], 422);
         }
-        if ($booking->renter?->license_verification_status === 'rejected' || (PlatformSetting::get('require_kyc_for_booking', '1') === '1' && $booking->renter?->license_verification_status !== 'approved')) {
-            return response()->json(['message' => 'An approved driver license is required.'], 422);
+        if (!$booking->renter?->drivers_license_front || !$booking->renter?->drivers_license_back || $booking->renter?->license_verification_status === 'rejected') {
+            return response()->json(['message' => 'Ask the renter to upload both sides of a valid license before approval.'], 422);
         }
+        $booking->renter->update([
+            'is_drivers_license_verified' => true,
+            'license_verification_status' => 'approved',
+            'license_rejection_reason' => null,
+        ]);
         $booking->update([
             'status' => 'approved',
             'payment_status' => 'paid_reservation',
@@ -502,6 +515,7 @@ class BookingController extends Controller
     {
         $validated = $request->validate([
             'start_mileage' => ['required', 'integer', 'min:0'],
+            'rental_balance_collected' => ['required', 'accepted'],
             'start_fuel_level' => ['required', 'integer', 'min:0', 'max:100'],
             'start_inspection_notes' => ['nullable', 'string', 'max:1000'],
             'start_inspection_photos' => ['nullable', 'array', 'max:10'],
@@ -525,6 +539,10 @@ class BookingController extends Controller
             ], 422);
         }
 
+        if (!in_array($booking->payment_status, ['paid_reservation', 'paid_full'])) {
+            return response()->json(['message' => 'Verify the reservation payment before handover.'], 422);
+        }
+
         $photoPaths = [];
         if ($request->hasFile('start_inspection_photos')) {
             foreach ($request->file('start_inspection_photos') as $file) {
@@ -538,6 +556,9 @@ class BookingController extends Controller
         $booking->update([
             'status' => 'trip_in_progress',
             'actual_start_time' => $now,
+            'rental_paid_amount' => max(0, (float) $booking->total_price - (float) $booking->extension_paid_total),
+            'rental_balance_paid_at' => $now,
+            'payment_status' => 'paid_full',
             'start_mileage' => $validated['start_mileage'],
             'start_fuel_level' => $validated['start_fuel_level'],
             'start_inspection_notes' => $validated['start_inspection_notes'] ?? null,
@@ -566,6 +587,7 @@ class BookingController extends Controller
     {
         $validated = $request->validate([
             'end_mileage' => ['required', 'integer', 'min:0'],
+            'settlement_confirmed' => ['required', 'accepted'],
             'end_fuel_level' => ['required', 'integer', 'min:0', 'max:100'],
             'fuel_charge' => ['nullable', 'numeric', 'min:0'],
             'damage_charge' => ['nullable', 'numeric', 'min:0'],
@@ -593,6 +615,9 @@ class BookingController extends Controller
             ], 422);
         }
 
+        if (in_array($booking->extension_status, ['pending', 'payment_required', 'pending_verification'])) {
+            return response()->json(['message' => 'Finish or decline the outstanding extension request before completing the trip.'], 422);
+        }
         $now = now();
         $startMileage = (int) ($booking->start_mileage ?? $validated['end_mileage']);
         $endMileage = (int) $validated['end_mileage'];
@@ -608,7 +633,7 @@ class BookingController extends Controller
         $additionalTotal = $fuelCharge + $damageCharge + $lateFee + $otherCharges;
 
         // Final amount calculation (subtract both initial reservation fee and settled extension payment)
-        $totalPaidSoFar = (float) $booking->reservation_fee;
+        $totalPaidSoFar = (float) ($booking->rental_paid_amount ?: $booking->reservation_fee);
         if ((float) $booking->extension_paid_total > 0) {
             $totalPaidSoFar += (float) $booking->extension_paid_total;
         } elseif ($booking->extension_status === 'approved') {
@@ -636,7 +661,9 @@ class BookingController extends Controller
             'damage_charge' => $damageCharge,
             'late_fee' => $lateFee,
             'other_charges' => $otherCharges,
-            'final_amount_due' => $finalAmountDue,
+            'final_amount_due' => 0,
+            'return_collected_amount' => $finalAmountDue,
+            'rental_paid_amount' => max(0, (float) $booking->total_price - (float) $booking->extension_paid_total),
             'end_inspection_notes' => $validated['end_inspection_notes'] ?? null,
             'end_inspection_photos' => ! empty($endPhotoPaths) ? $endPhotoPaths : null,
         ]);
@@ -812,6 +839,23 @@ class BookingController extends Controller
             return response()->json(['message' => 'A future pickup cannot be marked as no-show.'], 422);
         }
 
+        if ($isHost && $newStatus === 'rejected' && $request->boolean('license_rejected') && $booking->renter) {
+            $request->validate(['rejection_reason' => ['required', 'string', 'max:500']]);
+            $reason = $request->input('rejection_reason');
+            $booking->renter->update([
+                'is_drivers_license_verified' => false,
+                'license_verification_status' => 'rejected',
+                'license_rejection_reason' => $reason,
+            ]);
+            Notification::create([
+                'user_id' => $booking->renter_id,
+                'title' => 'New License Photos Required',
+                'message' => $reason.' Please upload new front and back photos of your license.',
+                'type' => 'warning',
+                'action_url' => '/driver-license',
+            ]);
+        }
+
         $booking->update(['status' => $newStatus]);
 
         // Vehicle availability state sync
@@ -929,17 +973,6 @@ class BookingController extends Controller
                     'type' => 'warning',
                     'action_url' => '/operator-bookings',
                 ]);
-
-                $rejectionReason = $request->input('rejection_reason') ?? $request->input('reason');
-                if ($rejectionReason && $booking->renter) {
-                    if (stripos($rejectionReason, 'license') !== false || stripos($rejectionReason, 'driver') !== false) {
-                        $booking->renter->update([
-                            'is_drivers_license_verified' => false,
-                            'license_verification_status' => 'rejected',
-                            'license_rejection_reason' => $rejectionReason,
-                        ]);
-                    }
-                }
 
                 return response()->json([
                     'success' => true,
@@ -1338,10 +1371,10 @@ class BookingController extends Controller
 
         $booking = Booking::with(['vehicle', 'operator'])->where('renter_id', $request->user()->id)->findOrFail($id);
 
-        if (! in_array($booking->status, ['approved', 'ongoing', 'pickup_in_progress', 'ready_to_start', 'trip_in_progress'])) {
+        if (! in_array($booking->status, ['ongoing', 'trip_in_progress'])) {
             return response()->json([
                 'success' => false,
-                'message' => 'Extensions can only be requested for confirmed or ongoing active rentals.',
+                'message' => 'Extensions can only be requested after handover while the trip is ongoing.',
             ], 422);
         }
 
@@ -1513,8 +1546,8 @@ class BookingController extends Controller
     public function settleExtensionPayment(Request $request, int $id): JsonResponse
     {
         $validated = $request->validate([
-            'payment_method' => ['required', 'string', 'in:gcash,maya,bank_transfer,cash'],
-            'payment_reference' => ['required_unless:payment_method,cash', 'nullable', 'string', 'regex:/^[\d\s-]{10,20}$/'],
+            'payment_method' => ['required', 'string', 'in:gcash'],
+            'payment_reference' => ['required', 'string', 'regex:/^\d{13}$/'],
         ], [
             'payment_reference.required' => 'Payment reference number is required to verify your transaction.',
             'payment_reference.regex' => 'Please enter a valid GCash reference number (typically 13 digits from your receipt).',
@@ -1582,6 +1615,7 @@ class BookingController extends Controller
             'total_days' => $calcTotalDays,
             'total_price' => $newTotalPrice,
             'extension_status' => 'approved',
+            'return_at' => Carbon::parse($newEnd, 'Asia/Manila')->setTimeFrom(($booking->return_at ?: Carbon::parse('10:00', 'Asia/Manila'))->copy()->setTimezone('Asia/Manila'))->utc(),
             'extension_end_date' => $newEnd,
             'extension_price' => $extraPrice,
             'extension_payment_method' => $validated['payment_method'],

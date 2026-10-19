@@ -157,7 +157,7 @@ class AuthService
             }
 
             if ($user->account_status === 'suspended') {
-                throw ValidationException::withMessages(['email' => ['Your account is suspended.']]);
+                throw ValidationException::withMessages(['email' => ['This account is suspended. Please contact support.']]);
             }
             $user->tokens()->delete();
             $user->update([

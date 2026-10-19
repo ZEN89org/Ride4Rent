@@ -340,7 +340,7 @@
                     <time class="admin-date" datetime="{{ now()->timezone('Asia/Manila')->toDateString() }}">{{ now()->timezone('Asia/Manila')->format('l, d M Y') }}</time>
                 </section>
                 <section class="admin-stat-grid" aria-label="Marketplace statistics">
-                    @foreach ([['Renters', $stats['total_renters'], 'Registered renter accounts', 'users'], ['Active operators', $stats['active_operators'], 'Ready to serve your community', 'users'], ['Pending applications', $stats['pending_verifications'], 'Awaiting your review', 'moderation'], ['Suspended accounts', $stats['suspended_accounts'], 'Review account status', 'users']] as [$label, $value, $caption, $destination])
+                    @foreach ([['Renters', $stats['total_renters'], 'Registered renter accounts', 'users'], ['Active operators', $stats['active_operators'], 'Ready to serve your community', 'users'], ['Pending applications', $stats['pending_verifications'], 'Awaiting your review', 'moderation'], ['Frozen operators', $stats['frozen_operators'], 'Bookings temporarily paused', 'commissions']] as [$label, $value, $caption, $destination])
                         <button onclick="switchTab('{{ $destination }}')" class="admin-stat {{ $destination === 'moderation' ? 'admin-stat--attention' : '' }} text-left cursor-pointer">
                             <span class="admin-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 17l5-5 4 3 7-9M15 6h5v5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
                             <span class="admin-stat-label">{{ $label }}</span><strong>{{ number_format($value) }}</strong><small>{{ $caption }} ↗</small>
@@ -541,7 +541,7 @@
                             </div>
                             <h3 class="text-lg font-bold text-[#343C6A] mt-1.5">Automated Operator Remittance Governance</h3>
                             <p class="text-xs text-[#718EBF] mt-0.5 max-w-2xl">
-                                Operators retain 90% of trip gross and remit 10% platform commission at month-end. Upon cycle close, a strict 48-hour grace window triggers. If remittance proof is not verified before grace expires, operator accounts are automatically suspended and blocked from new bookings.
+                                Operators retain 90% of trip gross and remit 10% platform commission at month-end. Upon cycle close, a strict 48-hour grace window triggers. If remittance proof is not verified before grace expires, the operator is automatically frozen from receiving new bookings (while full app access and ongoing trips continue normally).
                             </p>
                         </div>
                         <form method="POST" action="{{ route('admin.remittances.sync') }}" class="flex-shrink-0">
@@ -657,7 +657,7 @@
                                     @php
                                         $op = $remit->operator;
                                         $prof = $op?->operatorProfile;
-                                        $isFrozen = ($op?->account_status === 'suspended');
+                                        $isFrozen = (bool) $op?->is_frozen;
                                     @endphp
                                     <tr class="hover:bg-[#F8FAFC] transition">
                                         <!-- Operator Info -->
@@ -729,15 +729,16 @@
                                             @endif
                                         </td>
 
-                                        <!-- Account Status -->
+                                        <!-- Booking Status -->
                                         <td class="py-4">
                                             @if ($isFrozen)
-                                                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                                                    Frozen (Suspended)
+                                                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1 w-max">
+                                                    <span class="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse"></span>
+                                                    Frozen (Bookings Paused)
                                                 </span>
                                             @else
                                                 <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                                    Active
+                                                    Active (Receiving Bookings)
                                                 </span>
                                             @endif
                                         </td>
@@ -756,10 +757,10 @@
                                             @if ($op)
                                                 <form method="POST" action="{{ route('admin.operators.toggle-freeze', $op) }}" class="inline">
                                                     @csrf
-                                                    <button
-                                                        type="submit"
-                                                        class="px-3.5 py-1.5 rounded-full font-bold text-xs transition {{ $isFrozen ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-rose-100 hover:bg-rose-200 text-rose-700' }}"
-                                                        title="{{ $isFrozen ? 'Unfreeze operator account' : 'Freeze operator account' }}"
+                                                    <button 
+                                                        type="submit" 
+                                                        class="px-3.5 py-1.5 rounded-full font-bold text-xs transition {{ $isFrozen ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' : 'bg-rose-100 hover:bg-rose-200 text-rose-700' }}"
+                                                        title="{{ $isFrozen ? 'Unfreeze operator account and restore vehicle listings' : 'Freeze operator from receiving new bookings' }}"
                                                     >
                                                         {{ $isFrozen ? 'Unfreeze' : 'Freeze' }}
                                                     </button>
@@ -903,7 +904,8 @@
                                 <th class="pb-3 font-bold">Member</th>
                                 <th class="pb-3 font-bold">Role</th>
                                 <th class="pb-3 font-bold">Contact</th>
-                                <th class="pb-3 font-bold">Account Status</th>
+                                <th class="pb-3 font-bold">Accreditation</th>
+                                <th class="pb-3 font-bold">Booking Status</th>
                                 <th class="pb-3 font-bold">Registered</th>
                                 <th class="pb-3 font-bold text-right">Action</th>
                             </tr>
@@ -932,28 +934,48 @@
                                     </td>
                                     <td class="py-4">
                                         @if ($u->account_status === 'active')
-                                            <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">Active</span>
-                                        @elseif ($u->account_status === 'suspended')
-                                            <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800">Suspended / Frozen</span>
+                                            <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">Approved</span>
+                                        @elseif ($u->account_status === 'rejected')
+                                            <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800">Rejected</span>
                                         @else
-                                            <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">{{ ucfirst($u->account_status) }}</span>
+                                            <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">Pending Review</span>
+                                        @endif
+                                    </td>
+                                    <td class="py-4">
+                                        @if ($u->role === 'operator')
+                                            @if ($u->is_frozen)
+                                                <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1 w-max">
+                                                    <span class="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse"></span>
+                                                    Frozen (No Bookings)
+                                                </span>
+                                            @else
+                                                <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                    Receiving Bookings
+                                                </span>
+                                            @endif
+                                        @else
+                                            <span class="text-xs text-[#718EBF] font-semibold">Active Renter</span>
                                         @endif
                                     </td>
                                     <td class="py-4 text-[#718EBF]">
                                         {{ $u->created_at?->format('M d, Y') }}
                                     </td>
                                     <td class="py-4 text-right">
-                                        <form method="POST" action="{{ route('admin.users.toggle-status', $u) }}" class="inline">
-                                            @csrf
-                                            <button type="submit" class="px-3 py-1.5 rounded-full text-xs font-bold transition {{ $u->account_status === 'active' ? 'bg-rose-50 text-rose-700 hover:bg-rose-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' }}">
-                                                {{ $u->account_status === 'active' ? 'Freeze / Suspend' : 'Activate' }}
-                                            </button>
-                                        </form>
+                                        @if ($u->role === 'operator')
+                                            <form method="POST" action="{{ route('admin.operators.toggle-freeze', $u) }}" class="inline">
+                                                @csrf
+                                                <button type="submit" class="px-3 py-1.5 rounded-full text-xs font-bold transition {{ $u->is_frozen ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200' }}">
+                                                    {{ $u->is_frozen ? 'Unfreeze' : 'Freeze' }}
+                                                </button>
+                                            </form>
+                                        @else
+                                            <span class="text-xs text-[#718EBF]">&mdash;</span>
+                                        @endif
                                     </td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="6" class="py-8 text-center text-xs text-[#718EBF]">No members matched your search.</td>
+                                    <td colspan="7" class="py-8 text-center text-xs text-[#718EBF]">No members matched your search.</td>
                                 </tr>
                             @endforelse
                         </tbody>
@@ -1136,6 +1158,14 @@
                 <div class="bankdash-card max-w-2xl">
                     <form method="POST" action="{{ route('admin.settings.update') }}" class="space-y-5 text-xs">
                         @csrf
+                        <div>
+                            <label class="block font-bold text-[#343C6A] mb-1.5">Commission GCash Account Name</label>
+                            <input name="commission_gcash_name" maxlength="100" value="{{ $platformSettings['commission_gcash_name'] ?? '' }}" class="w-full px-4 py-2.5 rounded-xl bg-[#F5F7FA] border border-[#DFEAF2]" placeholder="Actual account holder name">
+                        </div>
+                        <div>
+                            <label class="block font-bold text-[#343C6A] mb-1.5">Commission GCash Mobile Number</label>
+                            <input name="commission_gcash_number" inputmode="numeric" pattern="09[0-9]{9}" maxlength="11" value="{{ $platformSettings['commission_gcash_number'] ?? '' }}" class="w-full px-4 py-2.5 rounded-xl bg-[#F5F7FA] border border-[#DFEAF2]" placeholder="09XXXXXXXXX">
+                        </div>
                         <div>
                             <label class="block font-bold text-[#343C6A] mb-1.5">Platform Commission Rate (%)</label>
                             <input

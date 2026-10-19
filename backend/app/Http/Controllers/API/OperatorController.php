@@ -24,6 +24,9 @@ class OperatorController extends Controller
             'data' => [
                 'role' => $user->role,
                 'account_status' => $user->account_status,
+                'is_frozen' => (bool) $user->is_frozen,
+                'frozen_at' => $user->frozen_at?->format('Y-m-d H:i:s'),
+                'freeze_reason' => $user->freeze_reason,
                 'operator_profile' => $user->operatorProfile,
             ],
         ]);
@@ -44,6 +47,7 @@ class OperatorController extends Controller
 
         $now = now()->setTimezone('Asia/Manila');
         $requestedMonth = $request->query('month'); // format: 'YYYY-MM'
+        $request->validate(['month' => ['nullable', 'date_format:Y-m']]);
 
         if ($requestedMonth && preg_match('/^\d{4}-\d{2}$/', $requestedMonth)) {
             $cycleStart = Carbon::createFromFormat('Y-m-d', $requestedMonth.'-01', 'Asia/Manila')->startOfMonth();
@@ -57,7 +61,8 @@ class OperatorController extends Controller
         $isCurrentMonth = ($requestedMonth === $now->format('Y-m'));
         $daysRemaining = $isCurrentMonth ? max(0, (int) $now->diffInDays($cycleEnd, false)) : 0;
 
-        $commissionPercent = (float) PlatformSetting::get('platform_fee_percent', env('PLATFORM_COMMISSION_PERCENT', 10.0));
+        $statement = OperatorRemittance::where('operator_id', $user->id)->where('billing_month', $requestedMonth)->first();
+        $commissionPercent = (float) ($statement?->commission_rate ?? PlatformSetting::get('platform_fee_percent', env('PLATFORM_COMMISSION_PERCENT', 10.0)));
 
         // Fetch completed bookings for this operator within this month cycle
         $completedBookings = Booking::with(['vehicle', 'renter'])
@@ -168,7 +173,7 @@ class OperatorController extends Controller
         $graceDeadline = $remittance?->grace_period_expires_at ?? $cycleEnd->copy()->addHours(48);
         $graceHoursRemaining = max(0, (int) $now->diffInHours($graceDeadline, false));
         $isGraceExpired = $now->greaterThan($graceDeadline);
-        $isFrozen = ($user->account_status === 'suspended');
+        $isFrozen = (bool) $user->is_frozen;
 
         return response()->json([
             'success' => true,
@@ -182,6 +187,10 @@ class OperatorController extends Controller
                 'commission_percent' => $commissionPercent,
                 'gross_revenue' => $grossRevenue,
                 'commission_due' => $totalCommissionDue,
+                'admin_payment_info' => [
+                    'account_name' => PlatformSetting::get('commission_gcash_name', ''),
+                    'account_number' => PlatformSetting::get('commission_gcash_number', ''),
+                ],
                 'net_earnings' => $totalNetEarnings,
                 'completed_bookings_count' => count($bookingsList),
                 'active_bookings_count' => $activeCount,
@@ -194,6 +203,8 @@ class OperatorController extends Controller
                     'grace_hours_remaining' => $graceHoursRemaining,
                     'is_grace_expired' => $isGraceExpired,
                     'is_account_frozen' => $isFrozen,
+                    'frozen_at' => $user->frozen_at?->format('Y-m-d H:i:s'),
+                    'freeze_reason' => $user->freeze_reason,
                     'payment_method' => $remittance?->payment_method,
                     'payment_reference' => $remittance?->payment_reference,
                     'receipt_image_url' => $remittance?->receipt_image_url,
@@ -219,14 +230,19 @@ class OperatorController extends Controller
         }
 
         $validated = $request->validate([
-            'billing_month' => ['required', 'string', 'regex:/^\d{4}-\d{2}$/'],
-            'payment_method' => ['required', 'string', 'max:50'],
-            'payment_reference' => ['required', 'string', 'max:100'],
+            'billing_month' => ['required', 'date_format:Y-m'],
+            'payment_method' => ['required', 'string', 'in:GCash,gcash'],
+            'payment_reference' => ['required', 'string', 'regex:/^\d{13}$/'],
             'receipt_image' => ['required', 'file', 'image', 'max:10240'],
             'operator_notes' => ['nullable', 'string', 'max:500'],
         ]);
 
-        $receiptPath = $request->file('receipt_image')->store('remittances', 'public');
+        if ($validated['billing_month'] >= now('Asia/Manila')->format('Y-m')) {
+            return response()->json(['message' => 'Submit commission payments after the monthly billing cycle closes.'], 422);
+        }
+        if (!PlatformSetting::get('commission_gcash_number', '') || !PlatformSetting::get('commission_gcash_name', '')) {
+            return response()->json(['message' => 'The admin GCash account has not been set up. Please contact support before sending payment.'], 422);
+        }
 
         // Look up or calculate remittance
         $commissionService = app(CommissionService::class);
@@ -243,6 +259,10 @@ class OperatorController extends Controller
             ], 404);
         }
 
+        if (in_array($remittance->status, ['submitted', 'verified']) || (float) $remittance->commission_due <= 0) {
+            return response()->json(['message' => 'This commission statement is already submitted, verified or has no amount due.'], 422);
+        }
+        $receiptPath = $request->file('receipt_image')->store('remittances', 'public');
         $remittance->update([
             'payment_method' => $validated['payment_method'],
             'payment_reference' => $validated['payment_reference'],

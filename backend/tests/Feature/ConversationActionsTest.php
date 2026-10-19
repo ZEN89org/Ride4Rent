@@ -11,6 +11,27 @@ class ConversationActionsTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_conversations_follow_latest_sent_or_received_message_not_unread_status(): void
+    {
+        [$renter, $operator] = $this->createConversation();
+        $other = $operator->replicate();
+        $other->email = 'second-operator@example.com';
+        $other->save();
+        Message::create(['sender_id' => $other->id, 'receiver_id' => $renter->id, 'message' => 'Older unread']);
+        $this->travel(1)->minutes();
+        $this->actingAs($renter, 'sanctum')->postJson('/api/v1/messages/send', [
+            'receiver_id' => $operator->id, 'message' => 'Latest sent',
+        ])->assertCreated();
+        $this->getJson('/api/v1/messages/conversations')->assertOk()
+            ->assertJsonPath('data.0.user_id', $operator->id)->assertJsonPath('data.0.last_message', 'Latest sent');
+        // Same timestamp: the higher message ID is the newer message.
+        $this->actingAs($other, 'sanctum')->postJson('/api/v1/messages/send', [
+            'receiver_id' => $renter->id, 'message' => 'Latest received',
+        ])->assertCreated();
+        $this->actingAs($renter, 'sanctum')->getJson('/api/v1/messages/conversations')->assertOk()
+            ->assertJsonPath('data.0.user_id', $other->id)->assertJsonPath('data.0.last_message', 'Latest received');
+    }
+
     public function test_user_can_archive_and_restore_a_conversation_without_deleting_messages(): void
     {
         [$renter, $operator] = $this->createConversation();

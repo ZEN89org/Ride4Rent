@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
 use App\Models\Notification;
+use App\Services\PrivateDocumentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -13,44 +14,21 @@ class LicenseController extends Controller
     public function upload(Request $request): JsonResponse
     {
         $request->validate([
-            'front_image' => ['nullable', function ($attribute, $value, $fail) {
-                if (request()->hasFile($attribute)) {
-                    $file = request()->file($attribute);
-                    $ext = strtolower($file->getClientOriginalExtension() ?: '');
-                    $mime = $file->getMimeType() ?: '';
-                    if (! in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'heic']) && ! str_starts_with($mime, 'image/')) {
-                        $fail("The {$attribute} must be a valid image file.");
-                    }
-                }
-            }],
-            'back_image' => ['nullable', function ($attribute, $value, $fail) {
-                if (request()->hasFile($attribute)) {
-                    $file = request()->file($attribute);
-                    $ext = strtolower($file->getClientOriginalExtension() ?: '');
-                    $mime = $file->getMimeType() ?: '';
-                    if (! in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'heic']) && ! str_starts_with($mime, 'image/')) {
-                        $fail("The {$attribute} must be a valid image file.");
-                    }
-                }
-            }],
+            'front_image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
+            'back_image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
         ]);
 
         $user = $request->user();
 
-        if ($user->is_drivers_license_verified && $user->license_verification_status === 'approved') {
-            return response()->json([
-                'success' => false,
-                'message' => "Your driver's license has already been verified and approved.",
-            ], 422);
-        }
-
+        // Replacing a verified license is allowed; the new documents must be
+        // reviewed again before they can be treated as verified.
         if ($request->hasFile('front_image')) {
-            $frontPath = $request->file('front_image')->store('driver_licenses', 'local');
+            $frontPath = PrivateDocumentService::storeLicense($request->file('front_image'));
             $user->drivers_license_front = $frontPath;
         }
 
         if ($request->hasFile('back_image')) {
-            $backPath = $request->file('back_image')->store('driver_licenses', 'local');
+            $backPath = PrivateDocumentService::storeLicense($request->file('back_image'));
             $user->drivers_license_back = $backPath;
         }
 
@@ -78,7 +56,7 @@ class LicenseController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => "Driver's license uploaded successfully. An administrator will review your documents.",
+            'message' => "Driver's license uploaded successfully. Your operator will review your documents.",
             'data' => new UserResource($user),
         ]);
     }

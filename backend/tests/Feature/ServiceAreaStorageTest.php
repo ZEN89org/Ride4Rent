@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Services\ServiceArea;
+use App\Services\PrivateDocumentService;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -12,6 +14,29 @@ use Tests\TestCase;
 class ServiceAreaStorageTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_license_upload_has_a_durable_private_copy_before_container_files_are_lost(): void
+    {
+        Storage::fake('local');
+        Storage::fake('public');
+        $file = UploadedFile::fake()->image('license.jpg');
+        $path = PrivateDocumentService::storeLicense($file);
+        $this->assertDatabaseHas('stored_files', ['path' => $path]);
+        Storage::disk('local')->assertExists($path);
+        Storage::disk('public')->assertMissing($path);
+        Storage::disk('local')->delete($path);
+        $this->get(PrivateDocumentService::url($path))->assertOk()
+            ->assertHeader('Content-Type', 'image/jpeg')
+            ->assertHeader('Cache-Control', 'no-store, private');
+        $this->get('/documents/'.$path)->assertForbidden();
+    }
+
+    public function test_license_storage_check_is_read_only(): void
+    {
+        $this->artisan('storage:check-licenses')->expectsOutputToContain('Private document route: registered')
+            ->expectsOutputToContain('Database backup table: present')->assertSuccessful();
+        $this->assertDatabaseCount('stored_files', 0);
+    }
 
     public function test_province_polygon_accepts_local_towns_and_rejects_occidental_manila_and_sea(): void
     {

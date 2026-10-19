@@ -32,6 +32,9 @@ use Laravel\Sanctum\HasApiTokens;
     'license_submitted_at',
     'role',
     'account_status',
+    'is_frozen',
+    'frozen_at',
+    'freeze_reason',
     'last_login_at',
 ])]
 #[Hidden([
@@ -49,6 +52,8 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'last_login_at' => 'datetime',
             'password' => 'hashed',
+            'is_frozen' => 'boolean',
+            'frozen_at' => 'datetime',
         ];
     }
 
@@ -90,5 +95,28 @@ class User extends Authenticatable
     public function remittances(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(OperatorRemittance::class, 'operator_id');
+    }
+
+    public function isFrozen(): bool
+    {
+        return (bool) $this->is_frozen;
+    }
+
+    public function freeze(?string $reason = null): void
+    {
+        $this->update([
+            'is_frozen' => true,
+            'frozen_at' => now(),
+            'freeze_reason' => $reason,
+        ]);
+    }
+
+    public function unfreeze(): void
+    {
+        $this->update([
+            'is_frozen' => false,
+            'frozen_at' => null,
+            'freeze_reason' => null,
+        ]);
     }
 }

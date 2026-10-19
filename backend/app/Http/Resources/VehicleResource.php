@@ -15,6 +15,8 @@ class VehicleResource extends JsonResource
         $operator = $this->operator;
         $profile = $operator?->operatorProfile;
 
+        $demand = DemandPricingService::calculateVehicleDemand($this->resource);
+
         return [
             'id' => $this->id,
             'operator_id' => $this->operator_id,
@@ -38,13 +40,14 @@ class VehicleResource extends JsonResource
             'number_of_doors' => $this->number_of_doors,
             'mileage' => $this->mileage,
             'interior_color' => $this->interior_color,
-            'price_per_day' => (float) DemandPricingService::calculateVehicleDemand($this->resource)['effective_price'],
+            'price_per_day' => (float) $demand['effective_price'],
             'base_price_per_day' => (float) ($this->base_price_per_day ?: $this->daily_rate ?: 1500),
-            'demand_pricing' => DemandPricingService::calculateVehicleDemand($this->resource),
+            'demand_pricing' => $demand,
             'current_odometer' => (int) ($this->current_odometer ?: 0),
             'last_service_odometer' => (int) ($this->last_service_odometer ?: 0),
             'service_interval_km' => (int) ($this->service_interval_km ?: 5000),
-            'reservation_fee' => (float) ($this->reservation_fee ?? 500),
+            'reservation_fee' => round((float) $demand['effective_price'] * 0.05, 2),
+            'reservation_fee_percentage' => 5,
             'rating' => ((int) ($this->rating_count ?? 0) > 0 && $this->rating !== null) ? (float) $this->rating : null,
             'rating_count' => (int) ($this->rating_count ?? 0),
             'min_driver_age' => (int) ($this->min_driver_age ?? 21),
