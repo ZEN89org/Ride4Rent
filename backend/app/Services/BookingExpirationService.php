@@ -61,7 +61,7 @@ class BookingExpirationService
                 $booking = Booking::whereKey($candidate->id)->lockForUpdate()->first();
                 if (!$booking || !in_array($booking->status, ['approved', 'awaiting_pickup']) || $booking->actual_start_time) return;
                 $pickup = $booking->scheduledPickup();
-                if ($pickup->copy()->addHours(24)->isFuture()) return;
+                if ($pickup->copy()->addHours(RentalPolicy::NO_SHOW_HOURS)->isFuture()) return;
                 $booking->update(['status' => 'no_show', 'no_show_at' => now(), 'expires_at' => null]);
                 if ($vehicle) {
                     $active = Booking::where('vehicle_id', $vehicle->id)->whereIn('status', Booking::ACTIVE_STATUSES)->count();

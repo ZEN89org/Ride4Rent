@@ -27,6 +27,54 @@ class RentalIntegrityTest extends TestCase
 
     private Booking $booking;
 
+    public function test_assistant_uses_current_policy_without_contacting_the_model(): void
+    {
+        \Illuminate\Support\Facades\Http::fake();
+        config(['services.gemini.key' => 'test-key']);
+        foreach ([
+            'What is the reservation fee?' => ['5%', '95%'],
+            'Can I update my approved license?' => ['Update License', 'operator'],
+            'How do extensions work?' => ['100%', 'no second reservation fee'],
+            'What happens for a no-show?' => ['24 hours', 'retained'],
+            'Paano ang bayad?' => ['5%', '95%', 'bayaran'],
+        ] as $question => $expected) {
+            $response = $this->postJson('/api/v1/assistant/chat', ['message' => $question])->assertOk()
+                ->assertJsonPath('data.knowledge_version', \App\Services\AssistantKnowledge::VERSION);
+            foreach ($expected as $text) $this->assertStringContainsString(strtolower($text), strtolower($response->json('data.reply')));
+            $this->assertStringNotContainsString('₱500', $response->json('data.reply'));
+        }
+        \Illuminate\Support\Facades\Http::assertNothingSent();
+    }
+
+    public function test_assistant_reads_current_advance_booking_setting(): void
+    {
+        PlatformSetting::set('max_advance_days', '12');
+        $this->postJson('/api/v1/assistant/chat', ['message' => 'How do I book?'])->assertOk()
+            ->assertSee('12 days');
+    }
+
+    public function test_assistant_catalog_uses_displayed_prices_and_excludes_frozen_operators(): void
+    {
+        config(['services.gemini.key' => '']);
+        $this->vehicle->update(['is_dynamic_pricing_enabled' => true]);
+        $price = DemandPricingService::calculateVehicleDemand($this->vehicle->fresh())['effective_price'];
+        $response = $this->postJson('/api/v1/assistant/chat', ['message' => 'Show Test vehicles'])->assertOk()->assertJsonCount(1, 'data.vehicles');
+        $this->assertSame((float) $price, (float) $response->json('data.vehicles.0.price_per_day'));
+        $this->operator->update(['is_frozen' => true]);
+        $this->postJson('/api/v1/assistant/chat', ['message' => 'Show Test vehicles'])->assertOk()->assertJsonCount(0, 'data.vehicles');
+    }
+
+    public function test_assistant_rejects_model_recommendations_outside_eligible_catalog(): void
+    {
+        config(['services.gemini.key' => 'test-key']);
+        $this->vehicle->forceFill(['is_active' => false])->save();
+        \Illuminate\Support\Facades\Http::fake(['generativelanguage.googleapis.com/*' => \Illuminate\Support\Facades\Http::response([
+            'candidates' => [['content' => ['parts' => [['text' => json_encode(['reply' => 'Check available listings.', 'recommended_vehicle_ids' => [$this->vehicle->id], 'quick_replies' => []])]]]]],
+        ])]);
+        $this->postJson('/api/v1/assistant/chat', ['message' => 'Show vehicles'])->assertOk()->assertJsonCount(0, 'data.vehicles');
+        \Illuminate\Support\Facades\Http::assertSent(fn ($request) => str_contains(json_encode($request->data()), '5%') && !str_contains(json_encode($request->data()), '₱500'));
+    }
+
     protected function setUp(): void
     {
         parent::setUp();

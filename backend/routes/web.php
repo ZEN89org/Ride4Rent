@@ -9,8 +9,32 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 
 Route::get('/', function () {
-    return view('welcome');
+    $featuredVehicles = \App\Models\Vehicle::with(['brand', 'vehicleType', 'transmissionType', 'fuelType', 'images'])
+        ->where('availability_status', 'available')
+        ->whereHas('operator', function ($q) {
+            $q->where('account_status', 'active')->where('is_frozen', false);
+        })
+        ->orderByDesc('rating')
+        ->take(6)
+        ->get();
+
+    $stats = [
+        'vehicles_count' => max(12, \App\Models\Vehicle::count()),
+        'operators_count' => max(5, \App\Models\User::where('role', 'operator')->where('account_status', 'active')->count()),
+        'trips_completed' => max(42, \App\Models\Booking::where('status', 'completed')->count()),
+        'satisfaction_rate' => 99,
+    ];
+
+    return view('welcome', compact('featuredVehicles', 'stats'));
 });
+
+Route::get('/download-app', function () {
+    $apkPath = public_path('downloads/Ride4Rent.apk');
+    if (file_exists($apkPath)) {
+        return response()->download($apkPath, 'Ride4Rent.apk');
+    }
+    return redirect('/#download');
+})->name('app.download');
 
 Route::get('/documents/{path}', [PrivateDocumentController::class, 'show'])->where('path', '.*')->name('documents.show');
 

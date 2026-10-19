@@ -203,7 +203,7 @@ class BookingController extends Controller
 
         $dailyRate = (float) DemandPricingService::calculateVehicleDemand($vehicle)['effective_price'];
         $totalPrice = $dailyRate * $totalDays;
-        $resFee = round($totalPrice * 0.05, 2);
+        $resFee = \App\Services\RentalPolicy::reservationFee((float) $totalPrice);
 
         $booking = Booking::create([
             'renter_id' => $user->id,
