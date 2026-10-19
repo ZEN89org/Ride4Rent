@@ -1,200 +1,232 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full bg-[#0F172A]">
+<html lang="en" class="h-full bg-[#F5F7FA]">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Console | Ride4Rent</title>
+    <title>Admin Dashboard | Ride4Rent</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        body {
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #F5F7FA;
+            color: #343C6A;
+        }
         code, .font-mono { font-family: 'JetBrains Mono', monospace; }
-        
-        .nav-item-active {
-            background-color: rgba(254, 193, 3, 0.12);
-            color: #FEC103;
-            border-left: 3px solid #FEC103;
+
+        .bankdash-card {
+            background-color: #FFFFFF;
+            border-radius: 25px;
+            padding: 24px;
+            border: 1px solid rgba(223, 234, 242, 0.7);
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.02);
+        }
+
+        .bankdash-title {
+            font-size: 22px;
             font-weight: 700;
+            color: #343C6A;
+            letter-spacing: -0.02em;
         }
-        .nav-item-inactive {
-            color: #94A3B8;
-            border-left: 3px solid transparent;
+
+        /* Sidebar Item States */
+        .sidebar-link-active {
+            color: #2D60FF;
+            font-weight: 700;
+            position: relative;
+        }
+        .sidebar-link-active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 6px;
+            height: 48px;
+            background-color: #2D60FF;
+            border-top-right-radius: 8px;
+            border-bottom-right-radius: 8px;
+        }
+        .sidebar-link-inactive {
+            color: #718EBF;
             font-weight: 600;
+            transition: all 0.2s ease;
         }
-        .nav-item-inactive:hover {
-            background-color: rgba(255, 255, 255, 0.04);
-            color: #F8FAFC;
+        .sidebar-link-inactive:hover {
+            color: #2D60FF;
+            background-color: #F8FAFC;
         }
     </style>
 </head>
-<body class="h-full bg-[#F8FAFC] text-[#0F172A] antialiased flex overflow-hidden">
+<body class="admin-shell h-full bg-[#F5F7FA] antialiased flex overflow-hidden">
 
     <!-- ======================================================== -->
-    <!-- LEFT EXECUTIVE SIDEBAR (Admin Console Navigation)       -->
+    <!-- LEFT EXECUTIVE SIDEBAR (BankDash Clean White Aesthetic)  -->
     <!-- ======================================================== -->
-    <aside id="admin-sidebar" class="fixed inset-y-0 left-0 z-40 flex w-64 flex-col justify-between bg-[#0F172A] text-white transition-transform duration-200 lg:static lg:translate-x-0 -translate-x-full">
-        <!-- Top Section: Brand & Navigation -->
+    <aside id="admin-sidebar" class="fixed inset-y-0 left-0 z-40 flex w-64 flex-col justify-between bg-white border-r border-[#E6EFF5] transition-transform duration-200 lg:static lg:translate-x-0 -translate-x-full select-none">
         <div class="flex flex-col h-full overflow-y-auto">
             <!-- Brand Identity -->
-            <div class="flex items-center gap-3 border-b border-[#1E293B] px-5 py-5">
-                <img src="{{ asset('images/ride4rent.png') }}" alt="Ride4Rent Logo" class="h-9 w-auto object-contain" />
+            <div class="flex items-center gap-3 px-7 py-7 border-b border-[#F3F4F6]">
+                <div class="admin-brand-icon">
+                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M5 19L9 5h6l4 14M12 7v3m0 4v3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
                 <div>
-                    <div class="flex items-center gap-1.5">
-                        <span class="text-lg font-black tracking-tight text-white">Ride<span class="text-[#FEC103]">4</span>Rent</span>
-                    </div>
-                    <span class="inline-block text-[10px] font-bold uppercase tracking-[0.2em] text-[#FEC103]">Admin Console</span>
+                    <span class="admin-brand-title">Ride4Rent<span style="color:#F5C344">.</span></span>
+                    <p class="admin-brand-subtitle">Administration</p>
                 </div>
             </div>
 
-            <!-- Navigation Links Grouped by Pillar -->
-            <nav class="flex-1 space-y-6 px-3 py-6 text-xs">
-                <!-- Group 1: Verification & Trust -->
-                <div>
-                    <p class="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[#64748B]">Compliance & Vetting</p>
-                    <div class="space-y-1">
-                        <button 
-                            id="nav-moderation" 
-                            onclick="switchTab('moderation')" 
-                            class="nav-item-active flex w-full items-center justify-between rounded-r-xl px-3 py-2.5 transition text-left cursor-pointer"
-                        >
-                            <div class="flex items-center gap-2.5">
-                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                                </svg>
-                                <span>Moderation Queue</span>
-                            </div>
-                            @if ($stats['pending_verifications'] > 0)
-                                <span class="rounded-full bg-[#FEC103] px-1.5 py-0.2 text-[10px] font-black text-[#1A1A1A]">
-                                    {{ $stats['pending_verifications'] }}
-                                </span>
-                            @endif
-                        </button>
-
-                        <button 
-                            id="nav-users" 
-                            onclick="switchTab('users')" 
-                            class="nav-item-inactive flex w-full items-center justify-between rounded-r-xl px-3 py-2.5 transition text-left cursor-pointer"
-                        >
-                            <div class="flex items-center gap-2.5">
-                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                                </svg>
-                                <span>Member Directory</span>
-                            </div>
-                            <span class="rounded bg-[#1E293B] px-1.5 py-0.2 text-[10px] font-bold text-[#94A3B8]">
-                                {{ $stats['total_platform_users'] }}
-                            </span>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Group 2: Operations & Resolution -->
-                <div>
-                    <p class="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[#64748B]">Platform Operations</p>
-                    <div class="space-y-1">
-                        <button 
-                            id="nav-disputes" 
-                            onclick="switchTab('disputes')" 
-                            class="nav-item-inactive flex w-full items-center justify-between rounded-r-xl px-3 py-2.5 transition text-left cursor-pointer"
-                        >
-                            <div class="flex items-center gap-2.5">
-                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                </svg>
-                                <span>Disputes & Incidents</span>
-                            </div>
-                            @if ($disputes->count() > 0)
-                                <span class="rounded bg-amber-400/20 px-1.5 py-0.2 text-[10px] font-bold text-amber-400">
-                                    {{ $disputes->count() }}
-                                </span>
-                            @endif
-                        </button>
-
-                        <button 
-                            id="nav-reviews" 
-                            onclick="switchTab('reviews')" 
-                            class="nav-item-inactive flex w-full items-center justify-between rounded-r-xl px-3 py-2.5 transition text-left cursor-pointer"
-                        >
-                            <div class="flex items-center gap-2.5">
-                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                                </svg>
-                                <span>Review Moderation</span>
-                            </div>
-                            <span class="text-[10px] text-[#64748B]">{{ $reviews->count() }}</span>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Group 3: Governance & Audit -->
-                <div>
-                    <p class="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[#64748B]">Governance & Audit</p>
-                    <div class="space-y-1">
-                        <button 
-                            id="nav-audit" 
-                            onclick="switchTab('audit')" 
-                            class="nav-item-inactive flex w-full items-center gap-2.5 rounded-r-xl px-3 py-2.5 transition text-left cursor-pointer"
-                        >
-                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                            </svg>
-                            <span>Action Audit Log</span>
-                        </button>
-
-                        <button 
-                            id="nav-settings" 
-                            onclick="switchTab('settings')" 
-                            class="nav-item-inactive flex w-full items-center gap-2.5 rounded-r-xl px-3 py-2.5 transition text-left cursor-pointer"
-                        >
-                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                            <span>Platform Controls</span>
-                        </button>
-
-                        <button 
-                            id="nav-exports" 
-                            onclick="switchTab('exports')" 
-                            class="nav-item-inactive flex w-full items-center gap-2.5 rounded-r-xl px-3 py-2.5 transition text-left cursor-pointer"
-                        >
-                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                            <span>Compliance Exports</span>
-                        </button>
-                    </div>
-                </div>
-            </nav>
-
-            <!-- Bottom: Announcement Trigger & Admin Profile -->
-            <div class="border-t border-[#1E293B] p-4 space-y-3">
-                <button 
-                    onclick="openBroadcastModal()" 
-                    class="w-full flex items-center justify-center gap-2 rounded-xl bg-[#FEC103] hover:bg-[#EAB308] px-3.5 py-2.5 text-xs font-bold text-[#1A1A1A] shadow-xs transition active:scale-98 cursor-pointer"
+            <!-- Navigation Links -->
+            <nav class="flex-1 py-6 space-y-1.5 text-[15px]">
+                <!-- Dashboard / Overview -->
+                <button
+                    id="nav-dashboard"
+                    onclick="switchTab('dashboard')"
+                    class="sidebar-link-active flex w-full items-center gap-4 px-8 py-3.5 text-left cursor-pointer transition"
                 >
-                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                    <svg class="w-6 h-6 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                     </svg>
-                    <span>Broadcast Notice</span>
+                    <span>Dashboard</span>
                 </button>
 
-                <div class="flex items-center justify-between rounded-xl bg-[#1E293B]/70 p-2.5">
-                    <div class="flex items-center gap-2.5 truncate">
-                        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-[#FEC103] text-xs font-black text-[#1A1A1A]">
-                            AD
+                <!-- Commissions & Remittance (Core 10% Feature) -->
+                <button
+                    id="nav-commissions"
+                    onclick="switchTab('commissions')"
+                    class="sidebar-link-inactive flex w-full items-center justify-between px-8 py-3.5 text-left cursor-pointer transition"
+                >
+                    <div class="flex items-center gap-4">
+                        <svg class="w-6 h-6 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                        </svg>
+                        <span>Commissions</span>
+                    </div>
+                    @if ($commissionStats['frozen_operators_count'] > 0)
+                        <span class="rounded-full bg-[#FE5C73] text-white px-2 py-0.5 text-xs font-bold shadow-sm">
+                            {{ $commissionStats['frozen_operators_count'] }}
+                        </span>
+                    @elseif ($commissionStats['in_grace_count'] > 0)
+                        <span class="rounded-full bg-[#FFBB38] text-white px-2 py-0.5 text-xs font-bold shadow-sm">
+                            {{ $commissionStats['in_grace_count'] }}
+                        </span>
+                    @endif
+                </button>
+
+                <!-- Operator Accreditation (Business Permit only) -->
+                <button
+                    id="nav-moderation"
+                    onclick="switchTab('moderation')"
+                    class="sidebar-link-inactive flex w-full items-center justify-between px-8 py-3.5 text-left cursor-pointer transition"
+                >
+                    <div class="flex items-center gap-4">
+                        <svg class="w-6 h-6 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                        <span>Operator Vetting</span>
+                    </div>
+                    @if ($stats['pending_verifications'] > 0)
+                        <span class="rounded-full bg-[#2D60FF] text-white px-2 py-0.5 text-xs font-bold shadow-sm">
+                            {{ $stats['pending_verifications'] }}
+                        </span>
+                    @endif
+                </button>
+
+                <!-- Member Directory -->
+                <button
+                    id="nav-users"
+                    onclick="switchTab('users')"
+                    class="sidebar-link-inactive flex w-full items-center justify-between px-8 py-3.5 text-left cursor-pointer transition"
+                >
+                    <div class="flex items-center gap-4">
+                        <svg class="w-6 h-6 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                        <span>Members</span>
+                    </div>
+                    <span class="text-xs font-semibold text-[#718EBF] bg-[#F5F7FA] px-2 py-0.5 rounded-full">
+                        {{ $stats['total_platform_users'] }}
+                    </span>
+                </button>
+
+                <!-- Escalation & Disputes -->
+                <button
+                    id="nav-disputes"
+                    onclick="switchTab('disputes')"
+                    class="sidebar-link-inactive flex w-full items-center justify-between px-8 py-3.5 text-left cursor-pointer transition"
+                >
+                    <div class="flex items-center gap-4">
+                        <svg class="w-6 h-6 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <span>Disputes & Claims</span>
+                    </div>
+                    @if ($disputes->count() > 0)
+                        <span class="text-xs font-semibold text-[#718EBF] bg-[#F5F7FA] px-2 py-0.5 rounded-full">
+                            {{ $disputes->count() }}
+                        </span>
+                    @endif
+                </button>
+
+                <!-- Review Moderation -->
+                <button
+                    id="nav-reviews"
+                    onclick="switchTab('reviews')"
+                    class="sidebar-link-inactive flex w-full items-center justify-between px-8 py-3.5 text-left cursor-pointer transition"
+                >
+                    <div class="flex items-center gap-4">
+                        <svg class="w-6 h-6 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                        </svg>
+                        <span>Reviews</span>
+                    </div>
+                </button>
+
+                <!-- Audit Logs -->
+                <button
+                    id="nav-audit"
+                    onclick="switchTab('audit')"
+                    class="sidebar-link-inactive flex w-full items-center gap-4 px-8 py-3.5 text-left cursor-pointer transition"
+                >
+                    <svg class="w-6 h-6 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    <span>Audit Trail</span>
+                </button>
+
+                <!-- Platform Settings -->
+                <button
+                    id="nav-settings"
+                    onclick="switchTab('settings')"
+                    class="sidebar-link-inactive flex w-full items-center gap-4 px-8 py-3.5 text-left cursor-pointer transition"
+                >
+                    <svg class="w-6 h-6 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <span>Settings</span>
+                </button>
+            </nav>
+
+            <!-- Bottom Session Card -->
+            <div class="admin-session p-6 border-t border-[#F3F4F6]">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-[#F5F7FA] border border-[#DFEAF2] flex items-center justify-center font-bold text-[#343C6A]">
+                            {{ strtoupper(substr(Auth::user()->first_name ?? 'A', 0, 1)) }}
                         </div>
-                        <div class="truncate">
-                            <p class="text-xs font-bold text-white truncate">Administrator</p>
-                            <p class="text-[10px] text-[#94A3B8] truncate">{{ auth()->user()?->email }}</p>
+                        <div class="overflow-hidden">
+                            <p class="text-sm font-bold text-[#343C6A] truncate">{{ Auth::user()->first_name ?? 'Administrator' }}</p>
+                            <p class="text-[11px] text-[#718EBF] truncate">{{ Auth::user()->email }}</p>
                         </div>
                     </div>
                     <form method="POST" action="{{ route('admin.logout') }}">
                         @csrf
-                        <button type="submit" title="Sign out" class="rounded-lg p-1.5 text-[#94A3B8] hover:bg-white/10 hover:text-white transition cursor-pointer">
-                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <button type="submit" title="Sign Out" class="text-[#718EBF] hover:text-[#FE5C73] p-1.5 rounded-lg hover:bg-[#F5F7FA] transition">
+                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                             </svg>
                         </button>
@@ -204,1196 +236,1306 @@
         </div>
     </aside>
 
-    <!-- Sidebar Backdrop on Mobile -->
-    <div id="sidebar-backdrop" onclick="toggleSidebar()" class="fixed inset-0 z-30 hidden bg-black/60 backdrop-blur-xs lg:hidden"></div>
+    <!-- ======================================================== -->
+    <!-- MAIN APPLICATION CANVAS (BankDash Header & Content)       -->
+    <!-- ======================================================== -->
+    <button id="sidebar-overlay" class="admin-overlay hidden" aria-label="Close navigation" onclick="closeSidebar()"></button>
+    <div class="admin-workspace flex-1 flex flex-col min-w-0 overflow-y-auto">
 
-    <!-- ======================================================== -->
-    <!-- MAIN APPLICATION WORKSPACE                              -->
-    <!-- ======================================================== -->
-    <div class="flex flex-1 flex-col overflow-hidden">
-        
-        <!-- Top App Bar -->
-        <header class="flex h-16 items-center justify-between border-b border-[#E2E8F0] bg-white px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center gap-3">
-                <button onclick="toggleSidebar()" class="rounded-lg p-2 text-[#64748B] hover:bg-[#F1F5F9] lg:hidden cursor-pointer">
-                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <!-- Top Navigation Header -->
+        <header class="admin-header bg-white border-b border-[#E6EFF5] sticky top-0 z-30 px-6 lg:px-10 py-5 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <button id="sidebar-toggle" aria-label="Open navigation" aria-controls="admin-sidebar" aria-expanded="false" onclick="toggleSidebar()" class="lg:hidden text-[#718EBF] hover:text-[#343C6A]">
+                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
                     </svg>
                 </button>
-                <div>
-                    <h1 id="topbar-section-title" class="text-base font-bold text-[#0F172A]">Moderation & Verification Queue</h1>
-                    <p id="topbar-section-sub" class="text-[11px] text-[#64748B]">Driver's license reviews and commercial operator accreditation</p>
-                </div>
+                <div><p class="admin-breadcrumb">Workspace / Administration</p><h1 id="page-title" class="text-2xl lg:text-[28px] font-bold text-[#343C6A] tracking-tight">Overview</h1></div>
             </div>
 
-            <!-- Top Bar Badges & Actions -->
-            <div class="flex items-center gap-3">
-                <span class="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
-                    <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span class="hidden sm:inline">System Live</span>
-                </span>
-                <a href="{{ route('admin.exports.renters-kyc') }}" class="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] hover:bg-white px-3 py-1.5 text-xs font-semibold text-[#0F172A] transition">
-                    <span>Export KYC</span>
-                    <span>↓</span>
-                </a>
+            <!-- Header Right Actions -->
+            <div class="flex items-center gap-4 lg:gap-7">
+                <!-- Search Pill -->
+                <form method="GET" action="{{ route('admin.dashboard') }}" class="relative hidden sm:block w-56 lg:w-72" role="search">
+                    <input type="hidden" name="tab" value="users" />
+                    <svg class="w-5 h-5 text-[#718EBF] absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input
+                        type="text"
+                        name="search" aria-label="Search members" placeholder="Search members…"
+                        class="w-full pl-12 pr-4 py-3 rounded-full bg-[#F5F7FA] text-sm text-[#343C6A] placeholder-[#718EBF] border border-transparent focus:border-[#2D60FF] focus:bg-white focus:outline-none transition-all"
+                    />
+                </form>
+
+                <!-- Settings Button -->
+                <button onclick="switchTab('settings')" class="w-12 h-12 rounded-full bg-[#F5F7FA] text-[#718EBF] hover:text-[#2D60FF] hover:bg-white border border-transparent hover:border-[#DFEAF2] flex items-center justify-center transition shadow-sm" title="Settings">
+                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                </button>
+
+                <!-- Notification Bell Button -->
+                <button onclick="switchTab('commissions')" class="relative w-12 h-12 rounded-full bg-[#F5F7FA] text-[#FE5C73] hover:text-[#2D60FF] hover:bg-white border border-transparent hover:border-[#DFEAF2] flex items-center justify-center transition shadow-sm" title="Alerts & Remittances">
+                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    </svg>
+                    @if ($commissionStats['frozen_operators_count'] > 0 || $stats['pending_verifications'] > 0)
+                        <span class="absolute top-3 right-3 w-2.5 h-2.5 rounded-full bg-[#FE5C73] ring-2 ring-white"></span>
+                    @endif
+                </button>
+
+                <!-- Admin Avatar -->
+                <div class="relative cursor-pointer" onclick="switchTab('settings')">
+                    <div class="w-12 h-12 rounded-full bg-[#2D60FF] text-white flex items-center justify-center font-bold text-lg ring-2 ring-white shadow-sm overflow-hidden">
+                        @if (Auth::user()->profile_photo)
+                            <img src="{{ asset('storage/'.Auth::user()->profile_photo) }}" class="w-full h-full object-cover" alt="Admin" />
+                        @else
+                            {{ strtoupper(substr(Auth::user()->first_name ?? 'A', 0, 1)) }}
+                        @endif
+                    </div>
+                </div>
             </div>
         </header>
 
-        <!-- Main Scrollable Content Viewport -->
-        <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-            
-            <!-- Flash Message Banner -->
-            @if (session('status'))
-                <div class="mb-6 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-xs text-emerald-900 shadow-xs">
-                    <div class="flex items-center gap-2.5">
-                        <span class="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-600 text-white font-bold text-xs">✓</span>
-                        <p class="font-semibold">{{ session('status') }}</p>
-                    </div>
-                    <button onclick="this.parentElement.remove()" class="text-emerald-600 hover:text-emerald-900">✕</button>
+        <!-- Alerts & Feedback Banner -->
+        @if (session('status'))
+            <div class="mx-6 lg:mx-10 mt-6 p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center justify-between text-sm font-medium shadow-sm">
+                <div class="flex items-center gap-3">
+                    <svg class="w-5 h-5 text-emerald-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>{{ session('status') }}</span>
                 </div>
-            @endif
-
-            @if (isset($errors) && $errors->any())
-                <div class="mb-6 flex items-center justify-between rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-900 shadow-xs">
-                    <div class="flex items-center gap-2.5">
-                        <span class="flex h-6 w-6 items-center justify-center rounded-lg bg-red-600 text-white font-bold text-xs">✕</span>
-                        <p class="font-semibold">{{ $errors->first() }}</p>
-                    </div>
-                    <button onclick="this.parentElement.remove()" class="text-red-600 hover:text-red-900">✕</button>
-                </div>
-            @endif
-
-            <!-- Compact Admin KPI Row (Always Visible for Snapshot Oversight) -->
-            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4 mb-8">
-                <!-- KPI 1 -->
-                <div class="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-xs">
-                    <p class="text-[10.5px] font-bold uppercase tracking-wider text-[#64748B]">Pending Moderation</p>
-                    <div class="mt-1.5 flex items-baseline justify-between">
-                        <span class="text-2xl font-extrabold text-[#0F172A]">{{ $stats['pending_verifications'] }}</span>
-                        <span class="rounded bg-[#FFF6DA] border border-[#FDE68A] px-1.5 py-0.5 text-[10px] font-bold text-[#92400E]">Action Req.</span>
-                    </div>
-                    <p class="text-[10px] text-[#94A3B8] mt-1">{{ $pendingRenters->count() }} Licenses · {{ $operators->count() }} Permits</p>
-                </div>
-
-                <!-- KPI 2 -->
-                <div class="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-xs">
-                    <p class="text-[10.5px] font-bold uppercase tracking-wider text-[#64748B]">Platform Members</p>
-                    <div class="mt-1.5 flex items-baseline justify-between">
-                        <span class="text-2xl font-extrabold text-[#0F172A]">{{ $stats['total_platform_users'] }}</span>
-                        <span class="rounded bg-[#F1F5F9] px-1.5 py-0.5 text-[10px] font-bold text-[#64748B]">Clients</span>
-                    </div>
-                    <p class="text-[10px] text-[#94A3B8] mt-1">{{ $stats['total_renters'] }} Renters · {{ $stats['total_operators'] }} Hosts</p>
-                </div>
-
-                <!-- KPI 3 -->
-                <div class="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-xs">
-                    <p class="text-[10.5px] font-bold uppercase tracking-wider text-[#64748B]">KYC Verified Rate</p>
-                    <div class="mt-1.5 flex items-baseline justify-between">
-                        <span class="text-2xl font-extrabold text-emerald-700">{{ $stats['kyc_compliance_rate'] }}%</span>
-                        <span class="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">Verified</span>
-                    </div>
-                    <p class="text-[10px] text-[#94A3B8] mt-1">{{ $stats['verified_renters'] }} of {{ $stats['total_renters'] }} verified</p>
-                </div>
-
-                <!-- KPI 4 -->
-                <div class="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-xs">
-                    <p class="text-[10.5px] font-bold uppercase tracking-wider text-[#64748B]">Active Account Health</p>
-                    <div class="mt-1.5 flex items-baseline justify-between">
-                        <span class="text-2xl font-extrabold text-[#0F172A]">{{ $stats['active_accounts'] }}</span>
-                        <span class="text-[10.5px] font-bold text-red-600">{{ $stats['suspended_accounts'] }} restricted</span>
-                    </div>
-                    <p class="text-[10px] text-[#94A3B8] mt-1">Normal platform standing</p>
-                </div>
+                <button onclick="this.parentElement.remove()" class="text-emerald-600 hover:text-emerald-900">&times;</button>
             </div>
+        @endif
+
+        @if (isset($errors) && $errors->any())
+            <div class="mx-6 lg:mx-10 mt-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-sm font-medium shadow-sm">
+                <div class="flex items-center gap-2 mb-1">
+                    <svg class="w-5 h-5 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <span class="font-bold">Please check the following errors:</span>
+                </div>
+                <ul class="list-disc list-inside ml-6 space-y-0.5">
+                    @foreach ($errors->all() as $err)
+                        <li>{{ $err }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
+        <!-- Main Body Container -->
+        <main id="admin-main" class="admin-main flex-1 p-6 lg:p-10">
 
             <!-- ======================================================== -->
-            <!-- SECTION 1: MODERATION QUEUE (Default View)              -->
+            <!-- TAB 1: DASHBOARD / OVERVIEW (BankDash Exact Layout)      -->
             <!-- ======================================================== -->
-            <div id="section-moderation" class="space-y-10">
-                <!-- Renter License Submissions -->
-                <div>
-                    <div class="flex items-center justify-between border-b border-[#E2E8F0] pb-3 mb-4">
-                        <div class="flex items-center gap-2">
-                            <span class="flex h-5 w-5 items-center justify-center rounded bg-[#1A1A1A] text-[10px] font-bold text-[#FEC103]">1</span>
-                            <h2 class="text-sm font-bold uppercase tracking-wider text-[#0F172A]">Renter Driver's License Submissions</h2>
+            <div id="tab-dashboard" class="tab-content space-y-8">
+                <section class="admin-welcome" aria-label="Marketplace overview">
+                    <div><p class="admin-eyebrow">The Ride4Rent workspace</p><h2>Your marketplace, at a glance.</h2><p>Keep rentals moving. Review your community, payments, and pending applications.</p></div>
+                    <time class="admin-date" datetime="{{ now()->timezone('Asia/Manila')->toDateString() }}">{{ now()->timezone('Asia/Manila')->format('l, d M Y') }}</time>
+                </section>
+                <section class="admin-stat-grid" aria-label="Marketplace statistics">
+                    @foreach ([['Renters', $stats['total_renters'], 'Registered renter accounts', 'users'], ['Active operators', $stats['active_operators'], 'Ready to serve your community', 'users'], ['Pending applications', $stats['pending_verifications'], 'Awaiting your review', 'moderation'], ['Suspended accounts', $stats['suspended_accounts'], 'Review account status', 'users']] as [$label, $value, $caption, $destination])
+                        <button onclick="switchTab('{{ $destination }}')" class="admin-stat {{ $destination === 'moderation' ? 'admin-stat--attention' : '' }} text-left cursor-pointer">
+                            <span class="admin-stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 17l5-5 4 3 7-9M15 6h5v5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                            <span class="admin-stat-label">{{ $label }}</span><strong>{{ number_format($value) }}</strong><small>{{ $caption }} ↗</small>
+                        </button>
+                    @endforeach
+                </section>
+
+
+                <!-- Row 1: Cards & Recent Remittances -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+                    <div class="lg:col-span-8 flex flex-col">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="bankdash-title">Commission overview</h2>
+                            <button onclick="switchTab('commissions')" class="admin-text-link">View statements ↗</button>
                         </div>
-                        <span class="rounded-full bg-[#FFF6DA] border border-[#FDE68A] px-2.5 py-0.5 text-[11px] font-bold text-[#92400E]">
-                            {{ $pendingRenters->count() }} Awaiting Verification
-                        </span>
-                    </div>
-
-                    <div class="grid grid-cols-1 gap-5">
-                        @forelse ($pendingRenters as $renter)
-                            <article class="rounded-2xl border border-[#E2E8F0] bg-white shadow-xs overflow-hidden">
-                                <!-- Top Bar -->
-                                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-[#F1F5F9] bg-[#FAFBFD] px-5 py-3">
-                                    <div class="flex items-center gap-2.5">
-                                        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1A1A1A] font-bold text-xs text-[#FEC103]">
-                                            {{ strtoupper(substr($renter->first_name ?: 'R', 0, 1) . substr($renter->last_name ?: '', 0, 1)) }}
-                                        </div>
-                                        <div>
-                                            <p class="text-xs font-bold text-[#0F172A]">
-                                                {{ trim($renter->first_name . ' ' . $renter->middle_name . ' ' . $renter->last_name . ' ' . $renter->suffix) ?: 'Unnamed Renter' }}
-                                            </p>
-                                            <p class="text-[10.5px] text-[#64748B]">{{ $renter->email }} · ID #{{ $renter->id }}</p>
-                                        </div>
-                                    </div>
-                                    <div class="text-[11px] text-[#64748B]">
-                                        Submitted: <span class="font-semibold text-[#0F172A]">{{ $renter->license_submitted_at ? \Carbon\Carbon::parse($renter->license_submitted_at)->format('M j, Y h:i A') : $renter->updated_at->format('M j, Y') }}</span>
-                                    </div>
-                                </div>
-
-                                <!-- Body Grid: Info vs Photo Previews vs Decisions -->
-                                <div class="grid gap-5 p-5 lg:grid-cols-[1fr_1.4fr_1fr]">
-                                    <!-- Column 1: Record Checklist -->
-                                    <div class="rounded-xl border border-[#F1F5F9] bg-[#FAFBFD] p-4 text-xs">
-                                        <p class="font-bold text-[11px] uppercase tracking-wider text-[#64748B] mb-2.5">Applicant Record</p>
-                                        <dl class="space-y-2">
-                                            <div class="flex justify-between border-b border-[#E2E8F0]/60 pb-1.5">
-                                                <dt class="text-[#64748B]">Full Name:</dt>
-                                                <dd class="font-bold text-[#0F172A]">{{ trim($renter->first_name . ' ' . $renter->last_name) }}</dd>
-                                            </div>
-                                            <div class="flex justify-between border-b border-[#E2E8F0]/60 pb-1.5">
-                                                <dt class="text-[#64748B]">Birthdate:</dt>
-                                                <dd class="font-bold text-[#0F172A]">
-                                                    {{ $renter->date_of_birth ? $renter->date_of_birth->format('M j, Y') : 'Not provided' }}
-                                                    @if ($renter->date_of_birth)
-                                                        <span class="text-[#64748B] font-normal">({{ \Carbon\Carbon::parse($renter->date_of_birth)->age }} yrs)</span>
-                                                    @endif
-                                                </dd>
-                                            </div>
-                                            <div class="flex justify-between border-b border-[#E2E8F0]/60 pb-1.5">
-                                                <dt class="text-[#64748B]">Sex / Gender:</dt>
-                                                <dd class="font-bold text-[#0F172A]">{{ $renter->sex ? ucfirst($renter->sex) : 'Not specified' }}</dd>
-                                            </div>
-                                            <div class="flex justify-between border-b border-[#E2E8F0]/60 pb-1.5">
-                                                <dt class="text-[#64748B]">Mobile:</dt>
-                                                <dd class="font-bold text-[#0F172A]">{{ $renter->mobile_number ?: 'None' }}</dd>
-                                            </div>
-                                        </dl>
-                                    </div>
-
-                                    <!-- Column 2: Uploaded Card Previews -->
-                                    <div>
-                                        <p class="font-bold text-[11px] uppercase tracking-wider text-[#64748B] mb-2.5">Uploaded License Photos (Click to Enlarge)</p>
-                                        <div class="grid grid-cols-2 gap-3">
-                                            <!-- Front -->
-                                            <div class="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-2 text-center">
-                                                <span class="block text-[10px] font-bold text-[#64748B] mb-1">Front (Name & Details)</span>
-                                                @if ($renter->drivers_license_front)
-                                                    <img 
-                                                        src="{{ \App\Services\PrivateDocumentService::url($renter->drivers_license_front) }}"
-                                                        alt="Driver License Front" 
-                                                        class="h-32 w-full object-cover rounded-lg cursor-pointer hover:opacity-90 transition border border-[#E2E8F0]"
-                                                        onclick="openImageModal('{{ \App\Services\PrivateDocumentService::url($renter->drivers_license_front) }}', 'Front License - {{ addslashes(trim($renter->first_name . ' ' . $renter->last_name)) }}')"
-                                                    />
-                                                @else
-                                                    <div class="h-32 flex items-center justify-center rounded-lg bg-[#F1F5F9] text-[#94A3B8] text-[11px]">No Photo</div>
-                                                @endif
-                                            </div>
-
-                                            <!-- Back -->
-                                            <div class="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-2 text-center">
-                                                <span class="block text-[10px] font-bold text-[#64748B] mb-1">Back (Restrictions)</span>
-                                                @if ($renter->drivers_license_back)
-                                                    <img 
-                                                        src="{{ \App\Services\PrivateDocumentService::url($renter->drivers_license_back) }}"
-                                                        alt="Driver License Back" 
-                                                        class="h-32 w-full object-cover rounded-lg cursor-pointer hover:opacity-90 transition border border-[#E2E8F0]"
-                                                        onclick="openImageModal('{{ \App\Services\PrivateDocumentService::url($renter->drivers_license_back) }}', 'Back License - {{ addslashes(trim($renter->first_name . ' ' . $renter->last_name)) }}')"
-                                                    />
-                                                @else
-                                                    <div class="h-32 flex items-center justify-center rounded-lg bg-[#F1F5F9] text-[#94A3B8] text-[11px]">No Photo</div>
-                                                @endif
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Column 3: Decision Console -->
-                                    <div class="flex flex-col justify-between rounded-xl border border-[#E2E8F0] bg-[#FAFBFD] p-4 text-xs">
-                                        <div>
-                                            <p class="font-bold text-[11px] uppercase tracking-wider text-[#64748B] mb-2">Verification Action</p>
-                                            <form method="POST" action="{{ route('admin.licenses.approve', $renter) }}">
-                                                @csrf
-                                                <button 
-                                                    class="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white shadow-xs transition cursor-pointer" 
-                                                    type="submit"
-                                                    onclick="return confirm('Approve driver license for {{ addslashes(trim($renter->first_name . ' ' . $renter->last_name)) }}?')"
-                                                >
-                                                    ✓ Approve License
-                                                </button>
-                                            </form>
-
-                                            <div class="my-3 border-t border-[#E2E8F0]"></div>
-
-                                            <form method="POST" action="{{ route('admin.licenses.reject', $renter) }}" class="space-y-2">
-                                                @csrf
-                                                <textarea 
-                                                    class="min-h-16 w-full resize-y rounded-xl border border-[#CBD5E1] bg-white p-2 text-xs text-[#0F172A] outline-none focus:border-red-400" 
-                                                    name="rejection_reason" 
-                                                    placeholder="Reason for rejection (sent to renter)" 
-                                                    required
-                                                ></textarea>
-                                                <button class="w-full rounded-xl border border-red-200 bg-white hover:bg-red-50 px-4 py-2 text-xs font-bold text-red-600 transition cursor-pointer" type="submit">
-                                                    ✕ Reject Submission
-                                                </button>
-                                            </form>
-                                        </div>
-                                    </div>
-                                </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-5 flex-1">
+                            <article class="admin-finance-card admin-finance-card--dark">
+                                <div><p>Commission due this month</p><strong>₱{{ number_format($commissionStats['current_month_commission'], 2) }}</strong></div>
+                                <footer><span>{{ now()->timezone('Asia/Manila')->format('F Y') }}</span><span>Monthly billing cycle</span></footer>
                             </article>
-                        @empty
-                            <div class="rounded-xl border border-dashed border-[#CBD5E1] bg-white p-8 text-center text-xs text-[#64748B]">
-                                ✓ All submitted driver's licenses have been reviewed and verified.
-                            </div>
-                        @endforelse
-                    </div>
-                </div>
-
-                <!-- Operator Host Accreditation -->
-                <div class="pt-4">
-                    <div class="flex items-center justify-between border-b border-[#E2E8F0] pb-3 mb-4">
-                        <div class="flex items-center gap-2">
-                            <span class="flex h-5 w-5 items-center justify-center rounded bg-[#1A1A1A] text-[10px] font-bold text-[#FEC103]">2</span>
-                            <h2 class="text-sm font-bold uppercase tracking-wider text-[#0F172A]">Operator & Commercial Host Accreditation</h2>
+                            <article class="admin-finance-card">
+                                <div><p>Awaiting collection</p><strong>₱{{ number_format($commissionStats['current_month_pending'], 2) }}</strong></div>
+                                <footer><span>Current month</span><button onclick="switchTab('commissions')" class="admin-text-link">Review payments →</button></footer>
+                            </article>
                         </div>
-                        <span class="rounded-full bg-[#FFF6DA] border border-[#FDE68A] px-2.5 py-0.5 text-[11px] font-bold text-[#92400E]">
-                            {{ $operators->count() }} Awaiting Audit
-                        </span>
                     </div>
 
-                    <div class="grid grid-cols-1 gap-5">
-                        @forelse ($operators as $operator)
-                            <article class="rounded-2xl border border-[#E2E8F0] bg-white shadow-xs overflow-hidden">
-                                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-[#F1F5F9] bg-[#FAFBFD] px-5 py-3">
-                                    <div class="flex items-center gap-2.5">
-                                        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-[#FEC103] font-black text-xs text-[#1A1A1A]">
-                                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
-                                        </div>
+                    <!-- Right: Recent Remittances (Transactions) -->
+                    <div class="lg:col-span-4 flex flex-col">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="bankdash-title">Recent remittances</h2>
+                        </div>
+                        <div class="bankdash-card flex-1 flex flex-col justify-around space-y-4">
+                            @forelse ($recentRemittances as $remit)
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-3.5">
+                                        <!-- Category Icon Pill -->
+                                        @if ($remit->payment_method === 'gcash')
+                                            <div class="w-12 h-12 rounded-full bg-[#FFF5D9] text-[#FFBB38] flex items-center justify-center flex-shrink-0">
+                                                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
+                                                </svg>
+                                            </div>
+                                        @elseif ($remit->status === 'verified')
+                                            <div class="w-12 h-12 rounded-full bg-[#DCFAF8] text-[#16DBCC] flex items-center justify-center flex-shrink-0">
+                                                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                            </div>
+                                        @else
+                                            <div class="w-12 h-12 rounded-full bg-[#E7EDFF] text-[#2D60FF] flex items-center justify-center flex-shrink-0">
+                                                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                                                </svg>
+                                            </div>
+                                        @endif
+
                                         <div>
-                                            <p class="text-xs font-bold text-[#0F172A]">
-                                                {{ $operator->operatorProfile?->business_name ?: 'Unnamed Commercial Host' }}
+                                            <p class="text-sm font-bold text-[#343C6A] leading-tight">
+                                                {{ $remit->operator?->operatorProfile?->business_name ?: trim(($remit->operator?->first_name ?? 'Operator').' '.($remit->operator?->last_name ?? '')) }}
                                             </p>
-                                            <p class="text-[10.5px] text-[#64748B]">Representative: {{ trim($operator->first_name . ' ' . $operator->last_name) }} · {{ $operator->email }}</p>
+                                            <p class="text-xs text-[#718EBF] mt-0.5">
+                                                {{ $remit->submitted_at ? $remit->submitted_at->format('d F Y') : \Carbon\Carbon::createFromFormat('Y-m', $remit->billing_month)->format('F Y') }}
+                                            </p>
                                         </div>
                                     </div>
-                                    <div class="text-[11px] text-[#64748B]">
-                                        Applied: <span class="font-semibold text-[#0F172A]">{{ $operator->created_at?->format('M j, Y h:i A') }}</span>
+
+                                    <div class="text-right">
+                                        @if ($remit->status === 'verified')
+                                            <span class="text-sm font-bold text-[#16DBCC]">+₱{{ number_format((float) $remit->commission_due, 2) }}</span>
+                                        @elseif ($remit->status === 'frozen' || $remit->status === 'overdue')
+                                            <span class="text-sm font-bold text-[#FE5C73]">-₱{{ number_format((float) $remit->commission_due, 2) }}</span>
+                                        @else
+                                            <span class="text-sm font-bold text-[#2D60FF]">₱{{ number_format((float) $remit->commission_due, 2) }}</span>
+                                        @endif
                                     </div>
                                 </div>
-
-                                <div class="grid gap-5 p-5 lg:grid-cols-[1fr_1.4fr_1fr]">
-                                    <!-- Business Info -->
-                                    <div class="rounded-xl border border-[#F1F5F9] bg-[#FAFBFD] p-4 text-xs">
-                                        <p class="font-bold text-[11px] uppercase tracking-wider text-[#64748B] mb-2.5">Business Credentials</p>
-                                        <dl class="space-y-2">
-                                            <div>
-                                                <dt class="text-[#64748B]">Trade Name:</dt>
-                                                <dd class="font-bold text-[#0F172A]">{{ $operator->operatorProfile?->business_name }}</dd>
-                                            </div>
-                                            <div>
-                                                <dt class="text-[#64748B]">Address:</dt>
-                                                <dd class="font-medium text-[#0F172A]">
-                                                    {{ $operator->operatorProfile?->street_address }}, {{ $operator->operatorProfile?->barangay }}, {{ $operator->operatorProfile?->municipality }}
-                                                </dd>
-                                            </div>
-                                            <div>
-                                                <dt class="text-[#64748B]">Contact Phone:</dt>
-                                                <dd class="font-bold text-[#0F172A]">{{ $operator->mobile_number ?: 'None' }}</dd>
-                                            </div>
-                                        </dl>
-                                    </div>
-
-                                    <!-- Documents -->
-                                    <div>
-                                        <p class="font-bold text-[11px] uppercase tracking-wider text-[#64748B] mb-2.5">Submitted Official Documents</p>
-                                        <div class="grid grid-cols-2 gap-2 text-xs">
-                                            @foreach (['government_id_front' => 'Gov ID (Front)', 'government_id_back' => 'Gov ID (Back)', 'business_permit_front' => 'Permit (Front)', 'business_permit_back' => 'Permit (Back)'] as $field => $label)
-                                                @if ($operator->operatorProfile?->{$field})
-                                                    <button 
-                                                        type="button"
-                                                        onclick="openImageModal('{{ \App\Services\PrivateDocumentService::url($operator->operatorProfile->{$field}) }}', '{{ addslashes($label) }} - {{ addslashes($operator->operatorProfile?->business_name ?: trim($operator->first_name . ' ' . $operator->last_name)) }}')"
-                                                        class="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-3 py-2 text-[11px] font-semibold text-[#0F172A] hover:border-[#FEC103] hover:bg-white flex items-center justify-between cursor-pointer w-full text-left transition"
-                                                    >
-                                                        <span class="flex items-center gap-1.5 truncate">
-                                                            <svg class="h-3.5 w-3.5 shrink-0 text-[#64748B]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                                                            <span class="truncate">{{ $label }}</span>
-                                                        </span>
-                                                        <span class="text-[#FEC103] font-bold text-xs">View</span>
-                                                    </button>
-                                                @else
-                                                    <div class="rounded-xl border border-dashed border-[#CBD5E1] bg-[#F1F5F9] px-3 py-2 text-[11px] text-[#94A3B8]">
-                                                        {{ $label }} (Missing)
-                                                    </div>
-                                                @endif
-                                            @endforeach
-                                        </div>
-                                    </div>
-
-                                    <!-- Decision -->
-                                    <div class="flex flex-col justify-between rounded-xl border border-[#E2E8F0] bg-[#FAFBFD] p-4 text-xs">
-                                        <div>
-                                            <p class="font-bold text-[11px] uppercase tracking-wider text-[#64748B] mb-2">Accreditation Decision</p>
-                                            <form method="POST" action="{{ route('admin.operators.approve', $operator) }}">
-                                                @csrf
-                                                <button 
-                                                    class="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white shadow-xs transition cursor-pointer" 
-                                                    type="submit"
-                                                    onclick="return confirm('Accredit operator {{ addslashes($operator->operatorProfile?->business_name ?: $operator->first_name) }}?')"
-                                                >
-                                                    ✓ Accredit Operator
-                                                </button>
-                                            </form>
-
-                                            <div class="my-3 border-t border-[#E2E8F0]"></div>
-
-                                            <form method="POST" action="{{ route('admin.operators.reject', $operator) }}" class="space-y-2">
-                                                @csrf
-                                                <textarea 
-                                                    class="min-h-16 w-full resize-y rounded-xl border border-[#CBD5E1] bg-white p-2 text-xs text-[#0F172A] outline-none focus:border-red-400" 
-                                                    name="rejection_reason" 
-                                                    placeholder="Reason for declining application" 
-                                                    required
-                                                ></textarea>
-                                                <button class="w-full rounded-xl border border-red-200 bg-white hover:bg-red-50 px-4 py-2 text-xs font-bold text-red-600 transition cursor-pointer" type="submit">
-                                                    ✕ Decline Permit
-                                                </button>
-                                            </form>
-                                        </div>
-                                    </div>
+                            @empty
+                                <div class="text-center py-6 text-xs text-[#718EBF]">
+                                    No commission remittances recorded for this cycle.
                                 </div>
-                            </article>
-                        @empty
-                            <div class="rounded-xl border border-dashed border-[#CBD5E1] bg-white p-8 text-center text-xs text-[#64748B]">
-                                ✓ No pending vehicle host operator accreditation requests.
+                            @endforelse
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Row 2: Weekly Activity Dual-Bar Chart & Fleet Distribution Donut Chart -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+                    <!-- Left: Weekly Activity Dual-Bar Chart -->
+                    <div class="lg:col-span-8 flex flex-col">
+                        <div class="admin-chart-header flex items-center justify-between mb-4">
+                            <h2 class="bankdash-title">Trip & commission activity</h2>
+                            <!-- Legend -->
+                            <div class="admin-chart-legend flex items-center gap-6 text-xs font-medium text-[#718EBF]">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-3 h-3 rounded-full" style="background:#2C6250"></span>
+                                    <span>Completed Trips</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="w-3 h-3 rounded-full" style="background:#E4B744"></span>
+                                    <span>10% Commission (₱)</span>
+                                </div>
                             </div>
-                        @endforelse
-                    </div>
-                </div>
-            </div>
-
-            <!-- ======================================================== -->
-            <!-- SECTION 2: MEMBER DIRECTORY & GOVERNANCE                -->
-            <!-- ======================================================== -->
-            <div id="section-users" class="hidden space-y-5">
-                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div class="relative flex-1 max-w-md">
-                        <input 
-                            type="text" 
-                            id="user-search-input" 
-                            onkeyup="filterUserTable()" 
-                            placeholder="Filter members by name, email, or mobile..." 
-                            class="w-full rounded-xl border border-[#CBD5E1] bg-white py-2 pl-9 pr-3 text-xs text-[#0F172A] outline-none focus:border-[#FEC103]"
-                        />
-                        <svg class="absolute left-3 top-2.5 h-4 w-4 text-[#94A3B8]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                        </div>
+                        <div class="bankdash-card admin-chart-frame flex-1 min-h-[320px]">
+                            <canvas role="img" aria-label="Completed trips and commission for the last seven days" id="weeklyActivityChart" height="130"></canvas>
+                        </div>
                     </div>
 
-                    <div class="flex items-center gap-1.5 text-xs">
-                        <button onclick="setRoleFilter('all')" id="role-all-btn" class="rounded-lg bg-[#0F172A] text-white px-3 py-1.5 text-xs font-bold transition">All ({{ $allUsers->count() }})</button>
-                        <button onclick="setRoleFilter('customer')" id="role-customer-btn" class="rounded-lg bg-white border border-[#E2E8F0] text-[#64748B] px-3 py-1.5 text-xs font-bold hover:bg-[#F8FAFC] transition">Renters ({{ $stats['total_renters'] }})</button>
-                        <button onclick="setRoleFilter('operator')" id="role-operator-btn" class="rounded-lg bg-white border border-[#E2E8F0] text-[#64748B] px-3 py-1.5 text-xs font-bold hover:bg-[#F8FAFC] transition">Hosts ({{ $stats['total_operators'] }})</button>
+                    <!-- Right: Fleet Distribution Donut Chart -->
+                    <div class="lg:col-span-4 flex flex-col">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="bankdash-title">Fleet distribution</h2>
+                        </div>
+                        <div class="bankdash-card admin-chart-frame flex-1 flex flex-col items-center justify-center min-h-[320px]">
+                            <div class="w-full max-w-[260px] h-[260px] relative">
+                                <canvas role="img" aria-label="Vehicle types in the platform fleet" id="fleetPieChart"></canvas>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <div class="overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white shadow-xs">
-                    <table class="w-full text-left border-collapse text-xs" id="users-directory-table">
-                        <thead>
-                            <tr class="border-b border-[#E2E8F0] bg-[#FAFBFD] text-[#64748B] uppercase font-bold text-[10px] tracking-wider">
-                                <th class="py-3 px-5">Member</th>
-                                <th class="py-3 px-5">Contact</th>
-                                <th class="py-3 px-5">Role</th>
-                                <th class="py-3 px-5">KYC Verified</th>
-                                <th class="py-3 px-5">Account Status</th>
-                                <th class="py-3 px-5 text-right">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-[#F1F5F9]">
-                            @forelse ($allUsers as $u)
-                                <tr class="user-row hover:bg-[#FAFBFD] transition" data-role="{{ in_array($u->role, ['customer', 'renter']) ? 'customer' : $u->role }}" data-search="{{ strtolower(trim($u->first_name . ' ' . $u->last_name . ' ' . $u->email . ' ' . $u->mobile_number)) }}">
-                                    <td class="py-3.5 px-5">
-                                        <div class="flex items-center gap-2.5">
-                                            <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-[#F1F5F9] font-bold text-[#0F172A] text-[11px] border border-[#E2E8F0]">
-                                                {{ strtoupper(substr($u->first_name ?: 'U', 0, 1) . substr($u->last_name ?: '', 0, 1)) }}
-                                            </div>
-                                            <div>
-                                                <p class="font-bold text-[#0F172A]">{{ trim($u->first_name . ' ' . $u->last_name) }}</p>
-                                                <p class="text-[10px] text-[#94A3B8]">ID #{{ $u->id }}</p>
-                                            </div>
+                <!-- Row 3: Quick Transfer & Balance History Spline Chart -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+                    <!-- Left: Quick Remittance Action (Quick Transfer) -->
+                    <div class="lg:col-span-5 flex flex-col">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="bankdash-title">Operator workspace</h2>
+                        </div>
+                        <div class="bankdash-card flex-1 flex flex-col justify-between space-y-6">
+                            <!-- Operator Avatars Row -->
+                            <div class="flex items-center gap-4 overflow-x-auto pb-2">
+                                @forelse ($quickActionOperators as $qOp)
+                                    <div class="flex flex-col items-center min-w-[70px] text-center cursor-pointer group" onclick="selectQuickOperator('{{ $qOp->id }}', '{{ $qOp->first_name }}')">
+                                        <div class="w-14 h-14 rounded-full bg-[#F5F7FA] border-2 border-[#DFEAF2] group-hover:border-[#2D60FF] flex items-center justify-center overflow-hidden transition shadow-sm">
+                                            @if ($qOp->profile_photo)
+                                                <img src="{{ asset('storage/'.$qOp->profile_photo) }}" class="w-full h-full object-cover" alt="Operator" />
+                                            @else
+                                                <span class="font-bold text-[#343C6A] text-base">{{ strtoupper(substr($qOp->first_name, 0, 1)) }}</span>
+                                            @endif
                                         </div>
-                                    </td>
-                                    <td class="py-3.5 px-5">
-                                        <p class="font-semibold text-[#0F172A]">{{ $u->email }}</p>
-                                        <p class="text-[#64748B] text-[10.5px]">{{ $u->mobile_number ?: 'No phone' }}</p>
-                                    </td>
-                                    <td class="py-3.5 px-5">
-                                        @if ($u->role === 'operator')
-                                            <span class="rounded bg-[#FFF6DA] border border-[#FDE68A] px-2 py-0.5 text-[10px] font-bold uppercase text-[#92400E]">Host</span>
-                                        @else
-                                            <span class="rounded bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-700">Renter</span>
-                                        @endif
-                                    </td>
-                                    <td class="py-3.5 px-5">
-                                        @if ($u->is_drivers_license_verified)
-                                            <span class="text-emerald-700 font-semibold text-[11px]">✓ Verified</span>
-                                        @elseif ($u->role === 'operator' && $u->account_status === 'active')
-                                            <span class="text-emerald-700 font-semibold text-[11px]">✓ Accredited</span>
-                                        @else
-                                            <span class="text-[#94A3B8] text-[11px]">Unverified</span>
-                                        @endif
-                                    </td>
-                                    <td class="py-3.5 px-5">
-                                        @if ($u->account_status === 'active')
-                                            <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10.5px] font-bold text-emerald-700">
-                                                <span class="h-1 w-1 rounded-full bg-emerald-500"></span> Active
-                                            </span>
-                                        @elseif ($u->account_status === 'suspended')
-                                            <span class="inline-flex items-center gap-1 rounded-full bg-red-50 border border-red-200 px-2 py-0.5 text-[10.5px] font-bold text-red-700">
-                                                <span class="h-1 w-1 rounded-full bg-red-500"></span> Suspended
-                                            </span>
-                                        @else
-                                            <span class="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10.5px] font-bold text-amber-700">
-                                                {{ ucfirst($u->account_status) }}
-                                            </span>
-                                        @endif
-                                    </td>
-                                    <td class="py-3.5 px-5 text-right">
-                                        <div class="flex items-center justify-end gap-1.5">
-                                            <button 
-                                                onclick="openProfileViewModal({{ json_encode([
-                                                    'id' => $u->id,
-                                                    'name' => trim($u->first_name . ' ' . $u->middle_name . ' ' . $u->last_name . ' ' . $u->suffix),
-                                                    'email' => $u->email,
-                                                    'mobile_number' => $u->mobile_number ?: 'Not provided',
-                                                    'date_of_birth' => $u->date_of_birth ? $u->date_of_birth->format('F j, Y') : 'Not provided',
-                                                    'sex' => $u->sex ? ucfirst($u->sex) : 'Not specified',
-                                                    'role' => $u->role === 'operator' ? 'Operator (Fleet Host)' : 'Renter (Customer)',
-                                                    'account_status' => ucfirst($u->account_status),
-                                                    'license_verified' => $u->is_drivers_license_verified ? 'Verified' : 'Unverified',
-                                                    'created_at' => $u->created_at?->format('F j, Y h:i A'),
-                                                    'business_name' => $u->operatorProfile?->business_name,
-                                                    'business_address' => $u->operatorProfile ? ($u->operatorProfile->street_address . ', ' . $u->operatorProfile->barangay . ', ' . $u->operatorProfile->municipality) : null,
-                                                ]) }})" 
-                                                class="rounded-lg border border-[#E2E8F0] bg-white px-2 py-1 text-[11px] font-semibold text-[#0F172A] hover:bg-[#F8FAFC]"
-                                            >
-                                                Inspect
-                                            </button>
-
-                                            <button 
-                                                onclick="openStatusModal({{ $u->id }}, '{{ addslashes(trim($u->first_name . ' ' . $u->last_name)) }}', '{{ $u->email }}', '{{ $u->account_status }}')" 
-                                                class="rounded-lg border border-[#E2E8F0] px-2 py-1 text-[11px] font-semibold text-[#0F172A] hover:bg-[#F8FAFC]"
-                                            >
-                                                Status
-                                            </button>
-
-                                            <form method="POST" action="{{ route('admin.users.toggle-status', $u) }}" class="inline">
-                                                @csrf
-                                                <button 
-                                                    class="rounded-lg border {{ $u->account_status === 'active' ? 'border-red-200 text-red-600 hover:bg-red-50' : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50' }} px-2 py-1 text-[11px] font-semibold"
-                                                    type="submit"
-                                                >
-                                                    {{ $u->account_status === 'active' ? 'Suspend' : 'Activate' }}
-                                                </button>
-                                            </form>
-                                        </div>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="6" class="py-6 text-center text-xs text-[#64748B]">No members registered yet.</td>
-                                </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- ======================================================== -->
-            <!-- SECTION 3: AUDIT TRAIL LOGS                             -->
-            <!-- ======================================================== -->
-            <div id="section-audit" class="hidden space-y-4">
-                <div class="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
-                    <div>
-                        <h2 class="text-sm font-bold uppercase tracking-wider text-[#0F172A]">Administrative Action Log & Compliance Audit</h2>
-                        <p class="text-xs text-[#64748B]">Permanent, chronological record of all administrative verifications, status changes, announcements, and policy edits.</p>
-                    </div>
-                    <a href="{{ route('admin.exports.audit-logs') }}" class="rounded-xl border border-[#E2E8F0] bg-white px-3 py-1.5 text-xs font-bold text-[#0F172A] hover:bg-[#F8FAFC]">
-                        Download CSV ↓
-                    </a>
-                </div>
-
-                <div class="overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white shadow-xs">
-                    <table class="w-full text-left border-collapse text-xs font-mono">
-                        <thead>
-                            <tr class="border-b border-[#E2E8F0] bg-[#FAFBFD] text-[#64748B] uppercase font-bold text-[10px] tracking-wider font-sans">
-                                <th class="py-2.5 px-4">Timestamp</th>
-                                <th class="py-2.5 px-4">Admin</th>
-                                <th class="py-2.5 px-4">Action</th>
-                                <th class="py-2.5 px-4">Target</th>
-                                <th class="py-2.5 px-4">Details / Justification</th>
-                                <th class="py-2.5 px-4 text-right">IP</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-[#F1F5F9] text-[11px]">
-                            @forelse ($auditLogs as $l)
-                                <tr class="hover:bg-[#FAFBFD] transition">
-                                    <td class="py-3 px-4 text-[#64748B] whitespace-nowrap">{{ $l->created_at?->format('Y-m-d H:i:s') }}</td>
-                                    <td class="py-3 px-4 font-bold text-[#0F172A] font-sans">{{ $l->admin_name ?: 'System Admin' }}</td>
-                                    <td class="py-3 px-4">
-                                        <span class="rounded px-1.5 py-0.5 text-[10px] font-bold uppercase font-sans {{ str_contains($l->action, 'approved') ? 'bg-emerald-100 text-emerald-800' : (str_contains($l->action, 'rejected') ? 'bg-red-100 text-red-800' : 'bg-[#FFF6DA] text-[#92400E]') }}">
-                                            {{ str_replace('_', ' ', $l->action) }}
-                                        </span>
-                                    </td>
-                                    <td class="py-3 px-4 font-sans text-[#0F172A] font-semibold">{{ $l->target_name ?: $l->target_type }}</td>
-                                    <td class="py-3 px-4 text-[#64748B] font-sans max-w-sm truncate" title="{{ $l->details }}">{{ $l->details ?: '—' }}</td>
-                                    <td class="py-3 px-4 text-right text-[#94A3B8]">{{ $l->ip_address }}</td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="6" class="py-6 text-center text-xs font-sans text-[#64748B]">No administrative actions recorded yet.</td>
-                                </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- ======================================================== -->
-            <!-- SECTION 4: REVIEW MODERATION                            -->
-            <!-- ======================================================== -->
-            <div id="section-reviews" class="hidden space-y-4">
-                <div class="border-b border-[#E2E8F0] pb-3">
-                    <h2 class="text-sm font-bold uppercase tracking-wider text-[#0F172A]">Public Feedback & Community Review Moderation</h2>
-                    <p class="text-xs text-[#64748B]">Review member ratings and comments submitted for vehicles. Flag or hide content violating community decency guidelines.</p>
-                </div>
-
-                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    @forelse ($reviews as $rev)
-                        <div class="rounded-xl border {{ $rev->is_review_hidden ? 'border-red-200 bg-red-50/50' : 'border-[#E2E8F0] bg-white' }} p-4 shadow-xs flex flex-col justify-between">
-                            <div>
-                                <div class="flex items-start justify-between">
-                                    <div>
-                                        <p class="font-bold text-xs text-[#0F172A]">{{ $rev->vehicle?->name ?: 'Vehicle Listing' }}</p>
-                                        <p class="text-[10px] text-[#64748B]">By {{ $rev->renter ? trim($rev->renter->first_name . ' ' . $rev->renter->last_name) : 'Renter' }}</p>
+                                        <p class="text-xs font-bold text-[#343C6A] mt-2 truncate w-16">{{ $qOp->first_name }}</p>
+                                        <p class="text-[10px] text-[#718EBF] truncate w-16">{{ $qOp->operatorProfile?->business_name ? 'Operator' : 'Host' }}</p>
                                     </div>
-                                    <span class="rounded bg-[#FFF6DA] border border-[#FDE68A] px-1.5 py-0.2 text-xs font-bold text-[#92400E]">
-                                        ★ {{ $rev->rating ?: 'N/A' }}
-                                    </span>
-                                </div>
-
-                                <p class="mt-2.5 rounded-lg bg-[#F8FAFC] border border-[#F1F5F9] p-2.5 text-xs text-[#334155] italic">
-                                    "{{ $rev->review ?: 'No comment provided.' }}"
-                                </p>
-
-                                @if ($rev->is_review_hidden)
-                                    <p class="mt-2 flex items-center gap-1 text-[10.5px] font-bold text-red-600"><svg class="h-3.5 w-3.5 inline text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>Hidden from Public Catalog</p>
-                                @endif
+                                @empty
+                                    <p class="text-xs text-[#718EBF] py-4">No active operators listed.</p>
+                                @endforelse
+                                <button onclick="switchTab('commissions')" class="w-12 h-12 rounded-full border border-[#DFEAF2] bg-white flex items-center justify-center text-[#718EBF] hover:text-[#2D60FF] shadow-sm flex-shrink-0" title="View all">
+                                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </button>
                             </div>
 
-                            <div class="mt-3 pt-2.5 border-t border-[#F1F5F9] flex items-center justify-between">
-                                <span class="text-[10px] text-[#94A3B8]">{{ $rev->updated_at?->format('M j, Y') }}</span>
-                                <form method="POST" action="{{ route('admin.reviews.toggle-visibility', $rev) }}" class="inline">
+                            <!-- Action Form -->
+                            <div class="flex items-center gap-3">
+                                <span class="text-xs font-semibold text-[#718EBF] flex-shrink-0">Cycle Audit</span>
+                                <form method="POST" action="{{ route('admin.remittances.sync') }}" class="flex-1 flex items-center bg-[#F5F7FA] rounded-full pl-4 pr-1 py-1 border border-[#DFEAF2] focus-within:border-[#2D60FF]">
                                     @csrf
-                                    <button class="rounded-lg border {{ $rev->is_review_hidden ? 'border-emerald-200 text-emerald-700' : 'border-red-200 text-red-600' }} px-2.5 py-1 text-[11px] font-bold cursor-pointer" type="submit">
-                                        {{ $rev->is_review_hidden ? 'Restore' : 'Hide Review' }}
+                                    <input type="hidden" name="month" value="{{ $selectedMonth }}" />
+                                    <input type="text" readonly value="{{ \Carbon\Carbon::createFromFormat('Y-m', $selectedMonth)->format('F Y') }} (10%)" class="w-full bg-transparent text-xs font-bold text-[#343C6A] outline-none" />
+                                    <button type="submit" class="bg-[#2D60FF] hover:bg-blue-700 text-white rounded-full px-5 py-2.5 text-xs font-bold flex items-center gap-1.5 transition shadow-md shadow-blue-500/20">
+                                        <span>Audit</span>
+                                        <svg class="w-3.5 h-3.5 transform rotate-45" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                                        </svg>
                                     </button>
                                 </form>
                             </div>
                         </div>
-                    @empty
-                        <div class="col-span-full rounded-xl border border-dashed border-[#CBD5E1] bg-white p-6 text-center text-xs text-[#64748B]">
-                            No reviews submitted on the platform yet.
+                    </div>
+
+                    <!-- Right: Revenue History Smooth Spline Chart (Balance History) -->
+                    <div class="lg:col-span-7 flex flex-col">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="bankdash-title">Commission history</h2>
                         </div>
-                    @endforelse
+                        <div class="bankdash-card admin-chart-frame flex-1 min-h-[240px]">
+                            <canvas role="img" aria-label="Monthly platform commission history" id="balanceHistoryChart" height="100"></canvas>
+                        </div>
+                    </div>
                 </div>
+
             </div>
 
             <!-- ======================================================== -->
-            <!-- SECTION 5: DISPUTES & INCIDENTS                         -->
+            <!-- TAB 2: COMMISSIONS & REMITTANCE MANAGEMENT (NEW ENGINE)  -->
             <!-- ======================================================== -->
-            <div id="section-disputes" class="hidden space-y-4">
-                <div class="border-b border-[#E2E8F0] pb-3">
-                    <h2 class="text-sm font-bold uppercase tracking-wider text-[#0F172A]">Trip Incident & Dispute Resolution Desk</h2>
-                    <p class="text-xs text-[#64748B]">Inspect rentals with cancelled states, damage fees, fuel claims, or late return surcharges. Log official administrative resolution memos.</p>
+            <div id="tab-commissions" class="tab-content hidden space-y-8">
+
+                <!-- Grace Period Operational Notice -->
+                <div class="bankdash-card bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-white border-blue-200">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#2D60FF] text-white">48-Hour Grace Protocol Active</span>
+                                <span class="text-xs font-semibold text-[#718EBF]">Cycle: {{ \Carbon\Carbon::createFromFormat('Y-m', $selectedMonth)->format('F Y') }}</span>
+                            </div>
+                            <h3 class="text-lg font-bold text-[#343C6A] mt-1.5">Automated Operator Remittance Governance</h3>
+                            <p class="text-xs text-[#718EBF] mt-0.5 max-w-2xl">
+                                Operators retain 90% of trip gross and remit 10% platform commission at month-end. Upon cycle close, a strict 48-hour grace window triggers. If remittance proof is not verified before grace expires, operator accounts are automatically suspended and blocked from new bookings.
+                            </p>
+                        </div>
+                        <form method="POST" action="{{ route('admin.remittances.sync') }}" class="flex-shrink-0">
+                            @csrf
+                            <input type="hidden" name="month" value="{{ $selectedMonth }}" />
+                            <button type="submit" class="w-full md:w-auto px-5 py-2.5 rounded-full bg-[#2D60FF] hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition shadow-md shadow-blue-500/20">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                <span>Run Grace Audit & Sync</span>
+                            </button>
+                        </form>
+                    </div>
                 </div>
 
-                <div class="space-y-3">
-                    @forelse ($disputes as $disp)
-                        <div class="rounded-xl border border-[#E2E8F0] bg-white p-4 shadow-xs">
-                            <div class="flex items-center justify-between border-b border-[#F1F5F9] pb-3">
-                                <div>
-                                    <p class="font-bold text-xs text-[#0F172A]">Booking #{{ $disp->id }} · {{ $disp->vehicle?->name }}</p>
-                                    <p class="text-[10.5px] text-[#64748B]">
-                                        Renter: <span class="font-semibold text-[#0F172A]">{{ $disp->renter ? trim($disp->renter->first_name . ' ' . $disp->renter->last_name) : 'N/A' }}</span> · 
-                                        Host: <span class="font-semibold text-[#0F172A]">{{ $disp->operator ? trim($disp->operator->first_name . ' ' . $disp->operator->last_name) : 'N/A' }}</span>
-                                    </p>
+                <!-- KPI Metric Cards Grid -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <!-- Total Accrued -->
+                    <div class="bankdash-card flex items-center gap-4">
+                        <div class="w-14 h-14 rounded-full bg-[#E7EDFF] text-[#2D60FF] flex items-center justify-center flex-shrink-0">
+                            <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <p class="text-xs font-semibold text-[#718EBF]">10% Commission Accrued</p>
+                            <h3 class="text-xl font-bold text-[#343C6A] mt-0.5">₱{{ number_format($commissionStats['current_month_commission'], 2) }}</h3>
+                            <p class="text-[10px] text-[#718EBF] mt-0.5">Cycle Gross: ₱{{ number_format($commissionStats['current_month_gross'], 2) }}</p>
+                        </div>
+                    </div>
+
+                    <!-- Total Collected -->
+                    <div class="bankdash-card flex items-center gap-4">
+                        <div class="w-14 h-14 rounded-full bg-[#DCFAF8] text-[#16DBCC] flex items-center justify-center flex-shrink-0">
+                            <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <p class="text-xs font-semibold text-[#718EBF]">Verified & Collected</p>
+                            <h3 class="text-xl font-bold text-[#16DBCC] mt-0.5">₱{{ number_format($commissionStats['current_month_collected'], 2) }}</h3>
+                            <p class="text-[10px] text-[#718EBF] mt-0.5">All-Time: ₱{{ number_format($commissionStats['total_commission_collected'], 2) }}</p>
+                        </div>
+                    </div>
+
+                    <!-- Pending / In Grace -->
+                    <div class="bankdash-card flex items-center gap-4">
+                        <div class="w-14 h-14 rounded-full bg-[#FFF5D9] text-[#FFBB38] flex items-center justify-center flex-shrink-0">
+                            <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <p class="text-xs font-semibold text-[#718EBF]">Pending in 48h Grace</p>
+                            <h3 class="text-xl font-bold text-[#FFBB38] mt-0.5">₱{{ number_format($commissionStats['current_month_pending'], 2) }}</h3>
+                            <p class="text-[10px] text-[#718EBF] mt-0.5">{{ $commissionStats['in_grace_count'] }} Operator(s) In Window</p>
+                        </div>
+                    </div>
+
+                    <!-- Frozen Operators -->
+                    <div class="bankdash-card flex items-center gap-4">
+                        <div class="w-14 h-14 rounded-full bg-[#FFE0EB] text-[#FE5C73] flex items-center justify-center flex-shrink-0">
+                            <svg class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                            </svg>
+                        </div>
+                        <div>
+                            <p class="text-xs font-semibold text-[#718EBF]">Overdue Accounts Frozen</p>
+                            <h3 class="text-xl font-bold text-[#FE5C73] mt-0.5">{{ $commissionStats['frozen_operators_count'] }} Operator(s)</h3>
+                            <p class="text-[10px] text-[#FE5C73] mt-0.5">Rentals Automatically Blocked</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Monthly Statements Table Section -->
+                <div class="bankdash-card space-y-6">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                            <h2 class="bankdash-title">Operator Remittance Statements</h2>
+                            <p class="text-xs text-[#718EBF] mt-0.5">Monthly 10% platform commission statements with proof review and freeze controls</p>
+                        </div>
+
+                        <!-- Month Filter Dropdown -->
+                        <form method="GET" action="{{ route('admin.dashboard') }}" class="flex items-center gap-3">
+                            <input type="hidden" name="tab" value="commissions" />
+                            <select name="month" onchange="this.form.submit()" class="px-4 py-2 rounded-full bg-[#F5F7FA] text-xs font-bold text-[#343C6A] border border-[#DFEAF2] focus:border-[#2D60FF] outline-none">
+                                @foreach ($availableMonths as $m)
+                                    <option value="{{ $m }}" {{ $selectedMonth === $m ? 'selected' : '' }}>
+                                        {{ \Carbon\Carbon::createFromFormat('Y-m', $m)->format('F Y') }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </form>
+                    </div>
+
+                    <!-- Table -->
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs">
+                            <thead>
+                                <tr class="text-[#718EBF] uppercase tracking-wider text-[10px] border-b border-[#F3F4F6]">
+                                    <th class="pb-3 font-bold">Operator & Business</th>
+                                    <th class="pb-3 font-bold">Trips</th>
+                                    <th class="pb-3 font-bold">Gross Volume</th>
+                                    <th class="pb-3 font-bold">10% Due</th>
+                                    <th class="pb-3 font-bold">Grace Window</th>
+                                    <th class="pb-3 font-bold">Payment Proof</th>
+                                    <th class="pb-3 font-bold">Account State</th>
+                                    <th class="pb-3 font-bold text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-[#F3F4F6]">
+                                @forelse ($monthlyRemittances as $remit)
+                                    @php
+                                        $op = $remit->operator;
+                                        $prof = $op?->operatorProfile;
+                                        $isFrozen = ($op?->account_status === 'suspended');
+                                    @endphp
+                                    <tr class="hover:bg-[#F8FAFC] transition">
+                                        <!-- Operator Info -->
+                                        <td class="py-4">
+                                            <div class="flex items-center gap-3">
+                                                <div class="w-9 h-9 rounded-full bg-[#E7EDFF] text-[#2D60FF] flex items-center justify-center font-bold text-xs flex-shrink-0">
+                                                    {{ strtoupper(substr($op?->first_name ?? 'O', 0, 1)) }}
+                                                </div>
+                                                <div>
+                                                    <p class="font-bold text-[#343C6A] text-sm">{{ $prof?->business_name ?: trim(($op?->first_name ?? '').' '.($op?->last_name ?? '')) }}</p>
+                                                    <p class="text-[11px] text-[#718EBF]">{{ $op?->email }} &bull; {{ $op?->mobile_number ?: 'No phone' }}</p>
+                                                </div>
+                                            </div>
+                                        </td>
+
+                                        <!-- Completed Trips -->
+                                        <td class="py-4">
+                                            <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-[#F5F7FA] text-[#343C6A]">
+                                                {{ $remit->completed_trips_count }} trips
+                                            </span>
+                                        </td>
+
+                                        <!-- Gross Volume -->
+                                        <td class="py-4 font-semibold text-[#343C6A]">
+                                            ₱{{ number_format((float) $remit->gross_revenue, 2) }}
+                                        </td>
+
+                                        <!-- 10% Due -->
+                                        <td class="py-4 font-bold text-[#2D60FF] text-sm">
+                                            ₱{{ number_format((float) $remit->commission_due, 2) }}
+                                        </td>
+
+                                        <!-- Grace Period Status -->
+                                        <td class="py-4">
+                                            @if ($remit->status === 'verified')
+                                                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
+                                                    Settled
+                                                </span>
+                                            @elseif ($remit->isGraceExpired())
+                                                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 flex items-center gap-1 w-max">
+                                                    <span class="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse"></span>
+                                                    Grace Expired
+                                                </span>
+                                            @else
+                                                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800">
+                                                    {{ $remit->grace_hours_remaining }}h remaining
+                                                </span>
+                                            @endif
+                                        </td>
+
+                                        <!-- Payment Proof Status -->
+                                        <td class="py-4">
+                                            @if ($remit->receipt_image)
+                                                <button
+                                                    type="button"
+                                                    onclick="openProofModal('{{ $remit->id }}', '{{ $remit->receipt_image_url }}', '{{ $remit->payment_method }}', '{{ $remit->payment_reference }}', '{{ number_format((float) $remit->commission_due, 2) }}', '{{ $remit->billing_month }}', '{{ $op?->first_name }} {{ $op?->last_name }}', '{{ $remit->status }}')"
+                                                    class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#E7EDFF] text-[#2D60FF] font-bold text-xs hover:bg-blue-600 hover:text-white transition"
+                                                >
+                                                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                    </svg>
+                                                    <span>View Proof</span>
+                                                </button>
+                                            @elseif ($remit->status === 'verified')
+                                                <span class="text-xs text-emerald-600 font-semibold">Confirmed Manual</span>
+                                            @else
+                                                <span class="text-xs text-[#718EBF] italic">No proof submitted</span>
+                                            @endif
+                                        </td>
+
+                                        <!-- Account Status -->
+                                        <td class="py-4">
+                                            @if ($isFrozen)
+                                                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                                    Frozen (Suspended)
+                                                </span>
+                                            @else
+                                                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                    Active
+                                                </span>
+                                            @endif
+                                        </td>
+
+                                        <!-- Action Buttons -->
+                                        <td class="py-4 text-right space-x-2">
+                                            @if ($remit->status !== 'verified')
+                                                <form method="POST" action="{{ route('admin.remittances.verify', $remit) }}" class="inline">
+                                                    @csrf
+                                                    <button type="submit" class="px-3.5 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition shadow-sm" title="Confirm remittance payment and unfreeze operator">
+                                                        Confirm Payment
+                                                    </button>
+                                                </form>
+                                            @endif
+
+                                            @if ($op)
+                                                <form method="POST" action="{{ route('admin.operators.toggle-freeze', $op) }}" class="inline">
+                                                    @csrf
+                                                    <button
+                                                        type="submit"
+                                                        class="px-3.5 py-1.5 rounded-full font-bold text-xs transition {{ $isFrozen ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-rose-100 hover:bg-rose-200 text-rose-700' }}"
+                                                        title="{{ $isFrozen ? 'Unfreeze operator account' : 'Freeze operator account' }}"
+                                                    >
+                                                        {{ $isFrozen ? 'Unfreeze' : 'Freeze' }}
+                                                    </button>
+                                                </form>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="8" class="py-8 text-center text-xs text-[#718EBF]">
+                                            No operator commission statements found for {{ \Carbon\Carbon::createFromFormat('Y-m', $selectedMonth)->format('F Y') }}.
+                                        </td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- ======================================================== -->
+            <!-- TAB 3: OPERATOR ACCREDITATION (BUSINESS PERMITS ONLY)    -->
+            <!-- ======================================================== -->
+            <div id="tab-moderation" class="tab-content hidden space-y-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="bankdash-title">Operator Business Accreditation</h2>
+                        <p class="text-xs text-[#718EBF] mt-0.5">Vetting commercial vehicle hosts (Mayor's Permits, DTI, SEC, BIR). Renter driver licenses are handled exclusively by operators.</p>
+                    </div>
+                    <span class="px-3 py-1 rounded-full text-xs font-bold bg-[#E7EDFF] text-[#2D60FF]">
+                        {{ $operators->count() }} Pending Application(s)
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    @forelse ($operators as $op)
+                        @php $prof = $op->operatorProfile; @endphp
+                        <div class="bankdash-card flex flex-col justify-between space-y-5">
+                            <div>
+                                <div class="flex items-start justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-12 h-12 rounded-full bg-[#F5F7FA] border border-[#DFEAF2] flex items-center justify-center font-bold text-[#343C6A] text-lg">
+                                            {{ strtoupper(substr($op->first_name, 0, 1)) }}
+                                        </div>
+                                        <div>
+                                            <h3 class="font-bold text-[#343C6A] text-base">{{ $prof?->business_name ?: $op->first_name.' '.$op->last_name }}</h3>
+                                            <p class="text-xs text-[#718EBF]">{{ $op->email }} &bull; {{ $op->mobile_number }}</p>
+                                        </div>
+                                    </div>
+                                    <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
+                                        Pending Review
+                                    </span>
                                 </div>
-                                <span class="rounded bg-[#F1F5F9] px-2 py-0.5 text-[10px] font-bold uppercase text-[#64748B]">
-                                    {{ strtoupper($disp->status) }}
-                                </span>
+
+                                <div class="mt-4 p-3 rounded-xl bg-[#F8FAFC] border border-[#DFEAF2] space-y-1.5 text-xs text-[#343C6A]">
+                                    <p><span class="text-[#718EBF]">Address:</span> {{ $prof ? ($prof->street_address.', '.$prof->barangay.', '.$prof->municipality) : 'N/A' }}</p>
+                                    <p><span class="text-[#718EBF]">Submitted:</span> {{ $op->created_at?->format('M d, Y h:i A') }}</p>
+                                    @if ($prof?->rejection_reason)
+                                        <p class="text-rose-600"><span class="font-bold">Prior Rejection:</span> {{ $prof->rejection_reason }}</p>
+                                    @endif
+                                </div>
+
+                                <!-- Document Photos -->
+                                <div class="mt-4 grid grid-cols-2 gap-3">
+                                    @if ($prof?->business_permit_front)
+                                        <a href="{{ asset('storage/'.$prof->business_permit_front) }}" target="_blank" class="block rounded-xl overflow-hidden border border-[#DFEAF2] group relative">
+                                            <img src="{{ asset('storage/'.$prof->business_permit_front) }}" class="w-full h-28 object-cover group-hover:scale-105 transition" alt="Business Permit" />
+                                            <span class="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded backdrop-blur-sm">Permit Front</span>
+                                        </a>
+                                    @endif
+                                    @if ($prof?->business_permit_back)
+                                        <a href="{{ asset('storage/'.$prof->business_permit_back) }}" target="_blank" class="block rounded-xl overflow-hidden border border-[#DFEAF2] group relative">
+                                            <img src="{{ asset('storage/'.$prof->business_permit_back) }}" class="w-full h-28 object-cover group-hover:scale-105 transition" alt="Permit Back" />
+                                            <span class="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded backdrop-blur-sm">Permit Back</span>
+                                        </a>
+                                    @endif
+                                </div>
                             </div>
 
-                            <div class="mt-3 grid grid-cols-4 gap-2 text-xs">
-                                <div class="rounded-lg bg-[#FAFBFD] p-2">
-                                    <span class="text-[#64748B] text-[10px]">Damage:</span>
-                                    <p class="font-bold text-red-600">₱{{ number_format($disp->damage_charge ?: 0, 2) }}</p>
-                                </div>
-                                <div class="rounded-lg bg-[#FAFBFD] p-2">
-                                    <span class="text-[#64748B] text-[10px]">Fuel:</span>
-                                    <p class="font-bold text-amber-600">₱{{ number_format($disp->fuel_charge ?: 0, 2) }}</p>
-                                </div>
-                                <div class="rounded-lg bg-[#FAFBFD] p-2">
-                                    <span class="text-[#64748B] text-[10px]">Late Fee:</span>
-                                    <p class="font-bold text-amber-600">₱{{ number_format($disp->late_fee ?: 0, 2) }}</p>
-                                </div>
-                                <div class="rounded-lg bg-[#FAFBFD] p-2">
-                                    <span class="text-[#64748B] text-[10px]">Total Surcharges:</span>
-                                    <p class="font-bold text-[#0F172A]">₱{{ number_format(($disp->damage_charge + $disp->fuel_charge + $disp->late_fee + $disp->other_charges), 2) }}</p>
-                                </div>
-                            </div>
-
-                            <div class="mt-3 pt-2.5 border-t border-[#F1F5F9] flex items-center justify-between">
-                                <div class="text-[11px] text-[#64748B] truncate max-w-lg">
-                                    <span class="font-bold text-[#0F172A]">Memo:</span> {{ $disp->admin_memo ?: 'No memo recorded.' }}
-                                </div>
-                                <button onclick="openDisputeMemoModal({{ $disp->id }}, '{{ addslashes($disp->admin_memo ?: '') }}')" class="rounded-lg bg-[#0F172A] text-white px-3 py-1.5 text-[11px] font-bold cursor-pointer">
-                                    Log Memo
+                            <!-- Decision Actions -->
+                            <div class="flex items-center gap-3 pt-4 border-t border-[#F3F4F6]">
+                                <form method="POST" action="{{ route('admin.operators.approve', $op) }}" class="flex-1">
+                                    @csrf
+                                    <button type="submit" class="w-full py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition shadow-sm">
+                                        Accredit Operator
+                                    </button>
+                                </form>
+                                <button
+                                    type="button"
+                                    onclick="openRejectModal('{{ $op->id }}', '{{ $prof?->business_name ?: $op->first_name }}')"
+                                    class="flex-1 py-2.5 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200 transition"
+                                >
+                                    Reject Application
                                 </button>
                             </div>
                         </div>
                     @empty
-                        <div class="rounded-xl border border-dashed border-[#CBD5E1] bg-white p-6 text-center text-xs text-[#64748B]">
-                            ✓ No disputed bookings or surcharge incidents recorded.
+                        <div class="col-span-2 bankdash-card text-center py-12 text-[#718EBF] text-sm">
+                            <svg class="w-12 h-12 mx-auto text-[#718EBF]/40 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            All operator applications have been reviewed. Moderation queue is clear!
                         </div>
                     @endforelse
                 </div>
             </div>
 
             <!-- ======================================================== -->
-            <!-- SECTION 6: PLATFORM SETTINGS                            -->
+            <!-- TAB 4: MEMBERS DIRECTORY                                 -->
             <!-- ======================================================== -->
-            <div id="section-settings" class="hidden space-y-4">
-                <div class="border-b border-[#E2E8F0] pb-3">
-                    <h2 class="text-sm font-bold uppercase tracking-wider text-[#0F172A]">Platform Governance & Operational Controls</h2>
-                    <p class="text-xs text-[#64748B]">Configure platform-wide policies, verification strictness, emergency contacts, and fee structures.</p>
+            <div id="tab-users" class="tab-content hidden space-y-6">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="bankdash-title">Platform Members Directory</h2>
+                        <p class="text-xs text-[#718EBF] mt-0.5">Manage renters and commercial operators across Ride4Rent</p>
+                    </div>
+
+                    <!-- Filter Form -->
+                    <form method="GET" action="{{ route('admin.dashboard') }}" class="flex items-center gap-3">
+                        <input type="hidden" name="tab" value="users" />
+                        <input
+                            type="text"
+                            name="search"
+                            value="{{ request('search') }}"
+                            placeholder="Search name, email, mobile..."
+                            class="px-4 py-2 rounded-full bg-white border border-[#DFEAF2] text-xs font-semibold text-[#343C6A] outline-none focus:border-[#2D60FF]"
+                        />
+                        <select name="role" onchange="this.form.submit()" class="px-4 py-2 rounded-full bg-white border border-[#DFEAF2] text-xs font-semibold text-[#343C6A] outline-none">
+                            <option value="all" {{ request('role') === 'all' ? 'selected' : '' }}>All Roles</option>
+                            <option value="operator" {{ request('role') === 'operator' ? 'selected' : '' }}>Operators</option>
+                            <option value="renter" {{ request('role') === 'renter' ? 'selected' : '' }}>Renters</option>
+                        </select>
+                    </form>
                 </div>
 
-                <form method="POST" action="{{ route('admin.settings.update') }}" class="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-xs space-y-4 text-xs">
-                    @csrf
-                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <div class="rounded-xl border border-[#E2E8F0] bg-[#FAFBFD] p-3.5 flex items-center justify-between">
-                            <div>
-                                <p class="font-bold text-[#0F172A]">Strict KYC Enforcement</p>
-                                <p class="text-[10.5px] text-[#64748B]">Require approved license before placing booking</p>
+                <div class="bankdash-card overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead>
+                            <tr class="text-[#718EBF] uppercase tracking-wider text-[10px] border-b border-[#F3F4F6]">
+                                <th class="pb-3 font-bold">Member</th>
+                                <th class="pb-3 font-bold">Role</th>
+                                <th class="pb-3 font-bold">Contact</th>
+                                <th class="pb-3 font-bold">Account Status</th>
+                                <th class="pb-3 font-bold">Registered</th>
+                                <th class="pb-3 font-bold text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-[#F3F4F6]">
+                            @forelse ($allUsers as $u)
+                                <tr class="hover:bg-[#F8FAFC] transition">
+                                    <td class="py-4">
+                                        <div class="flex items-center gap-3">
+                                            <div class="w-9 h-9 rounded-full bg-[#E7EDFF] text-[#2D60FF] flex items-center justify-center font-bold text-xs flex-shrink-0">
+                                                {{ strtoupper(substr($u->first_name, 0, 1)) }}
+                                            </div>
+                                            <div>
+                                                <p class="font-bold text-[#343C6A] text-sm">{{ $u->first_name }} {{ $u->last_name }}</p>
+                                                <p class="text-[11px] text-[#718EBF]">{{ $u->email }}</p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="py-4">
+                                        <span class="px-2.5 py-1 rounded-full text-xs font-bold {{ $u->role === 'operator' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800' }}">
+                                            {{ ucfirst($u->role) }}
+                                        </span>
+                                    </td>
+                                    <td class="py-4 text-[#343C6A]">
+                                        {{ $u->mobile_number ?: 'N/A' }}
+                                    </td>
+                                    <td class="py-4">
+                                        @if ($u->account_status === 'active')
+                                            <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">Active</span>
+                                        @elseif ($u->account_status === 'suspended')
+                                            <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800">Suspended / Frozen</span>
+                                        @else
+                                            <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">{{ ucfirst($u->account_status) }}</span>
+                                        @endif
+                                    </td>
+                                    <td class="py-4 text-[#718EBF]">
+                                        {{ $u->created_at?->format('M d, Y') }}
+                                    </td>
+                                    <td class="py-4 text-right">
+                                        <form method="POST" action="{{ route('admin.users.toggle-status', $u) }}" class="inline">
+                                            @csrf
+                                            <button type="submit" class="px-3 py-1.5 rounded-full text-xs font-bold transition {{ $u->account_status === 'active' ? 'bg-rose-50 text-rose-700 hover:bg-rose-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' }}">
+                                                {{ $u->account_status === 'active' ? 'Freeze / Suspend' : 'Activate' }}
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="6" class="py-8 text-center text-xs text-[#718EBF]">No members matched your search.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ======================================================== -->
+            <!-- TAB 5: DISPUTES & CLAIMS                                 -->
+            <!-- ======================================================== -->
+            <div id="tab-disputes" class="tab-content hidden space-y-6">
+                <div>
+                    <h2 class="bankdash-title">Disputes & Incident Escalations</h2>
+                    <p class="text-xs text-[#718EBF] mt-0.5">Track booking cancellations, damage/fuel surcharges, and log executive arbitration memos</p>
+                </div>
+
+                <div class="space-y-4">
+                    @forelse ($disputes as $disp)
+                        <div class="bankdash-card">
+                            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#F3F4F6] pb-4">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-bold text-[#343C6A] text-base">Booking #{{ $disp->id }}</span>
+                                        <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800">{{ strtoupper($disp->status) }}</span>
+                                    </div>
+                                    <p class="text-xs text-[#718EBF] mt-0.5">
+                                        Vehicle: <span class="font-semibold text-[#343C6A]">{{ $disp->vehicle?->name }}</span> &bull;
+                                        Renter: <span class="font-semibold text-[#343C6A]">{{ $disp->renter?->first_name }} {{ $disp->renter?->last_name }}</span> &bull;
+                                        Operator: <span class="font-semibold text-[#343C6A]">{{ $disp->operator?->first_name }} {{ $disp->operator?->last_name }}</span>
+                                    </p>
+                                </div>
+                                <div class="text-right">
+                                    <span class="text-xs text-[#718EBF]">Total Amount</span>
+                                    <p class="text-lg font-bold text-[#343C6A]">₱{{ number_format((float) $disp->total_price, 2) }}</p>
+                                </div>
                             </div>
-                            <select name="require_kyc_for_booking" class="rounded-lg border border-[#CBD5E1] bg-white px-2.5 py-1 text-xs font-bold text-[#0F172A]">
-                                <option value="1" {{ $platformSettings['require_kyc_for_booking'] == '1' ? 'selected' : '' }}>Enforced</option>
-                                <option value="0" {{ $platformSettings['require_kyc_for_booking'] == '0' ? 'selected' : '' }}>Flexible</option>
-                            </select>
-                        </div>
 
-                        <div class="rounded-xl border border-[#E2E8F0] bg-[#FAFBFD] p-3.5 flex items-center justify-between">
-                            <div>
-                                <p class="font-bold text-[#0F172A]">System Maintenance Mode</p>
-                                <p class="text-[10.5px] text-[#64748B]">Display operational alert banner on clients</p>
+                            <div class="py-4 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+                                <div>
+                                    <span class="text-[#718EBF]">Fuel Surcharge</span>
+                                    <p class="font-bold text-[#343C6A]">₱{{ number_format((float) $disp->fuel_charge, 2) }}</p>
+                                </div>
+                                <div>
+                                    <span class="text-[#718EBF]">Damage Charge</span>
+                                    <p class="font-bold text-[#343C6A]">₱{{ number_format((float) $disp->damage_charge, 2) }}</p>
+                                </div>
+                                <div>
+                                    <span class="text-[#718EBF]">Late Fee</span>
+                                    <p class="font-bold text-[#343C6A]">₱{{ number_format((float) $disp->late_fee, 2) }}</p>
+                                </div>
+                                <div>
+                                    <span class="text-[#718EBF]">Resolution Memo</span>
+                                    <p class="font-bold {{ $disp->admin_memo ? 'text-emerald-700' : 'text-amber-700' }}">
+                                        {{ $disp->admin_memo ? 'Logged' : 'Pending Memo' }}
+                                    </p>
+                                </div>
                             </div>
-                            <select name="maintenance_mode" class="rounded-lg border border-[#CBD5E1] bg-white px-2.5 py-1 text-xs font-bold text-[#0F172A]">
-                                <option value="0" {{ $platformSettings['maintenance_mode'] == '0' ? 'selected' : '' }}>Live (Normal)</option>
-                                <option value="1" {{ $platformSettings['maintenance_mode'] == '1' ? 'selected' : '' }}>Maintenance Alert</option>
-                            </select>
-                        </div>
 
-                        <div>
-                            <label class="block font-bold text-[#0F172A] mb-1" for="support_phone">Platform Emergency Hotline</label>
-                            <input class="w-full rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] px-3 py-2 text-xs text-[#0F172A] outline-none focus:border-[#FEC103]" type="text" id="support_phone" name="support_phone" value="{{ $platformSettings['support_phone'] }}" required>
+                            <form method="POST" action="{{ route('admin.disputes.memo', $disp) }}" class="flex items-center gap-3 pt-3 border-t border-[#F3F4F6]">
+                                @csrf
+                                <input
+                                    type="text"
+                                    name="admin_memo"
+                                    value="{{ $disp->admin_memo }}"
+                                    placeholder="Add executive arbitration or resolution note..."
+                                    class="flex-1 px-4 py-2.5 rounded-full bg-[#F5F7FA] border border-[#DFEAF2] text-xs text-[#343C6A] outline-none focus:border-[#2D60FF]"
+                                />
+                                <button type="submit" class="px-5 py-2.5 rounded-full bg-[#2D60FF] hover:bg-blue-700 text-white font-bold text-xs transition shadow-sm">
+                                    Save Memo
+                                </button>
+                            </form>
                         </div>
-
-                        <div>
-                            <label class="block font-bold text-[#0F172A] mb-1" for="support_email">Official Compliance Support Email</label>
-                            <input class="w-full rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] px-3 py-2 text-xs text-[#0F172A] outline-none focus:border-[#FEC103]" type="email" id="support_email" name="support_email" value="{{ $platformSettings['support_email'] }}" required>
+                    @empty
+                        <div class="bankdash-card text-center py-10 text-xs text-[#718EBF]">
+                            No disputes or incident escalations logged.
                         </div>
-
-                        <div>
-                            <label class="block font-bold text-[#0F172A] mb-1" for="max_advance_days">Max Advance Reservation Window (Days)</label>
-                            <input class="w-full rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] px-3 py-2 text-xs text-[#0F172A] outline-none focus:border-[#FEC103]" type="number" id="max_advance_days" name="max_advance_days" value="{{ $platformSettings['max_advance_days'] }}" required>
-                        </div>
-
-                        <div>
-                            <label class="block font-bold text-[#0F172A] mb-1" for="platform_fee_percent">Platform Service Fee Rate (%)</label>
-                            <input class="w-full rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] px-3 py-2 text-xs text-[#0F172A] outline-none focus:border-[#FEC103]" type="number" step="0.5" id="platform_fee_percent" name="platform_fee_percent" value="{{ $platformSettings['platform_fee_percent'] }}" required>
-                        </div>
-                    </div>
-
-                    <div class="pt-3 border-t border-[#F1F5F9] flex justify-end">
-                        <button type="submit" class="rounded-xl bg-[#FEC103] hover:bg-[#EAB308] px-5 py-2.5 text-xs font-bold text-[#1A1A1A] shadow-xs cursor-pointer">
-                            Save Operational Controls
-                        </button>
-                    </div>
-                </form>
+                    @endforelse
+                </div>
             </div>
 
             <!-- ======================================================== -->
-            <!-- SECTION 7: COMPLIANCE EXPORTS                           -->
+            <!-- TAB 6: REVIEW MODERATION                                 -->
             <!-- ======================================================== -->
-            <div id="section-exports" class="hidden space-y-4">
-                <div class="border-b border-[#E2E8F0] pb-3">
-                    <h2 class="text-sm font-bold uppercase tracking-wider text-[#0F172A]">Regulatory Compliance & Data Exports Hub</h2>
-                    <p class="text-xs text-[#64748B]">Generate formal data spreadsheets formatted for government agencies (LTO, LGUs, DTI) and platform audits.</p>
+            <div id="tab-reviews" class="tab-content hidden space-y-6">
+                <div>
+                    <h2 class="bankdash-title">Review & Community Guidelines Moderation</h2>
+                    <p class="text-xs text-[#718EBF] mt-0.5">Audit customer ratings and reviews to protect marketplace integrity</p>
                 </div>
 
-                <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    <div class="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-xs flex flex-col justify-between">
-                        <div>
-                            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FFF6DA] text-[#92400E]">
-                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2"/></svg>
+                <div class="bankdash-card space-y-4">
+                    @forelse ($reviews as $rev)
+                        <div class="flex items-start justify-between p-4 rounded-2xl bg-[#F8FAFC] border border-[#DFEAF2]">
+                            <div class="space-y-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold text-[#343C6A] text-sm">{{ $rev->renter?->first_name }} {{ $rev->renter?->last_name }}</span>
+                                    <span class="text-xs text-amber-500 font-bold">&#9733; {{ $rev->rating }}/5</span>
+                                    <span class="text-xs text-[#718EBF]">&bull; {{ $rev->vehicle?->name }}</span>
+                                </div>
+                                <p class="text-xs text-[#343C6A] {{ $rev->is_review_hidden ? 'line-through text-slate-400' : '' }}">
+                                    "{{ $rev->review ?: 'No written comment.' }}"
+                                </p>
                             </div>
-                            <h3 class="font-bold text-sm text-[#0F172A] mt-2">Renter KYC Audit Registry</h3>
-                            <p class="text-[11px] text-[#64748B] mt-1">Spreadsheet of verified and unverified renters with government ID records.</p>
+                            <form method="POST" action="{{ route('admin.reviews.toggle-visibility', $rev) }}">
+                                @csrf
+                                <button type="submit" class="px-3 py-1.5 rounded-full font-bold text-xs transition {{ $rev->is_review_hidden ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800' }}">
+                                    {{ $rev->is_review_hidden ? 'Restore' : 'Hide Review' }}
+                                </button>
+                            </form>
                         </div>
-                        <a href="{{ route('admin.exports.renters-kyc') }}" class="mt-4 inline-flex items-center justify-center rounded-xl bg-[#0F172A] text-white py-2 text-xs font-bold hover:bg-[#1E293B]">
-                            Download CSV ↓
-                        </a>
-                    </div>
-
-                    <div class="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-xs flex flex-col justify-between">
-                        <div>
-                            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FFF6DA] text-[#92400E]">
-                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
-                            </div>
-                            <h3 class="font-bold text-sm text-[#0F172A] mt-2">Fleet Operator Registry</h3>
-                            <p class="text-[11px] text-[#64748B] mt-1">Directory of commercial host businesses, municipal addresses, and permits.</p>
-                        </div>
-                        <a href="{{ route('admin.exports.operators') }}" class="mt-4 inline-flex items-center justify-center rounded-xl bg-[#0F172A] text-white py-2 text-xs font-bold hover:bg-[#1E293B]">
-                            Download CSV ↓
-                        </a>
-                    </div>
-
-                    <div class="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-xs flex flex-col justify-between">
-                        <div>
-                            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FFF6DA] text-[#92400E]">
-                                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
-                            </div>
-                            <h3 class="font-bold text-sm text-[#0F172A] mt-2">Administrative Audit Trail</h3>
-                            <p class="text-[11px] text-[#64748B] mt-1">Chronological history of admin approvals, suspensions, and notices.</p>
-                        </div>
-                        <a href="{{ route('admin.exports.audit-logs') }}" class="mt-4 inline-flex items-center justify-center rounded-xl bg-[#0F172A] text-white py-2 text-xs font-bold hover:bg-[#1E293B]">
-                            Download CSV ↓
-                        </a>
-                    </div>
+                    @empty
+                        <p class="text-xs text-[#718EBF] py-6 text-center">No customer reviews submitted yet.</p>
+                    @endforelse
                 </div>
             </div>
+
+            <!-- ======================================================== -->
+            <!-- TAB 7: AUDIT TRAIL                                       -->
+            <!-- ======================================================== -->
+            <div id="tab-audit" class="tab-content hidden space-y-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="bankdash-title">Platform Audit Trail</h2>
+                        <p class="text-xs text-[#718EBF] mt-0.5">Tamper-evident logs of executive admin actions and automated events</p>
+                    </div>
+                    <a href="{{ route('admin.exports.audit-logs') }}" class="px-5 py-2.5 rounded-full bg-white border border-[#DFEAF2] hover:border-[#2D60FF] text-[#2D60FF] font-bold text-xs transition shadow-sm flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        <span>Export CSV</span>
+                    </a>
+                </div>
+
+                <div class="bankdash-card overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead>
+                            <tr class="text-[#718EBF] uppercase tracking-wider text-[10px] border-b border-[#F3F4F6]">
+                                <th class="pb-3 font-bold">Timestamp</th>
+                                <th class="pb-3 font-bold">Admin / System</th>
+                                <th class="pb-3 font-bold">Action</th>
+                                <th class="pb-3 font-bold">Details</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-[#F3F4F6]">
+                            @forelse ($auditLogs as $log)
+                                <tr class="hover:bg-[#F8FAFC] transition">
+                                    <td class="py-3.5 text-[#718EBF] font-mono text-[11px] whitespace-nowrap">
+                                        {{ $log->created_at?->format('Y-m-d H:i:s') }}
+                                    </td>
+                                    <td class="py-3.5 font-bold text-[#343C6A]">
+                                        {{ $log->admin_name ?: 'Automated System' }}
+                                    </td>
+                                    <td class="py-3.5">
+                                        <span class="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-[#F5F7FA] text-[#2D60FF]">
+                                            {{ $log->action }}
+                                        </span>
+                                    </td>
+                                    <td class="py-3.5 text-[#343C6A] max-w-md">
+                                        {{ $log->details }}
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="4" class="py-6 text-center text-xs text-[#718EBF]">No audit logs recorded yet.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ======================================================== -->
+            <!-- TAB 8: OPERATIONAL SETTINGS                              -->
+            <!-- ======================================================== -->
+            <div id="tab-settings" class="tab-content hidden space-y-6">
+                <div>
+                    <h2 class="bankdash-title">System & Governance Settings</h2>
+                    <p class="text-xs text-[#718EBF] mt-0.5">Control platform commission rates, booking rules, and administrative emergency toggles</p>
+                </div>
+
+                <div class="bankdash-card max-w-2xl">
+                    <form method="POST" action="{{ route('admin.settings.update') }}" class="space-y-5 text-xs">
+                        @csrf
+                        <div>
+                            <label class="block font-bold text-[#343C6A] mb-1.5">Platform Commission Rate (%)</label>
+                            <input
+                                type="number"
+                                step="0.5"
+                                name="platform_fee_percent"
+                                value="{{ $platformSettings['platform_fee_percent'] }}"
+                                class="w-full px-4 py-2.5 rounded-xl bg-[#F5F7FA] border border-[#DFEAF2] text-[#343C6A] font-bold outline-none focus:border-[#2D60FF]"
+                            />
+                            <p class="text-[11px] text-[#718EBF] mt-1">Default is 10% calculated automatically on completed bookings.</p>
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-[#343C6A] mb-1.5">Emergency Maintenance Mode</label>
+                            <select name="maintenance_mode" class="w-full px-4 py-2.5 rounded-xl bg-[#F5F7FA] border border-[#DFEAF2] text-[#343C6A] font-bold outline-none focus:border-[#2D60FF]">
+                                <option value="0" {{ $platformSettings['maintenance_mode'] == '0' ? 'selected' : '' }}>Disabled (Platform Operating Normally)</option>
+                                <option value="1" {{ $platformSettings['maintenance_mode'] == '1' ? 'selected' : '' }}>Enabled (Hold New Reservations)</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-[#343C6A] mb-1.5">Support Phone Helpline</label>
+                            <input
+                                type="text"
+                                name="support_phone"
+                                value="{{ $platformSettings['support_phone'] }}"
+                                class="w-full px-4 py-2.5 rounded-xl bg-[#F5F7FA] border border-[#DFEAF2] text-[#343C6A] font-bold outline-none focus:border-[#2D60FF]"
+                            />
+                        </div>
+
+                        <div>
+                            <label class="block font-bold text-[#343C6A] mb-1.5">Official Support Email</label>
+                            <input
+                                type="email"
+                                name="support_email"
+                                value="{{ $platformSettings['support_email'] }}"
+                                class="w-full px-4 py-2.5 rounded-xl bg-[#F5F7FA] border border-[#DFEAF2] text-[#343C6A] font-bold outline-none focus:border-[#2D60FF]"
+                            />
+                        </div>
+
+                        <input type="hidden" name="require_kyc_for_booking" value="1" />
+                        <input type="hidden" name="max_advance_days" value="30" />
+
+                        <div class="pt-4 border-t border-[#F3F4F6]">
+                            <button type="submit" class="px-6 py-3 rounded-full bg-[#2D60FF] hover:bg-blue-700 text-white font-bold text-xs transition shadow-md shadow-blue-500/20">
+                                Save Settings
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
         </main>
     </div>
 
     <!-- ======================================================== -->
-    <!-- MODALS                                                   -->
+    <!-- MODAL: PROOF OF REMITTANCE PREVIEW & VERIFICATION        -->
     <!-- ======================================================== -->
-    
-    <!-- Modal 1: Status Modal -->
-    <div id="status-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/75 p-4 backdrop-blur-xs">
-        <div class="relative w-full max-w-md overflow-hidden rounded-2xl bg-white p-6 shadow-2xl border border-[#E2E8F0]">
-            <div class="flex items-center justify-between border-b border-[#F1F5F9] pb-3">
-                <h3 class="text-sm font-bold text-[#0F172A]">Manage Member Account Status</h3>
-                <button onclick="closeStatusModal()" class="text-[#94A3B8] hover:text-[#0F172A]">✕</button>
+    <div id="proof-modal" class="fixed inset-0 z-50 hidden bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bankdash-card max-w-lg w-full max-h-[90vh] overflow-y-auto space-y-5">
+            <div class="flex items-center justify-between border-b border-[#F3F4F6] pb-3">
+                <div>
+                    <h3 class="text-lg font-bold text-[#343C6A]">Remittance Verification</h3>
+                    <p id="proof-modal-subtitle" class="text-xs text-[#718EBF]">Operator commission payment receipt</p>
+                </div>
+                <button onclick="closeProofModal()" class="text-[#718EBF] hover:text-[#343C6A] text-xl font-bold">&times;</button>
             </div>
-            <form id="status-form" method="POST" action="" class="mt-4 space-y-3.5 text-xs">
+
+            <div class="space-y-4">
+                <!-- Receipt Image Preview -->
+                <div class="rounded-2xl overflow-hidden border border-[#DFEAF2] bg-[#F5F7FA] max-h-80 flex items-center justify-center">
+                    <img id="proof-modal-img" src="" class="w-full h-auto object-contain max-h-80" alt="Receipt Proof" />
+                </div>
+
+                <!-- Payment Details Card -->
+                <div class="p-4 rounded-2xl bg-[#F8FAFC] border border-[#DFEAF2] space-y-2 text-xs">
+                    <div class="flex justify-between">
+                        <span class="text-[#718EBF]">Amount Due (10%):</span>
+                        <span id="proof-modal-amount" class="font-bold text-[#2D60FF] text-sm">₱0.00</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-[#718EBF]">Payment Method:</span>
+                        <span id="proof-modal-method" class="font-bold text-[#343C6A] uppercase">GCash</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-[#718EBF]">Reference / Txn #:</span>
+                        <span id="proof-modal-ref" class="font-mono font-bold text-[#343C6A]">REF-123456</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-[#718EBF]">Billing Month:</span>
+                        <span id="proof-modal-month" class="font-bold text-[#343C6A]">2026-10</span>
+                    </div>
+                </div>
+
+                <!-- Verification Form -->
+                <form id="proof-modal-form" method="POST" action="" class="space-y-3">
+                    @csrf
+                    <div>
+                        <label class="block text-xs font-bold text-[#343C6A] mb-1">Admin Verification Notes (Optional)</label>
+                        <input type="text" name="admin_notes" placeholder="e.g. Verified against official GCash business wallet" class="w-full px-4 py-2 rounded-xl bg-[#F5F7FA] border border-[#DFEAF2] text-xs outline-none focus:border-[#2D60FF]" />
+                    </div>
+                    <div class="flex items-center gap-3 pt-2">
+                        <button type="submit" class="flex-1 py-3 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition shadow-md shadow-emerald-500/20">
+                            Confirm Payment & Unfreeze Operator
+                        </button>
+                    </div>
+                </form>
+
+                <!-- Rejection Trigger -->
+                <form id="proof-reject-form" method="POST" action="" class="border-t border-[#F3F4F6] pt-3">
+                    @csrf
+                    <input type="hidden" name="rejection_reason" value="Payment receipt reference is unclear or transaction could not be located in bank ledger." />
+                    <button type="submit" class="w-full py-2.5 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200 transition">
+                        Reject Remittance Proof
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- MODAL: REJECT OPERATOR APPLICATION                        -->
+    <!-- ======================================================== -->
+    <div id="reject-modal" class="fixed inset-0 z-50 hidden bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bankdash-card max-w-md w-full space-y-4">
+            <div class="flex items-center justify-between border-b border-[#F3F4F6] pb-3">
+                <h3 class="text-base font-bold text-[#343C6A]">Reject Application</h3>
+                <button onclick="closeRejectModal()" class="text-[#718EBF] hover:text-[#343C6A] text-xl font-bold">&times;</button>
+            </div>
+            <form id="reject-form" method="POST" action="" class="space-y-4 text-xs">
                 @csrf
-                @method('PUT')
-                <div class="rounded-lg bg-[#F8FAFC] border border-[#E2E8F0] p-3">
-                    <p id="status-target-name" class="font-bold text-[#0F172A]"></p>
-                    <p id="status-target-email" class="text-[11px] text-[#64748B]"></p>
-                </div>
                 <div>
-                    <label class="block font-bold text-[#0F172A] mb-1" for="account_status_select">Account Status</label>
-                    <select class="w-full rounded-xl border border-[#CBD5E1] bg-white p-2.5 outline-none" id="account_status_select" name="account_status" required>
-                        <option value="active">Active (Normal Access)</option>
-                        <option value="suspended">Suspended (Access Restricted)</option>
-                        <option value="pending">Pending Review</option>
-                    </select>
+                    <label class="block font-bold text-[#343C6A] mb-1.5">Specify Reason for Rejection</label>
+                    <textarea
+                        name="rejection_reason"
+                        rows="3"
+                        required
+                        placeholder="e.g. Expired Mayor's permit, blurred DTI certificate..."
+                        class="w-full px-4 py-2.5 rounded-xl bg-[#F5F7FA] border border-[#DFEAF2] text-[#343C6A] outline-none focus:border-[#2D60FF]"
+                    ></textarea>
                 </div>
-                <div>
-                    <label class="block font-bold text-[#0F172A] mb-1" for="status_reason">Reason for Status Change</label>
-                    <textarea class="w-full rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] p-2.5 outline-none" id="status_reason" name="status_reason" placeholder="Optional explanation sent to user"></textarea>
-                </div>
-                <div class="pt-2 flex justify-end gap-2">
-                    <button type="button" onclick="closeStatusModal()" class="rounded-xl border border-[#E2E8F0] px-3.5 py-2 font-semibold text-[#64748B]">Cancel</button>
-                    <button type="submit" class="rounded-xl bg-[#FEC103] hover:bg-[#EAB308] px-4 py-2 font-bold text-[#1A1A1A]">Update Status</button>
+                <div class="flex items-center justify-end gap-3 pt-2">
+                    <button type="button" onclick="closeRejectModal()" class="px-4 py-2 rounded-full text-[#718EBF] hover:bg-[#F5F7FA]">Cancel</button>
+                    <button type="submit" class="px-5 py-2.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-bold transition">Confirm Rejection</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Modal 2: Profile View Modal -->
-    <div id="profile-view-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/75 p-4 backdrop-blur-xs">
-        <div class="relative w-full max-w-md overflow-hidden rounded-2xl bg-white p-6 shadow-2xl border border-[#E2E8F0] text-xs">
-            <div class="flex items-center justify-between border-b border-[#F1F5F9] pb-3">
-                <h3 class="text-sm font-bold text-[#0F172A]">Member Profile & KYC Record</h3>
-                <button onclick="closeProfileViewModal()" class="text-[#94A3B8] hover:text-[#0F172A]">✕</button>
-            </div>
-            <div class="mt-4 space-y-2.5">
-                <div class="rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] p-3 flex items-center gap-3">
-                    <div id="view-avatar-badge" class="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0F172A] text-white font-bold text-sm">U</div>
-                    <div>
-                        <p id="view-user-name" class="font-bold text-sm text-[#0F172A]"></p>
-                        <p id="view-user-role" class="text-[#64748B] text-[11px]"></p>
-                    </div>
-                </div>
-                <dl class="space-y-2">
-                    <div class="flex justify-between border-b border-[#F1F5F9] pb-1.5">
-                        <dt class="text-[#64748B]">Email:</dt>
-                        <dd id="view-user-email" class="font-bold text-[#0F172A]"></dd>
-                    </div>
-                    <div class="flex justify-between border-b border-[#F1F5F9] pb-1.5">
-                        <dt class="text-[#64748B]">Mobile:</dt>
-                        <dd id="view-user-phone" class="font-bold text-[#0F172A]"></dd>
-                    </div>
-                    <div class="flex justify-between border-b border-[#F1F5F9] pb-1.5">
-                        <dt class="text-[#64748B]">Birthdate:</dt>
-                        <dd id="view-user-dob" class="font-bold text-[#0F172A]"></dd>
-                    </div>
-                    <div class="flex justify-between border-b border-[#F1F5F9] pb-1.5">
-                        <dt class="text-[#64748B]">Gender:</dt>
-                        <dd id="view-user-sex" class="font-bold text-[#0F172A]"></dd>
-                    </div>
-                    <div class="flex justify-between border-b border-[#F1F5F9] pb-1.5">
-                        <dt class="text-[#64748B]">Status:</dt>
-                        <dd id="view-user-status" class="font-bold"></dd>
-                    </div>
-                    <div class="flex justify-between border-b border-[#F1F5F9] pb-1.5">
-                        <dt class="text-[#64748B]">KYC License:</dt>
-                        <dd id="view-user-kyc" class="font-bold"></dd>
-                    </div>
-                </dl>
-                <div id="view-operator-block" class="hidden rounded-lg bg-[#FFF6DA] border border-[#FDE68A] p-2.5">
-                    <p class="font-bold text-[#92400E]">Commercial Host Credentials</p>
-                    <p class="text-[#64748B] mt-0.5">Name: <span id="view-biz-name" class="font-semibold text-[#0F172A]"></span></p>
-                    <p class="text-[#64748B]">Address: <span id="view-biz-address" class="font-medium text-[#0F172A]"></span></p>
-                </div>
-            </div>
-            <div class="mt-4 pt-3 border-t border-[#F1F5F9] flex justify-end">
-                <button type="button" onclick="closeProfileViewModal()" class="rounded-xl bg-[#F1F5F9] px-4 py-2 font-bold text-[#0F172A]">Close</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal 3: Broadcast Announcement -->
-    <div id="broadcast-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/75 p-4 backdrop-blur-xs">
-        <div class="relative w-full max-w-md overflow-hidden rounded-2xl bg-white p-6 shadow-2xl border border-[#E2E8F0] text-xs">
-            <div class="flex items-center justify-between border-b border-[#F1F5F9] pb-3">
-                <h3 class="text-sm font-bold text-[#0F172A]">Broadcast Platform Announcement</h3>
-                <button onclick="closeBroadcastModal()" class="text-[#94A3B8] hover:text-[#0F172A]">✕</button>
-            </div>
-            <form method="POST" action="{{ route('admin.announcements.broadcast') }}" class="mt-4 space-y-3.5">
-                @csrf
-                <div class="grid grid-cols-2 gap-2.5">
-                    <div>
-                        <label class="block font-bold text-[#0F172A] mb-1" for="target_audience">Target</label>
-                        <select class="w-full rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] p-2 outline-none" id="target_audience" name="target_audience" required>
-                            <option value="all">All Members</option>
-                            <option value="customer">Renters Only</option>
-                            <option value="operator">Hosts Only</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block font-bold text-[#0F172A] mb-1" for="announcement_type">Type</label>
-                        <select class="w-full rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] p-2 outline-none" id="announcement_type" name="type" required>
-                            <option value="info">Info</option>
-                            <option value="warning">Advisory</option>
-                            <option value="success">Milestone</option>
-                        </select>
-                    </div>
-                </div>
-                <div>
-                    <label class="block font-bold text-[#0F172A] mb-1" for="announcement_title">Title</label>
-                    <input class="w-full rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] p-2 outline-none" type="text" id="announcement_title" name="title" placeholder="Notice headline" required>
-                </div>
-                <div>
-                    <label class="block font-bold text-[#0F172A] mb-1" for="announcement_message">Message</label>
-                    <textarea class="w-full rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] p-2 outline-none min-h-20" id="announcement_message" name="message" placeholder="Message content" required></textarea>
-                </div>
-                <div class="pt-2 flex justify-end gap-2">
-                    <button type="button" onclick="closeBroadcastModal()" class="rounded-xl border border-[#E2E8F0] px-3.5 py-2 font-semibold text-[#64748B]">Cancel</button>
-                    <button type="submit" class="rounded-xl bg-[#FEC103] hover:bg-[#EAB308] px-4 py-2 font-bold text-[#1A1A1A]">Broadcast Notice</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Modal 4: Dispute Memo Modal -->
-    <div id="dispute-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/75 p-4 backdrop-blur-xs">
-        <div class="relative w-full max-w-md overflow-hidden rounded-2xl bg-white p-6 shadow-2xl border border-[#E2E8F0] text-xs">
-            <div class="flex items-center justify-between border-b border-[#F1F5F9] pb-3">
-                <h3 class="text-sm font-bold text-[#0F172A]">Log Official Dispute Resolution Memo</h3>
-                <button onclick="closeDisputeMemoModal()" class="text-[#94A3B8] hover:text-[#0F172A]">✕</button>
-            </div>
-            <form id="dispute-form" method="POST" action="" class="mt-4 space-y-3.5">
-                @csrf
-                <div>
-                    <label class="block font-bold text-[#0F172A] mb-1" for="admin_memo_input">Resolution Findings & Action</label>
-                    <textarea class="w-full rounded-xl border border-[#CBD5E1] bg-[#F8FAFC] p-2.5 outline-none min-h-20" id="admin_memo_input" name="admin_memo" placeholder="Document administrative resolution findings..." required></textarea>
-                </div>
-                <div class="pt-2 flex justify-end gap-2">
-                    <button type="button" onclick="closeDisputeMemoModal()" class="rounded-xl border border-[#E2E8F0] px-3.5 py-2 font-semibold text-[#64748B]">Cancel</button>
-                    <button type="submit" class="rounded-xl bg-[#0F172A] text-white px-4 py-2 font-bold">Save Memo</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Modal 5: Image Lightbox -->
-    <div id="image-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/85 p-4 backdrop-blur-sm" onclick="closeImageModal(event)">
-        <div class="relative max-h-[90vh] max-w-4xl overflow-hidden rounded-2xl bg-[#0F172A] p-4 text-white shadow-2xl border border-white/10" onclick="event.stopPropagation()">
-            <div class="mb-3 flex items-center justify-between border-b border-white/10 pb-3">
-                <h4 id="modal-title" class="text-xs font-bold text-white truncate max-w-md">Document Inspection</h4>
-                <div class="flex items-center gap-2">
-                    <a id="modal-open-link" href="#" target="_blank" rel="noreferrer" class="rounded-lg bg-white/10 px-2.5 py-1 text-xs font-semibold text-[#FEC103]">Open Tab</a>
-                    <button onclick="closeImageModal()" class="rounded-lg p-1 text-[#94A3B8] hover:text-white">✕</button>
-                </div>
-            </div>
-            <div class="flex items-center justify-center max-h-[75vh] overflow-auto">
-                <img id="modal-image" src="" alt="Preview" class="max-h-[75vh] w-auto rounded object-contain" />
-            </div>
-        </div>
-    </div>
-
-    <!-- JavaScript Handlers -->
+    <!-- ======================================================== -->
+    <!-- SCRIPTS (BankDash Tab Controller & Chart Initializers)    -->
+    <!-- ======================================================== -->
     <script>
-        const tabMeta = {
-            'moderation': { title: 'Moderation & Verification Queue', sub: "Driver's license reviews and commercial operator accreditation" },
-            'users': { title: 'Platform Member Directory', sub: 'Inspect renter and vehicle host accounts and govern access standing' },
-            'audit': { title: 'Administrative Action Audit Log', sub: 'Chronological immutable record of administrator actions and system decisions' },
-            'reviews': { title: 'Public Review Moderation Desk', sub: 'Monitor member vehicle ratings and enforce community decency guidelines' },
-            'disputes': { title: 'Trip Incident & Dispute Desk', sub: 'Examine cancelled bookings, damage surcharges, fuel claims, and log resolution memos' },
-            'settings': { title: 'Platform Operational Controls', sub: 'Configure global policies, KYC strictness, emergency contacts, and fee rates' },
-            'exports': { title: 'Regulatory Compliance Exports Hub', sub: 'Generate and download official CSV spreadsheets for government and audit reports' }
-        };
-
-        function switchTab(tabId) {
-            Object.keys(tabMeta).forEach(t => {
-                const btn = document.getElementById('nav-' + t);
-                const sec = document.getElementById('section-' + t);
-                if (btn && sec) {
-                    if (t === tabId) {
-                        btn.className = 'nav-item-active flex w-full items-center justify-between rounded-r-xl px-3 py-2.5 transition text-left cursor-pointer';
-                        sec.classList.remove('hidden');
-                    } else {
-                        btn.className = 'nav-item-inactive flex w-full items-center justify-between rounded-r-xl px-3 py-2.5 transition text-left cursor-pointer';
-                        sec.classList.add('hidden');
-                    }
-                }
-            });
-
-            if (tabMeta[tabId]) {
-                document.getElementById('topbar-section-title').textContent = tabMeta[tabId].title;
-                document.getElementById('topbar-section-sub').textContent = tabMeta[tabId].sub;
-            }
-
-            // Close mobile sidebar if open
-            const sidebar = document.getElementById('admin-sidebar');
-            const backdrop = document.getElementById('sidebar-backdrop');
-            if (!sidebar.classList.contains('-translate-x-full')) {
-                sidebar.classList.add('-translate-x-full');
-                backdrop.classList.add('hidden');
-            }
+        function closeSidebar() {
+            document.getElementById('admin-sidebar').classList.add('-translate-x-full');
+            document.getElementById('sidebar-overlay').classList.add('hidden');
+            document.getElementById('sidebar-toggle').setAttribute('aria-expanded', 'false');
         }
-
         function toggleSidebar() {
             const sidebar = document.getElementById('admin-sidebar');
-            const backdrop = document.getElementById('sidebar-backdrop');
-            sidebar.classList.toggle('-translate-x-full');
-            backdrop.classList.toggle('hidden');
+            const isOpen = !sidebar.classList.toggle('-translate-x-full');
+            document.getElementById('sidebar-overlay').classList.toggle('hidden', !isOpen);
+            document.getElementById('sidebar-toggle').setAttribute('aria-expanded', String(isOpen));
+        }
+        document.addEventListener('keydown', event => { if (event.key === 'Escape') { closeSidebar(); closeProofModal(); closeRejectModal(); } });
+
+        function switchTab(tabId) {
+            if (!document.getElementById('tab-' + tabId)) tabId = 'dashboard';
+            closeSidebar();
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+
+            // Show selected tab
+            const target = document.getElementById('tab-' + tabId);
+            if (target) {
+                target.classList.remove('hidden');
+            }
+
+            // Update top bar title
+            const titles = {
+                'dashboard': 'Overview',
+                'commissions': 'Commissions & Remittance',
+                'moderation': 'Operator Accreditation',
+                'users': 'Members Directory',
+                'disputes': 'Disputes & Incident Desk',
+                'reviews': 'Review Moderation',
+                'audit': 'Audit Trail',
+                'settings': 'Platform Settings'
+            };
+            document.getElementById('page-title').innerText = titles[tabId] || 'Overview';
+
+            // Update sidebar link styles
+            document.querySelectorAll('#admin-sidebar nav button').forEach(btn => {
+                btn.removeAttribute('aria-current');
+                btn.className = 'sidebar-link-inactive flex w-full items-center justify-between px-8 py-3.5 text-left cursor-pointer transition';
+            });
+            const activeNav = document.getElementById('nav-' + tabId);
+            if (activeNav) {
+                activeNav.setAttribute('aria-current', 'page');
+                activeNav.className = 'sidebar-link-active flex w-full items-center justify-between px-8 py-3.5 text-left cursor-pointer transition';
+            }
+
+            // Sync URL hash
+            history.replaceState(null, null, '#' + tabId);
         }
 
-        // Live User Search & Filter
-        let activeRole = 'all';
+        // Handle initial hash routing
+        window.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const tabParam = urlParams.get('tab');
+            const hash = window.location.hash.replace('#', '');
+            const initialTab = tabParam || hash || 'dashboard';
+            switchTab(initialTab);
 
-        function setRoleFilter(role) {
-            activeRole = role;
-            ['all', 'customer', 'operator'].forEach(r => {
-                const b = document.getElementById('role-' + r + '-btn');
-                if (b) {
-                    if (r === role) {
-                        b.className = 'rounded-lg bg-[#0F172A] text-white px-3 py-1.5 text-xs font-bold transition';
-                    } else {
-                        b.className = 'rounded-lg bg-white border border-[#E2E8F0] text-[#64748B] px-3 py-1.5 text-xs font-bold hover:bg-[#F8FAFC] transition';
+            initCharts();
+        });
+
+        // Initialize BankDash Charts with Chart.js
+        function initCharts() {
+            if (typeof Chart === 'undefined') return;
+            Chart.defaults.font.family = 'Plus Jakarta Sans';
+            Chart.defaults.color = '#66757C';
+            // 1. Weekly Activity Dual Bar Chart
+            const weeklyCtx = document.getElementById('weeklyActivityChart')?.getContext('2d');
+            if (weeklyCtx) {
+                const activityData = @json($weeklyActivity);
+                new Chart(weeklyCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: activityData.map(d => d.day_label),
+                        datasets: [
+                            {
+                                label: '10% Commission (₱)',
+                                yAxisID: 'y',
+                                data: activityData.map(d => d.commission),
+                                backgroundColor: '#E4B744',
+                                borderRadius: 12,
+                                barThickness: 14,
+                            },
+                            {
+                                label: 'Completed Trips',
+                                data: activityData.map(d => d.trips),
+                                yAxisID: 'trips',
+                                backgroundColor: '#2C6250',
+                                borderRadius: 12,
+                                barThickness: 14,
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        if (context.datasetIndex === 0) {
+                                            return ' Commission: ₱' + context.parsed.y.toLocaleString();
+                                        } else {
+                                            return ' Trips: ' + context.parsed.y;
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                grid: { display: false },
+                                ticks: { color: '#718EBF', font: { weight: '600' } }
+                            },
+                            trips: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { precision: 0 }, title: { display: true, text: 'Trips' } },
+                            y: {
+                                beginAtZero: true, title: { display: true, text: 'Commission (₱)' },
+                                grid: { color: '#F3F4F6' },
+                                ticks: { color: '#718EBF' },
+                                border: { dash: [5, 5] }
+                            }
+                        }
                     }
-                }
-            });
-            filterUserTable();
-        }
-
-        function filterUserTable() {
-            const query = (document.getElementById('user-search-input').value || '').toLowerCase();
-            const rows = document.querySelectorAll('#users-directory-table tbody tr.user-row');
-
-            rows.forEach(row => {
-                const rowRole = row.getAttribute('data-role');
-                const rowSearch = row.getAttribute('data-search') || '';
-
-                const matchesRole = (activeRole === 'all') || (rowRole === activeRole);
-                const matchesQuery = !query || rowSearch.includes(query);
-
-                row.style.display = (matchesRole && matchesQuery) ? '' : 'none';
-            });
-        }
-
-        // Modals
-        function openStatusModal(userId, name, email, currentStatus) {
-            document.getElementById('status-form').action = '/admin/users/' + userId + '/status';
-            document.getElementById('status-target-name').textContent = name;
-            document.getElementById('status-target-email').textContent = email;
-            document.getElementById('account_status_select').value = currentStatus || 'active';
-            document.getElementById('status_reason').value = '';
-
-            document.getElementById('status-modal').classList.remove('hidden');
-            document.getElementById('status-modal').classList.add('flex');
-        }
-
-        function closeStatusModal() {
-            document.getElementById('status-modal').classList.add('hidden');
-            document.getElementById('status-modal').classList.remove('flex');
-        }
-
-        function openProfileViewModal(data) {
-            document.getElementById('view-avatar-badge').textContent = data.name.charAt(0).toUpperCase() || 'U';
-            document.getElementById('view-user-name').textContent = data.name;
-            document.getElementById('view-user-role').textContent = data.role;
-            document.getElementById('view-user-email').textContent = data.email;
-            document.getElementById('view-user-phone').textContent = data.mobile_number;
-            document.getElementById('view-user-dob').textContent = data.date_of_birth;
-            document.getElementById('view-user-sex').textContent = data.sex;
-            document.getElementById('view-user-status').textContent = data.account_status;
-            document.getElementById('view-user-kyc').textContent = data.license_verified;
-
-            const bizBlock = document.getElementById('view-operator-block');
-            if (data.business_name) {
-                bizBlock.classList.remove('hidden');
-                document.getElementById('view-biz-name').textContent = data.business_name;
-                document.getElementById('view-biz-address').textContent = data.business_address || 'Not specified';
-            } else {
-                bizBlock.classList.add('hidden');
+                });
             }
 
-            document.getElementById('profile-view-modal').classList.remove('hidden');
-            document.getElementById('profile-view-modal').classList.add('flex');
-        }
-
-        function closeProfileViewModal() {
-            document.getElementById('profile-view-modal').classList.add('hidden');
-            document.getElementById('profile-view-modal').classList.remove('flex');
-        }
-
-        function openBroadcastModal() {
-            document.getElementById('broadcast-modal').classList.remove('hidden');
-            document.getElementById('broadcast-modal').classList.add('flex');
-        }
-
-        function closeBroadcastModal() {
-            document.getElementById('broadcast-modal').classList.add('hidden');
-            document.getElementById('broadcast-modal').classList.remove('flex');
-        }
-
-        function openDisputeMemoModal(bookingId, memo) {
-            document.getElementById('dispute-form').action = '/admin/disputes/' + bookingId + '/memo';
-            document.getElementById('admin_memo_input').value = memo || '';
-            document.getElementById('dispute-modal').classList.remove('hidden');
-            document.getElementById('dispute-modal').classList.add('flex');
-        }
-
-        function closeDisputeMemoModal() {
-            document.getElementById('dispute-modal').classList.add('hidden');
-            document.getElementById('dispute-modal').classList.remove('flex');
-        }
-
-        function openImageModal(src, title) {
-            document.getElementById('modal-image').src = src;
-            document.getElementById('modal-title').textContent = title || 'Document Inspection';
-            document.getElementById('modal-open-link').href = src;
-            document.getElementById('image-modal').classList.remove('hidden');
-            document.getElementById('image-modal').classList.add('flex');
-        }
-
-        function closeImageModal(e) {
-            document.getElementById('image-modal').classList.add('hidden');
-            document.getElementById('image-modal').classList.remove('flex');
-        }
-
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                closeImageModal();
-                closeStatusModal();
-                closeProfileViewModal();
-                closeBroadcastModal();
-                closeDisputeMemoModal();
-            }
-        });
-
-        function showAdminToast(title, message, type = 'success') {
-            const container = document.getElementById('admin-toast-container');
-            if (!container) return;
-
-            const toastId = 'toast-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4);
-            const toast = document.createElement('div');
-            toast.id = toastId;
-            toast.className = 'pointer-events-auto transform transition-all duration-300 ease-out translate-x-full opacity-0 flex items-start gap-3 rounded-2xl border bg-white p-4 shadow-xl';
-
-            let iconHtml = '';
-            let borderColor = 'border-[#E2E8F0]';
-            let titleColor = 'text-[#0F172A]';
-
-            if (type === 'success') {
-                borderColor = 'border-emerald-200';
-                iconHtml = '<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 font-bold text-sm">✓</div>';
-            } else if (type === 'error') {
-                borderColor = 'border-rose-200';
-                iconHtml = '<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600 font-bold text-sm">✕</div>';
-            } else if (type === 'warning') {
-                borderColor = 'border-amber-200';
-                iconHtml = '<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 font-bold text-sm">!</div>';
-            } else {
-                borderColor = 'border-sky-200';
-                iconHtml = '<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600 font-bold text-sm">i</div>';
+            // 2. Expense Statistics Donut / Pie Chart
+            const pieCtx = document.getElementById('fleetPieChart')?.getContext('2d');
+            if (pieCtx) {
+                const fleetData = @json($fleetDistribution);
+                new Chart(pieCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: fleetData.map(f => f.name),
+                        datasets: [{
+                            data: fleetData.map(f => f.percent),
+                            backgroundColor: fleetData.map((f, index) => ['#2C6250', '#F5C344', '#8BA99A', '#B88A68', '#8593A4'][index % 5]),
+                            borderWidth: 2,
+                            borderColor: '#FFFFFF'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    boxWidth: 10,
+                                    font: { size: 10, weight: 'bold' },
+                                    color: '#343C6A'
+                                }
+                            }
+                        },
+                        cutout: '72%'
+                    }
+                });
             }
 
-            toast.classList.add(borderColor);
-            toast.innerHTML = `
-                ${iconHtml}
-                <div class="flex-1 min-w-0 pt-0.5">
-                    <h5 class="text-xs font-bold ${titleColor} truncate">${title}</h5>
-                    ${message ? `<p class="mt-0.5 text-[11.5px] leading-relaxed text-[#64748B]">${message}</p>` : ''}
-                </div>
-                <button type="button" onclick="dismissToast('${toastId}')" class="shrink-0 text-[#94A3B8] hover:text-[#0F172A] p-1 text-sm font-bold cursor-pointer">✕</button>
-            `;
+            // 3. Balance History Smooth Area Spline Chart
+            const balanceCtx = document.getElementById('balanceHistoryChart')?.getContext('2d');
+            if (balanceCtx) {
+                const historyData = @json($revenueHistory);
+                const gradient = balanceCtx.createLinearGradient(0, 0, 0, 220);
+                gradient.addColorStop(0, 'rgba(44, 98, 80, 0.25)');
+                gradient.addColorStop(1, 'rgba(44, 98, 80, 0.0)');
 
-            container.appendChild(toast);
-
-            requestAnimationFrame(() => {
-                toast.classList.remove('translate-x-full', 'opacity-0');
-                toast.classList.add('translate-x-0', 'opacity-100');
-            });
-
-            setTimeout(() => {
-                dismissToast(toastId);
-            }, 4500);
+                new Chart(balanceCtx, {
+                    type: 'line',
+                    data: {
+                        labels: historyData.map(h => h.month_label),
+                        datasets: [{
+                            label: 'Commission (₱)',
+                            data: historyData.map(h => h.commission),
+                            borderColor: '#2C6250',
+                            borderWidth: 3,
+                            fill: true,
+                            backgroundColor: gradient,
+                            tension: 0.45,
+                            pointRadius: 0,
+                            pointHoverRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return ' ₱' + context.parsed.y.toLocaleString();
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                grid: { display: false },
+                                ticks: { color: '#718EBF', font: { weight: '600' } }
+                            },
+                            y: {
+                                grid: { color: '#DFEAF2', borderDash: [4, 4] },
+                                ticks: { color: '#718EBF' }
+                            }
+                        }
+                    }
+                });
+            }
         }
 
-        function dismissToast(id) {
-            const el = document.getElementById(id);
-            if (!el) return;
-            el.classList.add('translate-x-full', 'opacity-0');
-            setTimeout(() => el.remove(), 300);
+        // Proof Modal Logic
+        function openProofModal(id, imgUrl, method, ref, amount, month, operatorName, status) {
+            document.getElementById('proof-modal-img').src = imgUrl;
+            document.getElementById('proof-modal-amount').innerText = '₱' + amount;
+            document.getElementById('proof-modal-method').innerText = method || 'GCash';
+            document.getElementById('proof-modal-ref').innerText = ref || 'N/A';
+            document.getElementById('proof-modal-month').innerText = month;
+            document.getElementById('proof-modal-subtitle').innerText = 'Payment proof submitted by ' + operatorName;
+
+            document.getElementById('proof-modal-form').action = '/admin/remittances/' + id + '/verify';
+            document.getElementById('proof-reject-form').action = '/admin/remittances/' + id + '/reject';
+
+            document.getElementById('proof-modal').classList.remove('hidden');
         }
 
-        document.addEventListener('DOMContentLoaded', function() {
-            @if (session('status'))
-                showAdminToast('Action Completed', '{{ addslashes(session('status')) }}', 'success');
-            @endif
-            @if (isset($errors) && $errors->any())
-                showAdminToast('Notice', '{{ addslashes($errors->first()) }}', 'error');
-            @endif
-        });
+        function closeProofModal() {
+            document.getElementById('proof-modal').classList.add('hidden');
+        }
+
+        // Operator Rejection Modal
+        function openRejectModal(userId, businessName) {
+            document.getElementById('reject-form').action = '/admin/operators/' + userId + '/reject';
+            document.getElementById('reject-modal').classList.remove('hidden');
+        }
+
+        function closeRejectModal() {
+            document.getElementById('reject-modal').classList.add('hidden');
+        }
+
+        function selectQuickOperator(opId, name) {
+            switchTab('commissions');
+        }
     </script>
-
-    <!-- Global Floating Toast Notification Stack -->
-    <div id="admin-toast-container" class="fixed top-5 right-5 z-[9999] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none sm:max-w-md"></div>
 </body>
 </html>

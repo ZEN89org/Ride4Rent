@@ -5,6 +5,7 @@
 node_modules
 vendor
 tests
+.tmp
 
 # Runtime verification documents are restored only through signed access.
 storage/app/private

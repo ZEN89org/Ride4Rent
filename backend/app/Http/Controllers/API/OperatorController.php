@@ -5,8 +5,10 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
 use App\Models\Notification;
+use App\Models\OperatorRemittance;
 use App\Models\PlatformSetting;
 use App\Models\User;
+use App\Services\CommissionService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -157,6 +159,17 @@ class OperatorController extends Controller
             ]);
         }
 
+        // Remittance record for this billing month
+        $remittance = OperatorRemittance::where('operator_id', $user->id)
+            ->where('billing_month', $requestedMonth)
+            ->first();
+
+        // 48-Hour Grace Period calculations
+        $graceDeadline = $remittance?->grace_period_expires_at ?? $cycleEnd->copy()->addHours(48);
+        $graceHoursRemaining = max(0, (int) $now->diffInHours($graceDeadline, false));
+        $isGraceExpired = $now->greaterThan($graceDeadline);
+        $isFrozen = ($user->account_status === 'suspended');
+
         return response()->json([
             'success' => true,
             'data' => [
@@ -174,6 +187,95 @@ class OperatorController extends Controller
                 'active_bookings_count' => $activeCount,
                 'available_months' => $availableMonths,
                 'bookings' => $bookingsList,
+                'remittance' => [
+                    'id' => $remittance?->id,
+                    'status' => $remittance?->status ?? ($totalCommissionDue > 0 ? 'pending' : 'settled'),
+                    'grace_period_expires_at' => $graceDeadline->format('Y-m-d H:i:s'),
+                    'grace_hours_remaining' => $graceHoursRemaining,
+                    'is_grace_expired' => $isGraceExpired,
+                    'is_account_frozen' => $isFrozen,
+                    'payment_method' => $remittance?->payment_method,
+                    'payment_reference' => $remittance?->payment_reference,
+                    'receipt_image_url' => $remittance?->receipt_image_url,
+                    'submitted_at' => $remittance?->submitted_at?->format('Y-m-d H:i:s'),
+                    'verified_at' => $remittance?->verified_at?->format('Y-m-d H:i:s'),
+                    'admin_notes' => $remittance?->admin_notes,
+                ],
+            ],
+        ]);
+    }
+
+    /**
+     * Operator submits proof of 10% platform commission remittance.
+     */
+    public function submitRemittance(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if ($user->role !== 'operator') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized. Only vehicle operators can submit commission remittances.',
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'billing_month' => ['required', 'string', 'regex:/^\d{4}-\d{2}$/'],
+            'payment_method' => ['required', 'string', 'max:50'],
+            'payment_reference' => ['required', 'string', 'max:100'],
+            'receipt_image' => ['required', 'file', 'image', 'max:10240'],
+            'operator_notes' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $receiptPath = $request->file('receipt_image')->store('remittances', 'public');
+
+        // Look up or calculate remittance
+        $commissionService = app(CommissionService::class);
+        $commissionService->syncMonthlyRemittances($validated['billing_month']);
+
+        $remittance = OperatorRemittance::where('operator_id', $user->id)
+            ->where('billing_month', $validated['billing_month'])
+            ->first();
+
+        if (! $remittance) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No commission statement found for cycle '.$validated['billing_month'].'.',
+            ], 404);
+        }
+
+        $remittance->update([
+            'payment_method' => $validated['payment_method'],
+            'payment_reference' => $validated['payment_reference'],
+            'receipt_image' => $receiptPath,
+            'status' => 'submitted',
+            'submitted_at' => now(),
+            'admin_notes' => $validated['operator_notes'] ?? null,
+        ]);
+
+        // Notify Admins
+        $admins = User::where('role', 'admin')->get();
+        foreach ($admins as $admin) {
+            Notification::create([
+                'user_id' => $admin->id,
+                'title' => 'Operator Remittance Submitted',
+                'message' => "Operator {$user->first_name} {$user->last_name} submitted remittance proof for {$validated['billing_month']} (Ref: {$validated['payment_reference']}).",
+                'type' => 'remittance_submitted',
+                'action_url' => '/admin/dashboard#commissions',
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Proof of commission payment submitted successfully! Admin will verify your remittance.',
+            'data' => [
+                'id' => $remittance->id,
+                'billing_month' => $remittance->billing_month,
+                'commission_due' => $remittance->commission_due,
+                'payment_method' => $remittance->payment_method,
+                'payment_reference' => $remittance->payment_reference,
+                'receipt_image_url' => $remittance->receipt_image_url,
+                'status' => $remittance->status,
+                'submitted_at' => $remittance->submitted_at?->format('Y-m-d H:i:s'),
             ],
         ]);
     }

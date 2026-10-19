@@ -86,4 +86,9 @@ class User extends Authenticatable
     {
         return $this->hasOne(OperatorProfile::class);
     }
+
+    public function remittances(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(OperatorRemittance::class, 'operator_id');
+    }
 }

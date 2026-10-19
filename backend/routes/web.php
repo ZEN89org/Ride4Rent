@@ -61,6 +61,12 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('/operators/{user}/approve', [AdminWebController::class, 'approve'])->name('operators.approve');
         Route::post('/operators/{user}/reject', [AdminWebController::class, 'reject'])->name('operators.reject');
 
+        // Commission & Remittance Management (10% Platform Fee & 48-Hour Grace Auto-Freeze)
+        Route::post('/remittances/{remittance}/verify', [AdminWebController::class, 'verifyRemittance'])->name('remittances.verify');
+        Route::post('/remittances/{remittance}/reject', [AdminWebController::class, 'rejectRemittance'])->name('remittances.reject');
+        Route::post('/remittances/sync', [AdminWebController::class, 'syncRemittances'])->name('remittances.sync');
+        Route::post('/operators/{user}/toggle-freeze', [AdminWebController::class, 'toggleOperatorFreeze'])->name('operators.toggle-freeze');
+
         Route::post('/licenses/{user}/approve', [AdminWebController::class, 'approveLicense'])->name('licenses.approve');
         Route::post('/licenses/{user}/reject', [AdminWebController::class, 'rejectLicense'])->name('licenses.reject');
 

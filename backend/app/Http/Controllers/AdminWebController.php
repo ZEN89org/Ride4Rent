@@ -5,11 +5,16 @@ namespace App\Http\Controllers;
 use App\Models\AdminAuditLog;
 use App\Models\Booking;
 use App\Models\Notification;
+use App\Models\OperatorRemittance;
 use App\Models\PlatformSetting;
 use App\Models\User;
+use App\Models\Vehicle;
+use App\Services\CommissionService;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -46,28 +51,197 @@ class AdminWebController extends Controller
 
     public function dashboard(Request $request): View
     {
-        // 1. Pending Operator Business Applications
+        // 1. Commission & Remittance System (10% Platform Fee & Grace Period)
+        $commissionService = app(CommissionService::class);
+        $now = now()->setTimezone('Asia/Manila');
+        $currentMonth = $now->format('Y-m');
+
+        $selectedMonth = $request->input('month', $currentMonth);
+        if (! preg_match('/^\d{4}-\d{2}$/', $selectedMonth)) {
+            $selectedMonth = $currentMonth;
+        }
+
+        // Auto-sync current and previous billing cycles
+        $commissionService->syncMonthlyRemittances($currentMonth);
+        $prevMonth = $now->copy()->subMonth()->format('Y-m');
+        $commissionService->syncMonthlyRemittances($prevMonth);
+        if ($selectedMonth !== $currentMonth && $selectedMonth !== $prevMonth) {
+            $commissionService->syncMonthlyRemittances($selectedMonth);
+        }
+
+        // Process automatic account freeze for expired 48-hour grace periods
+        $commissionService->checkAndProcessGraceExpirations();
+
+        // Remittances list for selected billing month
+        $remittancesQuery = OperatorRemittance::with(['operator.operatorProfile', 'verifier'])
+            ->where('billing_month', $selectedMonth);
+
+        if ($request->filled('remittance_status') && $request->input('remittance_status') !== 'all') {
+            $remittancesQuery->where('status', $request->input('remittance_status'));
+        }
+
+        $monthlyRemittances = $remittancesQuery->latest()->get();
+
+        // Aggregated Commission Metrics
+        $totalGrossAllTime = (float) OperatorRemittance::sum('gross_revenue');
+        $totalCommissionAllTime = (float) OperatorRemittance::sum('commission_due');
+        $totalCommissionCollected = (float) OperatorRemittance::where('status', 'verified')->sum('commission_due');
+        $totalCommissionPending = (float) OperatorRemittance::whereIn('status', ['pending', 'submitted', 'overdue', 'frozen'])->sum('commission_due');
+
+        $currentMonthRemittances = OperatorRemittance::where('billing_month', $currentMonth)->get();
+        $currentMonthGross = (float) $currentMonthRemittances->sum('gross_revenue');
+        $currentMonthCommission = (float) $currentMonthRemittances->sum('commission_due');
+        $currentMonthCollected = (float) $currentMonthRemittances->where('status', 'verified')->sum('commission_due');
+        $currentMonthPending = (float) $currentMonthRemittances->whereIn('status', ['pending', 'submitted', 'overdue', 'frozen'])->sum('commission_due');
+
+        $frozenOperatorsCount = User::where('role', 'operator')->where('account_status', 'suspended')->count();
+        $inGraceRemittances = OperatorRemittance::where('status', 'pending')
+            ->whereNotNull('grace_period_expires_at')
+            ->where('grace_period_expires_at', '>', $now)
+            ->count();
+
+        $commissionStats = [
+            'total_gross_all_time' => $totalGrossAllTime,
+            'total_commission_all_time' => $totalCommissionAllTime,
+            'total_commission_collected' => $totalCommissionCollected,
+            'total_commission_pending' => $totalCommissionPending,
+            'current_month_gross' => $currentMonthGross,
+            'current_month_commission' => $currentMonthCommission,
+            'current_month_collected' => $currentMonthCollected,
+            'current_month_pending' => $currentMonthPending,
+            'frozen_operators_count' => $frozenOperatorsCount,
+            'in_grace_count' => $inGraceRemittances,
+        ];
+
+        // Recent Remittances (for top right BankDash widget)
+        $recentRemittances = OperatorRemittance::with('operator.operatorProfile')
+            ->whereNotNull('submitted_at')
+            ->orWhere('status', 'verified')
+            ->latest('updated_at')
+            ->take(4)
+            ->get();
+
+        if ($recentRemittances->isEmpty()) {
+            $recentRemittances = OperatorRemittance::with('operator.operatorProfile')
+                ->latest()
+                ->take(4)
+                ->get();
+        }
+
+        // Weekly Activity Dual-Bar Chart (Last 7 Days: Trips vs 10% Commission)
+        $weeklyActivity = [];
+        for ($i = 6; $i >= 0; $i--) {
+            $day = $now->copy()->subDays($i);
+            $dayStart = $day->copy()->startOfDay();
+            $dayEnd = $day->copy()->endOfDay();
+
+            $dayTrips = Booking::where('status', 'completed')
+                ->where(function ($q) use ($dayStart, $dayEnd) {
+                    $q->whereBetween('actual_end_time', [$dayStart, $dayEnd])
+                        ->orWhere(function ($sub) use ($dayStart, $dayEnd) {
+                            $sub->whereNull('actual_end_time')
+                                ->whereBetween('updated_at', [$dayStart, $dayEnd]);
+                        });
+                })->get();
+
+            $dayTripsCount = $dayTrips->count();
+            $dayCommission = 0.0;
+            foreach ($dayTrips as $b) {
+                $gross = (float) $b->total_price + (float) ($b->fuel_charge ?? 0) + (float) ($b->damage_charge ?? 0) + (float) ($b->late_fee ?? 0) + (float) ($b->other_charges ?? 0);
+                $dayCommission += ($gross * 0.10);
+            }
+
+            $weeklyActivity[] = [
+                'day_label' => $day->format('D'),
+                'date' => $day->format('M d'),
+                'trips' => $dayTripsCount,
+                'commission' => round($dayCommission, 2),
+            ];
+        }
+
+        // Fleet Distribution (for BankDash Donut/Pie chart)
+        $vehicleTypes = DB::table('vehicles')
+            ->leftJoin('vehicle_types', 'vehicles.vehicle_type_id', '=', 'vehicle_types.id')
+            ->select(DB::raw("COALESCE(vehicle_types.name, 'Other') as type_name"), DB::raw('count(vehicles.id) as count'))
+            ->groupBy('vehicle_types.name')
+            ->get();
+        $totalFleet = Vehicle::count();
+        $fleetDistribution = [];
+        $palette = ['#343C6A', '#FC7900', '#1814F3', '#FA00FF', '#16DBCC', '#FE5C73'];
+        $colorIndex = 0;
+        foreach ($vehicleTypes as $vt) {
+            $pct = $totalFleet > 0 ? round(($vt->count / $totalFleet) * 100) : 0;
+            $fleetDistribution[] = [
+                'name' => ucfirst($vt->type_name ?: 'Other'),
+                'count' => $vt->count,
+                'percent' => $pct,
+                'color' => $palette[$colorIndex % count($palette)],
+            ];
+            $colorIndex++;
+        }
+        if (empty($fleetDistribution)) {
+            $fleetDistribution = [
+                ['name' => 'Sedan', 'count' => 12, 'percent' => 35, 'color' => '#343C6A'],
+                ['name' => 'SUV / Van', 'count' => 10, 'percent' => 30, 'color' => '#FC7900'],
+                ['name' => 'Motorcycle', 'count' => 7, 'percent' => 20, 'color' => '#FA00FF'],
+                ['name' => 'Hatchback', 'count' => 5, 'percent' => 15, 'color' => '#1814F3'],
+            ];
+        }
+
+        // Monthly Revenue Growth History (for BankDash Area Spline chart)
+        $revenueHistory = [];
+        for ($m = 6; $m >= 0; $m--) {
+            $histDate = $now->copy()->subMonths($m);
+            $histStart = $histDate->copy()->startOfMonth();
+            $histEnd = $histDate->copy()->endOfMonth();
+
+            $monthBookings = Booking::where('status', 'completed')
+                ->where(function ($q) use ($histStart, $histEnd) {
+                    $q->whereBetween('actual_end_time', [$histStart, $histEnd])
+                        ->orWhere(function ($sub) use ($histStart, $histEnd) {
+                            $sub->whereNull('actual_end_time')
+                                ->whereBetween('updated_at', [$histStart, $histEnd]);
+                        });
+                })->get();
+
+            $mGross = 0.0;
+            foreach ($monthBookings as $b) {
+                $mGross += (float) $b->total_price + (float) ($b->fuel_charge ?? 0) + (float) ($b->damage_charge ?? 0) + (float) ($b->late_fee ?? 0) + (float) ($b->other_charges ?? 0);
+            }
+            $mCommission = round($mGross * 0.10, 2);
+
+            $revenueHistory[] = [
+                'month_label' => $histDate->format('M'),
+                'year' => $histDate->format('Y'),
+                'gross' => $mGross,
+                'commission' => $mCommission,
+            ];
+        }
+
+        // Quick Action Operators (with active remittances)
+        $quickActionOperators = User::with('operatorProfile')
+            ->where('role', 'operator')
+            ->take(6)
+            ->get();
+
+        // Available billing months for dropdown
+        $availableMonths = OperatorRemittance::select('billing_month')
+            ->distinct()
+            ->orderByDesc('billing_month')
+            ->pluck('billing_month')
+            ->toArray();
+        if (! in_array($currentMonth, $availableMonths)) {
+            array_unshift($availableMonths, $currentMonth);
+        }
+
+        // 2. Pending Operator Accreditation Applications (Admin Responsibility Only)
         $operators = User::with('operatorProfile')
             ->where('role', 'operator')
             ->where('account_status', 'pending')
             ->latest()
             ->get();
 
-        // 2. Pending Renter Driver's License Submissions
-        $pendingRenters = User::whereIn('role', ['customer', 'renter'])
-            ->where(function ($query) {
-                $query->where('license_verification_status', 'pending')
-                    ->orWhere(function ($q) {
-                        $q->whereNull('license_verification_status')
-                            ->where('is_drivers_license_verified', false)
-                            ->whereNotNull('drivers_license_front');
-                    });
-            })
-            ->latest('license_submitted_at')
-            ->latest()
-            ->get();
-
-        // 3. User Directory & Status Governance (Excluding Admins from client members list)
+        // 3. User Directory & Status Governance (Excluding Admins)
         $usersQuery = User::with('operatorProfile')->where('role', '!=', 'admin');
 
         if ($request->filled('search')) {
@@ -95,36 +269,29 @@ class AdminWebController extends Controller
 
         $allUsers = $usersQuery->latest()->get();
 
-        // 4. Platform Compliance & Moderation Analytics
+        // 4. Platform Statistics
         $totalRenters = User::whereIn('role', ['customer', 'renter'])->count();
-        $verifiedRenters = User::whereIn('role', ['customer', 'renter'])->where('is_drivers_license_verified', true)->count();
-        $unverifiedRenters = User::whereIn('role', ['customer', 'renter'])->where('is_drivers_license_verified', false)->count();
-
         $totalOperators = User::where('role', 'operator')->count();
         $activeOperators = User::where('role', 'operator')->where('account_status', 'active')->count();
         $pendingOperators = User::where('role', 'operator')->where('account_status', 'pending')->count();
-
         $activeAccounts = User::where('role', '!=', 'admin')->where('account_status', 'active')->count();
         $suspendedAccounts = User::where('role', '!=', 'admin')->where('account_status', 'suspended')->count();
 
         $stats = [
             'total_platform_users' => User::where('role', '!=', 'admin')->count(),
             'total_renters' => $totalRenters,
-            'verified_renters' => $verifiedRenters,
-            'unverified_renters' => $unverifiedRenters,
             'total_operators' => $totalOperators,
             'active_operators' => $activeOperators,
             'pending_operators' => $pendingOperators,
             'active_accounts' => $activeAccounts,
             'suspended_accounts' => $suspendedAccounts,
-            'pending_verifications' => $pendingRenters->count() + $operators->count(),
-            'kyc_compliance_rate' => $totalRenters > 0 ? round(($verifiedRenters / $totalRenters) * 100) : 0,
+            'pending_verifications' => $operators->count(),
         ];
 
-        // 5. Admin-Exclusive Features: Audit Trail
+        // 5. Admin Audit Trail
         $auditLogs = AdminAuditLog::latest()->take(35)->get();
 
-        // 6. Admin-Exclusive Features: Reviews & Ratings Moderation Desk
+        // 6. Reviews & Ratings Moderation Desk
         $reviews = Booking::with(['renter', 'vehicle'])
             ->where(function ($q) {
                 $q->whereNotNull('rating')->orWhereNotNull('review');
@@ -132,7 +299,7 @@ class AdminWebController extends Controller
             ->latest('updated_at')
             ->get();
 
-        // 7. Admin-Exclusive Features: Escalation & Incident Desk
+        // 7. Escalation & Dispute Incident Desk
         $disputes = Booking::with(['renter', 'operator', 'vehicle'])
             ->where(function ($q) {
                 $q->where('status', 'cancelled')
@@ -144,7 +311,7 @@ class AdminWebController extends Controller
             ->latest()
             ->get();
 
-        // 8. Admin-Exclusive Features: Operational Governance Settings
+        // 8. Platform Operational Settings
         $platformSettings = [
             'require_kyc_for_booking' => PlatformSetting::get('require_kyc_for_booking', '1'),
             'maintenance_mode' => PlatformSetting::get('maintenance_mode', '0'),
@@ -156,9 +323,17 @@ class AdminWebController extends Controller
 
         return view('admin.dashboard', compact(
             'operators',
-            'pendingRenters',
             'allUsers',
             'stats',
+            'commissionStats',
+            'monthlyRemittances',
+            'selectedMonth',
+            'availableMonths',
+            'recentRemittances',
+            'weeklyActivity',
+            'fleetDistribution',
+            'revenueHistory',
+            'quickActionOperators',
             'auditLogs',
             'reviews',
             'disputes',
@@ -584,6 +759,79 @@ class AdminWebController extends Controller
         ]);
 
         return back()->with('status', 'Operator rejected successfully.');
+    }
+
+    /**
+     * Admin Remittance Verification (Instantly Unfreezes Operator)
+     */
+    public function verifyRemittance(Request $request, OperatorRemittance $remittance): RedirectResponse
+    {
+        $notes = $request->input('admin_notes');
+        $service = app(CommissionService::class);
+        $service->verifyRemittance($remittance, Auth::user(), $notes);
+
+        return back()->with('status', "Remittance for {$remittance->operator?->first_name} {$remittance->operator?->last_name} ({$remittance->billing_month}) verified. Operator account is active!");
+    }
+
+    /**
+     * Admin Remittance Rejection
+     */
+    public function rejectRemittance(Request $request, OperatorRemittance $remittance): RedirectResponse
+    {
+        $validated = $request->validate([
+            'rejection_reason' => ['required', 'string', 'max:500'],
+        ]);
+
+        $service = app(CommissionService::class);
+        $service->rejectRemittance($remittance, Auth::user(), $validated['rejection_reason']);
+
+        return back()->with('status', "Remittance proof rejected for {$remittance->billing_month}. Operator has been notified.");
+    }
+
+    /**
+     * Trigger Manual Sync of Monthly Remittances & Grace Expirations
+     */
+    public function syncRemittances(Request $request): RedirectResponse
+    {
+        $month = $request->input('month');
+        $service = app(CommissionService::class);
+        $synced = $service->syncMonthlyRemittances($month);
+        $frozen = $service->checkAndProcessGraceExpirations();
+
+        return back()->with('status', "Synchronized {$synced->count()} operator commission statement(s). Processed {$frozen} grace period expiration(s).");
+    }
+
+    /**
+     * Toggle Operator Freeze / Suspension
+     */
+    public function toggleOperatorFreeze(User $user): RedirectResponse
+    {
+        abort_unless($user->role === 'operator', 404);
+
+        $newStatus = $user->account_status === 'suspended' ? 'active' : 'suspended';
+        $user->update(['account_status' => $newStatus]);
+
+        $actionText = $newStatus === 'suspended' ? 'frozen (blocked from new rentals)' : 'unfrozen and reactivated';
+
+        AdminAuditLog::record(
+            action: 'operator_freeze_toggled',
+            targetType: 'User',
+            targetId: $user->id,
+            targetName: trim($user->first_name.' '.$user->last_name),
+            details: "Admin manually set operator account status to {$newStatus}"
+        );
+
+        Notification::create([
+            'user_id' => $user->id,
+            'title' => $newStatus === 'suspended' ? 'Operator Account Suspended' : 'Operator Account Activated',
+            'message' => $newStatus === 'suspended'
+                ? 'Your vehicle hosting privileges are temporarily on hold by administration.'
+                : 'Your vehicle hosting privileges have been reactivated. You can accept new bookings!',
+            'type' => $newStatus === 'suspended' ? 'warning' : 'success',
+            'action_url' => '/operator-profile',
+        ]);
+
+        return back()->with('status', "Operator {$user->first_name} {$user->last_name} is now {$actionText}.");
     }
 
     /**
