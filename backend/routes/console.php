@@ -9,5 +9,7 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('bookings:check-expirations')->everyMinute()->withoutOverlapping();
+Schedule::call(fn () => app(\App\Services\TripLocationMonitor::class)->sweep())
+    ->name('trip-location-monitor')->everyMinute()->withoutOverlapping();
 Schedule::call(fn () => app(\App\Services\BookingReminderService::class)->send())
     ->name('booking-reminders')->everyFiveMinutes()->withoutOverlapping();

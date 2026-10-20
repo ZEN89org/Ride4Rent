@@ -173,7 +173,7 @@ class MessageController extends Controller
                 'text' => $msg->message ?? '',
                 'image_url' => $imageUrl,
                 'is_read' => (bool) $msg->is_read,
-                'time' => $msg->created_at->format('h:i A'),
+                'time' => $msg->created_at->copy()->timezone('Asia/Manila')->format('h:i A'),
                 'created_at' => $msg->created_at->toIso8601String(),
             ];
         });
@@ -204,7 +204,7 @@ class MessageController extends Controller
                 'end_date' => $booking->end_date ? $booking->end_date->format('Y-m-d') : null,
                 'total_days' => $booking->total_days,
                 'total_price' => (float) $booking->total_price,
-                'reservation_fee' => (float) ($booking->reservation_fee ?? 500),
+                'reservation_fee' => (float) ($booking->reservation_fee ?? \App\Services\RentalPolicy::reservationFee((float) $booking->total_price)),
                 'balance_due' => $booking->balance_due,
                 'extension_status' => $booking->extension_status,
                 'extension_price' => (float) $booking->extension_price,
@@ -308,7 +308,7 @@ class MessageController extends Controller
                 'text' => $msg->message ?? '',
                 'image_url' => $fullImageUrl,
                 'is_read' => (bool) $msg->is_read,
-                'time' => $msg->created_at->format('h:i A'),
+                'time' => $msg->created_at->copy()->timezone('Asia/Manila')->format('h:i A'),
                 'created_at' => $msg->created_at->toIso8601String(),
             ],
         ], 201);

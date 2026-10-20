@@ -6,7 +6,7 @@ use App\Models\PlatformSetting;
 
 class AssistantKnowledge
 {
-    public const VERSION = '2026-10-20';
+    public const VERSION = '2026-10-20-fifty-percent';
 
     public function topics(): array
     {
@@ -30,6 +30,11 @@ class AssistantKnowledge
                 'match' => '/\b(extend|extension|extensions|palawig|dagdag.*araw)\b/i',
                 'en' => 'Request an extension from an ongoing trip in Bookings. The operator reviews it. Pay 100% of the extension amount through GCash and submit the payment reference/receipt. There is no second reservation fee. The return date changes after operator payment confirmation. Settle outstanding extension charges and applicable surcharges before completion.',
                 'fil' => 'Humiling ng extension sa ongoing trip sa Bookings. Ire-review ito ng operator. Bayaran nang 100% ang extension sa GCash at isumite ang reference/resibo; walang panibagong reservation fee. Magbabago ang return date pagkatapos i-confirm ng operator ang bayad. Bayaran ang outstanding extension at applicable surcharges bago makumpleto ang trip.',
+            ],
+            'early_return' => [
+                'match' => '/\b(early return|return early|unused days|maagang balik|maagang ibalik)\b/i',
+                'en' => 'During an active trip, use Request early return in Bookings to propose a date and time. The operator approves or declines the arrangement. The trip and GPS remain active until actual handover, return inspection and settlement. The original rental total remains unchanged; unused days have no automatic refund. Discuss any early-return refund face to face with the operator. Record the agreed refund separately after completion, and the renter confirms only after receiving it.',
+                'fil' => 'Sa active trip, gamitin ang Request early return sa Bookings at pumili ng petsa at oras. Ire-review ito ng operator. Active pa rin ang trip at GPS hanggang actual handover, inspection at settlement. Hindi nagbabago ang original rental total at walang automatic refund sa hindi nagamit na araw. Hiwalay na ire-record ang anumang napagkasunduang refund pagkatapos ng completion; i-confirm lang kapag natanggap na.',
             ],
             'no_show' => [
                 'match' => '/no[ -]?show|miss.*pick|fail.*pick|didn.t.*pick|hindi.*(kuha|sundo)|di.*makapunta/i',

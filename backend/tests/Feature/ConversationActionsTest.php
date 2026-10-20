@@ -11,6 +11,24 @@ class ConversationActionsTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_chat_message_time_is_the_same_philippine_time_for_both_participants(): void
+    {
+        $this->travelTo(\Carbon\Carbon::parse('2026-10-20 20:35:00', 'UTC'));
+        [$renter, $operator] = $this->createConversation();
+        $sent = $this->actingAs($renter, 'sanctum')->postJson('/api/v1/messages/send', [
+            'receiver_id' => $operator->id, 'message' => 'PAYMENT RECEIPT\nReference: 1234567890123',
+        ])->assertCreated()->assertJsonPath('data.time', '04:35 AM');
+        $messageId = $sent->json('data.id');
+        $renterThread = $this->actingAs($renter, 'sanctum')->getJson("/api/v1/messages/thread/{$operator->id}")->assertOk();
+        $operatorThread = $this->actingAs($operator, 'sanctum')->getJson("/api/v1/messages/thread/{$renter->id}")->assertOk();
+        $renterMessage = collect($renterThread->json('data'))->firstWhere('id', $messageId);
+        $operatorMessage = collect($operatorThread->json('data'))->firstWhere('id', $messageId);
+        $this->assertSame('04:35 AM', $renterMessage['time']);
+        $this->assertSame($renterMessage['time'], $operatorMessage['time']);
+        $this->assertSame($renterMessage['created_at'], $operatorMessage['created_at']);
+        $this->travelBack();
+    }
+
     public function test_conversations_follow_latest_sent_or_received_message_not_unread_status(): void
     {
         [$renter, $operator] = $this->createConversation();

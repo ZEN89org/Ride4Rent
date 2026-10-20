@@ -27,16 +27,110 @@ class RentalIntegrityTest extends TestCase
 
     private Booking $booking;
 
+    public function test_early_return_approval_keeps_charges_inventory_and_gps_until_inspection(): void
+    {
+        $this->booking->update(['status' => 'ongoing', 'return_at' => now()->addDays(2), 'rental_paid_amount' => 1200, 'start_mileage' => 100]);
+        $this->vehicle->update(['available_units' => 0, 'availability_status' => 'unavailable']);
+        $url = '/api/v1/bookings/'.$this->booking->id;
+        $this->actingAs($this->renter, 'sanctum')->postJson($url.'/early-return', ['requested_for' => now()->addHour()->toIso8601String(), 'reason' => 'Plans changed'])->assertOk()->assertJsonPath('data.early_return_status', 'pending');
+        $this->postJson($url.'/early-return', ['requested_for' => now()->addHour()->toIso8601String()])->assertUnprocessable();
+        $this->actingAs($this->operator, 'sanctum')->postJson($url.'/complete-trip', ['end_mileage' => 110, 'end_fuel_level' => 100, 'settlement_confirmed' => true])->assertUnprocessable();
+        $this->postJson($url.'/early-return/review', ['decision' => 'approved'])->assertOk();
+        $current = $this->booking->fresh();
+        $this->assertSame('ongoing', $current->status);
+        $this->assertSame('1200.00', $current->total_price);
+        $this->assertSame(2, $current->total_days);
+        $this->assertSame(0, (int) $this->vehicle->fresh()->available_units);
+        $this->assertNull($current->actual_end_time);
+        $this->actingAs($this->renter, 'sanctum')->postJson($url.'/location', ['latitude' => 13.0453, 'longitude' => 121.4878])->assertOk();
+        $this->actingAs($this->operator, 'sanctum')->postJson($url.'/complete-trip', ['end_mileage' => 110, 'end_fuel_level' => 100, 'settlement_confirmed' => true])->assertOk()->assertJsonPath('data.returned_early', true)->assertJsonPath('data.early_return_status', 'completed');
+        $current = $this->booking->fresh();
+        $this->assertSame('1200.00', $current->total_price);
+        $this->assertSame('200.00', $current->reservation_fee);
+        $this->assertSame('1200.00', $current->rental_paid_amount);
+        $this->assertTrue($current->return_at->equalTo($current->booked_return_at));
+        $this->assertSame('available', $this->vehicle->fresh()->availability_status);
+        $this->assertNull($current->early_return_refund_recorded_at);
+        $this->actingAs($this->renter, 'sanctum')->postJson($url.'/location', ['latitude' => 13.0453, 'longitude' => 121.4878])->assertUnprocessable();
+    }
+
+    public function test_early_return_checks_ownership_dates_and_conflicting_extensions(): void
+    {
+        $url = '/api/v1/bookings/'.$this->booking->id.'/early-return';
+        $data = ['requested_for' => now()->addHour()->toIso8601String()];
+        $this->actingAs($this->renter, 'sanctum')->postJson($url, $data)->assertUnprocessable();
+        $this->booking->update(['status' => 'ongoing', 'return_at' => now()->addDay()]);
+        $this->actingAs($this->operator, 'sanctum')->postJson($url, $data)->assertForbidden();
+        $this->actingAs($this->user('admin'), 'sanctum')->postJson($url, $data)->assertForbidden();
+        $this->actingAs($this->renter, 'sanctum')->postJson($url, ['requested_for' => now()->subMinute()->toIso8601String()])->assertUnprocessable();
+        $this->postJson($url, ['requested_for' => now()->addDays(2)->toIso8601String()])->assertUnprocessable();
+        $this->booking->update(['extension_status' => 'pending']);
+        $this->postJson($url, $data)->assertUnprocessable();
+        $this->booking->update(['extension_status' => null]);
+        $this->postJson($url, $data)->assertOk();
+        $this->postJson($url.'/review', ['decision' => 'approved'])->assertForbidden();
+        $this->postJson('/api/v1/bookings/'.$this->booking->id.'/request-extension', ['extension_end_date' => today()->addDays(4)->toDateString()])->assertUnprocessable();
+        $this->actingAs($this->operator, 'sanctum')->postJson($url.'/review', ['decision' => 'declined'])->assertUnprocessable();
+        $this->postJson($url.'/review', ['decision' => 'declined', 'response' => 'Please choose another time'])->assertOk();
+        $this->actingAs($this->renter, 'sanctum')->postJson($url, $data)->assertOk();
+        $this->postJson($url.'/withdraw')->assertOk()->assertJsonPath('data.early_return_status', 'withdrawn');
+        $this->postJson($url.'/withdraw')->assertUnprocessable();
+    }
+
+    public function test_early_return_refund_is_separate_and_requires_renter_receipt_confirmation(): void
+    {
+        $url = '/api/v1/bookings/'.$this->booking->id.'/early-return/refund';
+        $data = ['amount' => 300, 'method' => 'gcash', 'reference' => 'EARLY-REFUND-1', 'reason' => 'Agreed goodwill refund'];
+        $this->booking->update(['status' => 'ongoing']);
+        $this->actingAs($this->operator, 'sanctum')->postJson($url, $data)->assertUnprocessable();
+        $this->booking->update(['status' => 'completed', 'returned_early' => true, 'payment_status' => 'paid_full', 'rental_paid_amount' => 1200]);
+        $this->actingAs($this->renter, 'sanctum')->postJson($url, $data)->assertForbidden();
+        $this->actingAs($this->operator, 'sanctum')->postJson($url, [...$data, 'amount' => 1201])->assertUnprocessable();
+        $this->postJson($url, $data)->assertOk();
+        $this->deleteJson('/api/v1/bookings/'.$this->booking->id)->assertUnprocessable();
+        $this->postJson($url, $data)->assertUnprocessable();
+        $this->postJson($url.'/confirm', ['received' => true])->assertForbidden();
+        $this->actingAs($this->renter, 'sanctum')->postJson($url.'/confirm', ['received' => false])->assertUnprocessable();
+        $this->postJson($url.'/confirm', ['received' => true])->assertOk();
+        $current = $this->booking->fresh();
+        $this->assertSame('1200.00', $current->total_price);
+        $this->assertSame('1200.00', $current->rental_paid_amount);
+        $this->assertSame('paid_full', $current->payment_status);
+        $this->assertSame('300.00', $current->early_return_refund_amount);
+        $this->assertNotNull($current->early_return_refund_received_at);
+    }
+
+    public function test_return_completion_keeps_manual_unavailability_and_other_active_units(): void
+    {
+        $this->vehicle->update(['quantity' => 3, 'available_units' => 1, 'availability_status' => 'unavailable']);
+        $this->booking->update(['status' => 'ongoing', 'rental_paid_amount' => 1200]);
+        $other = $this->booking->replicate();
+        $other->save();
+        $this->actingAs($this->operator, 'sanctum')->postJson('/api/v1/bookings/'.$this->booking->id.'/complete-trip', ['end_mileage' => 100, 'end_fuel_level' => 100, 'settlement_confirmed' => true])->assertOk();
+        $this->assertSame('unavailable', $this->vehicle->fresh()->availability_status);
+        $this->assertSame(2, (int) $this->vehicle->fresh()->available_units);
+        $this->assertSame('ongoing', $other->fresh()->status);
+    }
+
+    public function test_early_return_completion_preserves_maintenance_hold(): void
+    {
+        $this->vehicle->update(['availability_status' => 'maintenance', 'available_units' => 0]);
+        $this->booking->update(['status' => 'ongoing', 'rental_paid_amount' => 1200]);
+        $this->actingAs($this->operator, 'sanctum')->postJson('/api/v1/bookings/'.$this->booking->id.'/complete-trip', ['end_mileage' => 100, 'end_fuel_level' => 100, 'settlement_confirmed' => true])->assertOk();
+        $this->assertSame('maintenance', $this->vehicle->fresh()->availability_status);
+    }
+
     public function test_assistant_uses_current_policy_without_contacting_the_model(): void
     {
         \Illuminate\Support\Facades\Http::fake();
         config(['services.gemini.key' => 'test-key']);
         foreach ([
-            'What is the reservation fee?' => ['5%', '95%'],
+            'What is the reservation fee?' => ['50%'],
             'Can I update my approved license?' => ['Update License', 'operator'],
             'How do extensions work?' => ['100%', 'no second reservation fee'],
+            'Can I return early?' => ['original rental total', 'no automatic refund', 'GPS'],
             'What happens for a no-show?' => ['24 hours', 'retained'],
-            'Paano ang bayad?' => ['5%', '95%', 'bayaran'],
+            'Paano ang bayad?' => ['50%', 'bayaran'],
         ] as $question => $expected) {
             $response = $this->postJson('/api/v1/assistant/chat', ['message' => $question])->assertOk()
                 ->assertJsonPath('data.knowledge_version', \App\Services\AssistantKnowledge::VERSION);
@@ -72,7 +166,7 @@ class RentalIntegrityTest extends TestCase
             'candidates' => [['content' => ['parts' => [['text' => json_encode(['reply' => 'Check available listings.', 'recommended_vehicle_ids' => [$this->vehicle->id], 'quick_replies' => []])]]]]],
         ])]);
         $this->postJson('/api/v1/assistant/chat', ['message' => 'Show vehicles'])->assertOk()->assertJsonCount(0, 'data.vehicles');
-        \Illuminate\Support\Facades\Http::assertSent(fn ($request) => str_contains(json_encode($request->data()), '5%') && !str_contains(json_encode($request->data()), '₱500'));
+        \Illuminate\Support\Facades\Http::assertSent(fn ($request) => str_contains(json_encode($request->data()), '50%') && !str_contains(json_encode($request->data()), '₱500'));
     }
 
     protected function setUp(): void
@@ -187,14 +281,14 @@ class RentalIntegrityTest extends TestCase
         $this->assertEquals(0, $this->booking->fresh()->balance_due);
     }
 
-    public function test_new_booking_uses_five_percent_of_the_entire_rental(): void
+    public function test_new_booking_uses_fifty_percent_of_the_entire_rental(): void
     {
         $this->booking->update(['status' => 'cancelled']);
         $this->renter->update(['drivers_license_front' => 'driver_licenses/front.jpg', 'drivers_license_back' => 'driver_licenses/back.jpg', 'license_verification_status' => 'approved']);
         $this->actingAs($this->renter, 'sanctum')->postJson('/api/v1/bookings', [
             'vehicle_id' => $this->vehicle->id, 'start_date' => today()->addDay()->toDateString(),
             'end_date' => today()->addDays(6)->toDateString(), 'pickup_time' => '01:30 PM', 'return_time' => '01:30 PM',
-        ])->assertCreated()->assertJsonPath('data.total_price', '3000.00')->assertJsonPath('data.reservation_fee', '150.00');
+        ])->assertCreated()->assertJsonPath('data.total_price', '3000.00')->assertJsonPath('data.reservation_fee', '1500.00');
     }
 
     public function test_new_listing_accepts_an_uploaded_cover_image(): void
@@ -362,21 +456,187 @@ class RentalIntegrityTest extends TestCase
         $this->assertSame(600.0, DemandPricingService::calculateVehicleDemand($this->vehicle)['effective_price']);
     }
 
+    public function test_trip_boundary_alerts_notify_both_users_once_per_exit(): void
+    {
+        $this->booking->update(['status' => 'trip_in_progress']);
+        $url = '/api/v1/bookings/'.$this->booking->id.'/location';
+        $this->actingAs($this->renter, 'sanctum');
+        $this->postJson($url, ['latitude' => 13.0453, 'longitude' => 121.4878, 'accuracy' => 10])->assertOk();
+        $this->assertDatabaseCount('notifications', 0);
+        $this->postJson($url, ['latitude' => 14.5995, 'longitude' => 120.9842, 'accuracy' => 10])->assertOk();
+        $this->assertDatabaseHas('notifications', ['user_id' => $this->operator->id, 'title' => 'Vehicle outside Oriental Mindoro']);
+        $this->assertDatabaseHas('notifications', ['user_id' => $this->renter->id, 'title' => 'Vehicle outside Oriental Mindoro']);
+        $this->assertDatabaseCount('notifications', 2);
+        $this->postJson($url, ['latitude' => 14.6, 'longitude' => 120.98, 'accuracy' => 10])->assertOk();
+        $this->assertDatabaseCount('notifications', 2);
+        $this->postJson($url, ['latitude' => 13.0453, 'longitude' => 121.4878, 'accuracy' => 10])->assertOk();
+        $this->postJson($url, ['latitude' => 14.6, 'longitude' => 120.98, 'accuracy' => 10])->assertOk();
+        $this->assertDatabaseCount('notifications', 4);
+    }
+
+    public function test_gps_speed_is_rounded_and_stationary_drift_is_zero(): void
+    {
+        $this->booking->update(['status' => 'trip_in_progress']);
+        $url = '/api/v1/bookings/'.$this->booking->id.'/location';
+        $this->actingAs($this->renter, 'sanctum')->postJson($url, ['latitude' => 13.0453, 'longitude' => 121.4878, 'speed' => 0.005669642938301])->assertOk();
+        $this->assertSame(0.0, (float) $this->booking->fresh()->current_speed);
+        $this->postJson($url, ['latitude' => 13.0453, 'longitude' => 121.4878, 'speed' => 35.8576])->assertOk();
+        $this->assertSame(36.0, (float) $this->booking->fresh()->current_speed);
+    }
+
+    public function test_low_accuracy_gps_does_not_raise_boundary_alerts(): void
+    {
+        $this->booking->update(['status' => 'trip_in_progress']);
+        $this->actingAs($this->renter, 'sanctum')->postJson('/api/v1/bookings/'.$this->booking->id.'/location', ['latitude' => 14.6, 'longitude' => 120.98, 'accuracy' => 1000])->assertOk();
+        $this->assertDatabaseCount('notifications', 0);
+    }
+
+    public function test_location_off_and_recovery_notify_both_users_without_duplicate_alerts(): void
+    {
+        $this->booking->update(['status' => 'trip_in_progress']);
+        $url = '/api/v1/bookings/'.$this->booking->id.'/location-sharing';
+        $this->actingAs($this->operator, 'sanctum')->postJson($url, ['reason' => 'app_setting'])->assertForbidden();
+        $this->actingAs($this->renter, 'sanctum')->postJson($url, ['reason' => 'app_setting'])->assertOk();
+        $this->postJson($url, ['reason' => 'app_setting'])->assertOk();
+        $this->assertDatabaseCount('notifications', 2);
+        foreach ([$this->renter, $this->operator] as $user) $this->assertDatabaseHas('notifications', ['user_id' => $user->id, 'title' => 'Trip location sharing off']);
+        $this->postJson('/api/v1/bookings/'.$this->booking->id.'/location', ['latitude' => 13.0453, 'longitude' => 121.4878])->assertOk();
+        $this->assertDatabaseCount('notifications', 4);
+        $this->assertSame('on', $this->booking->fresh()->location_sharing_status);
+    }
+
+    public function test_missing_gps_updates_notify_both_users_after_two_minutes_once(): void
+    {
+        $this->booking->update(['status' => 'trip_in_progress', 'last_location_updated_at' => now()->subSeconds(121)]);
+        app(\App\Services\TripLocationMonitor::class)->sweep();
+        app(\App\Services\TripLocationMonitor::class)->sweep();
+        $this->assertDatabaseCount('notifications', 2);
+        $this->assertSame('unavailable', $this->booking->fresh()->location_sharing_status);
+        $this->booking->update(['status' => 'completed', 'location_sharing_status' => null]);
+        app(\App\Services\TripLocationMonitor::class)->sweep();
+        $this->assertDatabaseCount('notifications', 2);
+    }
+
+    public function test_active_trip_coordinates_are_shared_with_operator_and_protected_from_other_users(): void
+    {
+        $this->assertIsInt($this->booking->fresh()->renter_id);
+        $this->assertIsInt($this->booking->fresh()->operator_id);
+        $this->assertIsBool($this->booking->fresh()->is_multi_vehicle_rental);
+        $this->booking->update(['status' => 'trip_in_progress']);
+        $url = '/api/v1/bookings/'.$this->booking->id.'/location';
+        $this->actingAs($this->renter, 'sanctum')->postJson($url, ['latitude' => 13.0453, 'longitude' => 121.4878, 'speed' => 15])->assertOk();
+        $this->actingAs($this->operator, 'sanctum')->getJson($url)->assertOk()
+            ->assertJsonPath('data.current_latitude', 13.0453)->assertJsonPath('data.current_longitude', 121.4878);
+        $this->actingAs($this->operator, 'sanctum')->postJson($url, ['latitude' => 0, 'longitude' => 0])->assertForbidden();
+        $other = $this->renter->replicate();
+        $other->email = 'location-outsider@example.com';
+        $other->save();
+        $this->actingAs($other, 'sanctum')->getJson($url)->assertForbidden();
+        $this->booking->update(['status' => 'completed']);
+        $this->actingAs($this->renter, 'sanctum')->postJson($url, ['latitude' => 13, 'longitude' => 121])->assertUnprocessable();
+    }
+
+    public function test_extension_full_flow_posts_submission_and_confirmation_to_both_chat_participants(): void
+    {
+        $this->booking->update(['status' => 'trip_in_progress', 'payment_status' => 'paid_full', 'rental_paid_amount' => 1200]);
+        $url = '/api/v1/bookings/'.$this->booking->id;
+        $oldEnd = $this->booking->end_date->toDateString();
+        $this->actingAs($this->renter, 'sanctum')->postJson($url.'/request-extension', ['extension_end_date' => today()->addDays(3)->toDateString(), 'extension_return_time' => '03:45 PM'])->assertOk();
+        $this->postJson($url.'/settle-extension-payment', ['payment_method' => 'gcash', 'payment_reference' => '1234567890123'])->assertUnprocessable();
+        $this->assertDatabaseCount('messages', 0);
+        $this->actingAs($this->operator, 'sanctum')->postJson($url.'/approve-extension')->assertOk()->assertJsonPath('data.extension_status', 'payment_required');
+        $this->assertSame($oldEnd, $this->booking->fresh()->end_date->toDateString());
+        $this->assertDatabaseCount('messages', 0);
+        $this->actingAs($this->renter, 'sanctum')->postJson($url.'/settle-extension-payment', ['payment_method' => 'gcash', 'payment_reference' => '1234567890123'])->assertOk();
+        $this->assertDatabaseCount('messages', 1);
+        $this->assertStringContainsString('Awaiting Host Verification', \App\Models\Message::first()->message);
+        $this->assertSame($oldEnd, $this->booking->fresh()->end_date->toDateString());
+        $this->postJson($url.'/settle-extension-payment', ['payment_method' => 'gcash', 'payment_reference' => '1234567890123'])->assertUnprocessable();
+        $this->actingAs($this->operator, 'sanctum')->postJson($url.'/confirm-extension-payment')->assertOk();
+        $this->assertDatabaseCount('messages', 2);
+        $this->assertStringContainsString('Payment Confirmed', \App\Models\Message::latest('id')->first()->message);
+        $this->assertSame('1800.00', $this->booking->fresh()->total_price);
+        $this->assertSame(3, $this->booking->fresh()->total_days);
+        $this->postJson($url.'/confirm-extension-payment')->assertUnprocessable();
+        $this->assertDatabaseCount('messages', 2);
+        $this->getJson('/api/v1/messages/thread/'.$this->renter->id)->assertOk()->assertJsonCount(2, 'data');
+        $this->actingAs($this->renter, 'sanctum')->getJson('/api/v1/messages/thread/'.$this->operator->id)->assertOk()->assertJsonCount(2, 'data');
+    }
+
+    public function test_extension_payment_correction_keeps_dates_and_allows_resubmission(): void
+    {
+        $this->booking->update(['status' => 'ongoing', 'extension_status' => 'pending_verification', 'extension_price' => 600, 'extension_days' => 1, 'extension_end_date' => today()->addDays(3), 'extension_payment_method' => 'gcash', 'extension_payment_reference' => '1234567890123']);
+        $url = '/api/v1/bookings/'.$this->booking->id;
+        $oldEnd = $this->booking->end_date->toDateString();
+        $this->actingAs($this->renter, 'sanctum')->postJson($url.'/reject-extension-payment', ['reason' => 'Wrong reference'])->assertNotFound();
+        $this->actingAs($this->operator, 'sanctum')->postJson($url.'/reject-extension-payment')->assertUnprocessable();
+        $this->postJson($url.'/reject-extension-payment', ['reason' => 'Reference does not match my GCash account'])->assertOk()->assertJsonPath('data.extension_status', 'payment_required');
+        $this->postJson($url.'/confirm-extension-payment')->assertUnprocessable();
+        $this->assertSame($oldEnd, $this->booking->fresh()->end_date->toDateString());
+        $this->actingAs($this->renter, 'sanctum')->postJson($url.'/settle-extension-payment', ['payment_method' => 'gcash', 'payment_reference' => '9876543210123'])->assertOk();
+        $this->actingAs($this->operator, 'sanctum')->postJson($url.'/confirm-extension-payment')->assertOk();
+        $this->assertSame('1800.00', $this->booking->fresh()->total_price);
+        $this->assertDatabaseCount('messages', 3);
+        $this->booking->update(['status' => 'completed', 'extension_status' => 'pending']);
+        $this->postJson($url.'/approve-extension')->assertUnprocessable();
+    }
+
+    public function test_face_to_face_handover_and_return_collections_post_receipts_once(): void
+    {
+        $this->booking->update(['status' => 'approved']);
+        $url = '/api/v1/bookings/'.$this->booking->id;
+        $this->actingAs($this->operator, 'sanctum')->postJson($url.'/start-trip', ['start_mileage' => 100, 'start_fuel_level' => 100, 'rental_balance_collected' => true])->assertOk();
+        $handover = \App\Models\Message::first();
+        $this->assertStringContainsString('HANDOVER PAYMENT RECEIPT', $handover->message);
+        $this->assertStringContainsString('1,000.00', $handover->message);
+        $this->postJson($url.'/start-trip', ['start_mileage' => 100, 'start_fuel_level' => 100, 'rental_balance_collected' => true])->assertUnprocessable();
+        $this->assertDatabaseCount('messages', 1);
+        $this->postJson($url.'/complete-trip', ['end_mileage' => 120, 'end_fuel_level' => 100, 'fuel_charge' => 100, 'settlement_confirmed' => true])->assertOk();
+        $this->assertDatabaseCount('messages', 2);
+        $this->assertStringContainsString('RETURN PAYMENT RECEIPT', \App\Models\Message::latest('id')->first()->message);
+        $this->assertStringContainsString('100.00', \App\Models\Message::latest('id')->first()->message);
+    }
+
+    public function test_receipt_deduplication_is_scoped_to_payment_event_not_reference_substrings(): void
+    {
+        $other = $this->booking->replicate(); $other->save();
+        $service = app(\App\Services\BookingPaymentReceipt::class);
+        foreach ([$this->booking, $other] as $booking) {
+            $service->post($booking, 'reservation', 'submitted', 200, 'gcash', '1234567890123');
+            $service->post($booking, 'reservation', 'submitted', 200, 'gcash', '1234567890123');
+        }
+        $this->assertDatabaseCount('messages', 2);
+        $this->assertSame(2, \App\Models\Message::whereNotNull('receipt_event_key')->count());
+    }
+
+    public function test_extension_request_validates_and_preserves_the_chosen_return_time(): void
+    {
+        $this->booking->update(['status' => 'trip_in_progress']);
+        $url = '/api/v1/bookings/'.$this->booking->id.'/request-extension';
+        $this->actingAs($this->renter, 'sanctum')->postJson($url, ['extension_end_date' => today()->addDays(3)->toDateString(), 'extension_return_time' => '13:90 PM'])->assertUnprocessable();
+        $this->postJson($url, ['extension_end_date' => today()->addDays(3)->toDateString(), 'extension_return_time' => '03:45 PM'])
+            ->assertOk()->assertJsonPath('data.extension_return_time', '03:45 PM');
+        $this->assertSame(today()->addDays(2)->toDateString(), $this->booking->fresh()->end_date->toDateString());
+    }
+
     public function test_extension_changes_dates_only_after_host_confirms_receipt(): void
     {
         $this->booking->update([
             'status' => 'trip_in_progress', 'extension_status' => 'payment_required',
             'extension_days' => 1, 'extension_price' => 600, 'extension_end_date' => today()->addDays(3),
+            'extension_return_time' => '03:45 PM', 'return_at' => today()->addDays(2)->setTime(2, 0)->utc(),
         ]);
         $originalEnd = $this->booking->end_date->toDateString();
         $this->actingAs($this->renter, 'sanctum')->postJson('/api/v1/bookings/'.$this->booking->id.'/settle-extension-payment', ['payment_method' => 'gcash', 'payment_reference' => '1234567890123'])->assertOk();
         $this->assertSame($originalEnd, $this->booking->fresh()->end_date->toDateString());
         $this->assertSame('pending_verification', $this->booking->fresh()->extension_status);
+        $this->assertSame('10:00', $this->booking->fresh()->return_at->setTimezone('Asia/Manila')->format('H:i'));
         $this->actingAs($this->renter, 'sanctum')->postJson('/api/v1/bookings/'.$this->booking->id.'/confirm-extension-payment')->assertNotFound();
         $this->actingAs($this->operator, 'sanctum')->postJson('/api/v1/bookings/'.$this->booking->id.'/confirm-extension-payment')->assertOk();
         $this->assertSame(today()->addDays(3)->toDateString(), $this->booking->fresh()->end_date->toDateString());
         $this->assertSame(1800.0, (float) $this->booking->fresh()->total_price);
         $this->assertSame(600.0, (float) $this->booking->fresh()->extension_paid_total);
+        $this->assertSame('15:45', $this->booking->fresh()->return_at->setTimezone('Asia/Manila')->format('H:i'));
         $this->actingAs($this->operator, 'sanctum')->postJson('/api/v1/bookings/'.$this->booking->id.'/confirm-extension-payment')->assertUnprocessable();
     }
 

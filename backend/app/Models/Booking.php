@@ -18,7 +18,7 @@ class Booking extends Model
 
     protected $fillable = [
         'rental_paid_amount', 'rental_balance_paid_at', 'return_collected_amount',
-        'pickup_at', 'return_at', 'no_show_at',
+        'pickup_at', 'return_at', 'no_show_at', 'booked_return_at', 'returned_early', 'early_return_status',
         'renter_id',
         'vehicle_id',
         'operator_id',
@@ -78,8 +78,10 @@ class Booking extends Model
         'refund_reference',
         'refund_notes',
         'refunded_at',
+        'extension_decision_note', 'extension_payment_review_note',
         'extension_days',
         'extension_end_date',
+        'extension_return_time',
         'extension_price',
         'extension_status',
         'extension_payment_method',
@@ -93,6 +95,19 @@ class Booking extends Model
     protected function casts(): array
     {
         return [
+            'booked_return_at' => 'datetime',
+            'returned_early' => 'boolean',
+            'early_return_requested_for' => 'datetime',
+            'early_return_requested_at' => 'datetime',
+            'early_return_reviewed_at' => 'datetime',
+            'early_return_refund_recorded_at' => 'datetime',
+            'early_return_refund_received_at' => 'datetime',
+            'early_return_refund_amount' => 'decimal:2',
+            'outside_service_area' => 'boolean',
+            'location_sharing_changed_at' => 'datetime',
+            'renter_id' => 'integer',
+            'operator_id' => 'integer',
+            'is_multi_vehicle_rental' => 'boolean',
             'rental_paid_amount' => 'decimal:2',
             'return_collected_amount' => 'decimal:2',
             'rental_balance_paid_at' => 'datetime',
@@ -148,6 +163,12 @@ class Booking extends Model
             $rentalPaid = (float) $this->reservation_fee;
         }
         return round(max(0, (float) $this->total_price - $rentalPaid - (float) $this->extension_paid_total), 2);
+    }
+
+    public function scheduledReturn(): \Carbon\Carbon
+    {
+        if ($this->return_at) return $this->return_at->copy();
+        return \Carbon\Carbon::parse($this->end_date->format('Y-m-d').' 10:00 AM', 'Asia/Manila')->utc();
     }
 
     public function scheduledPickup(): \Carbon\Carbon

@@ -11,6 +11,7 @@ class Message extends Model
     use HasFactory;
 
     protected $fillable = [
+        'receipt_event_key',
         'sender_id',
         'receiver_id',
         'vehicle_id',

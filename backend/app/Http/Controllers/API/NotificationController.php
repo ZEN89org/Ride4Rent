@@ -26,6 +26,7 @@ class NotificationController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        app(\App\Services\TripLocationMonitor::class)->sweep($request->user()->id);
         try {
             app(BookingController::class)->checkAndProcessExpirations($request->user()?->id);
         } catch (\Throwable $e) {
