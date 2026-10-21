@@ -11,7 +11,7 @@ import {
   initiateCall,
 } from "@/services/callService";
 import {
-  assertVoiceCallingAvailable,
+  prepareVoiceCalling,
   setLiveKitSpeakerEnabled,
   connectToLiveKitRoom,
   disconnectLiveKitRoom,
@@ -79,6 +79,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
         )
       : 0;
   const [isMuted, setIsMuted] = useState(false);
+  const [audioCallId, setAudioCallId] = useState<string | null>(null);
   const { showError } = useAppToast();
   const [isSpeaker, setIsSpeaker] = useState(false);
   const [callStatusText, setCallStatusText] = useState("");
@@ -145,21 +146,24 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     return () => clearInterval(timer);
   }, [callStatus]);
 
-  // Keep audio connected until this call's identity, status, or credentials change.
+  // Show connection state until audio is connected and the microphone is published.
   useEffect(() => {
-    if (callId && callStatus === "accepted" && livekitUrl && livekitToken) {
+    if (callId && callStatus === "accepted") {
       let cancelled = false;
-      connectToLiveKitRoom(livekitUrl, livekitToken).catch((error) => {
+      const failed = (message: string) => {
         if (cancelled) return;
-        reportConnectionError(error.message || "Could not connect call audio.");
+        reportConnectionError(message);
         endCall(callId).catch(() => {});
-        setActiveCall(null);
-        setCallRole(null);
-      });
-      return () => {
-        cancelled = true;
-        disconnectLiveKitRoom().catch(() => {});
+        setActiveCall(null); setCallRole(null); setCallStatusText("");
       };
+      if (!livekitUrl || !livekitToken) {
+        void Promise.resolve().then(() => failed("Call audio is not configured on this server. Please contact support."));
+        return;
+      }
+      Promise.resolve().then(() => connectToLiveKitRoom(livekitUrl, livekitToken, () => failed("Call audio disconnected. Check your internet connection and call again.")))
+        .then(result => { if (!cancelled && result.connected) { setAudioCallId(callId); setCallStatusText(""); } })
+        .catch(error => failed(error.message || "Could not connect call audio."));
+      return () => { cancelled = true; disconnectLiveKitRoom().catch(() => {}); };
     }
     disconnectLiveKitRoom().catch(() => {});
   }, [callId, callStatus, livekitUrl, livekitToken]);
@@ -213,7 +217,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     if (!user || isActionInProgressRef.current) return;
     try {
       isActionInProgressRef.current = true;
-      assertVoiceCallingAvailable();
+      await prepareVoiceCalling();
       setCallStatusText("Calling...");
       const newCall = await initiateCall(targetUser.id);
       setActiveCall(newCall);
@@ -244,7 +248,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     if (!activeCall || isActionInProgressRef.current) return;
     try {
       isActionInProgressRef.current = true;
-      assertVoiceCallingAvailable();
+      await prepareVoiceCalling();
       Vibration.cancel();
       setCallStatusText("Connecting...");
       const updated = await answerCall(activeCall.id);
@@ -309,14 +313,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  const toggleMute = () => {
-    setIsMuted((prev) => {
-      const next = !prev;
-      setLiveKitMicrophoneMuted(next).catch(() =>
-        showError("Microphone", "Could not change the microphone state."),
-      );
-      return next;
-    });
+  const toggleMute = async () => {
+    try { await setLiveKitMicrophoneMuted(!isMuted); setIsMuted(!isMuted); }
+    catch { showError("Microphone", "Call audio is still connecting or the microphone could not be changed."); }
   };
   const toggleSpeaker = async () => {
     try {
@@ -373,7 +372,9 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
               <View style={styles.topHeader}>
                 {/* Main Call Status */}
                 <Text style={styles.statusLabel}>
-                  {callStatusText
+                  {activeCall.status === "accepted" && audioCallId !== activeCall.id
+                    ? "Connecting audio…"
+                    : callStatusText
                     ? callStatusText
                     : activeCall.status === "accepted"
                       ? formatCallTime(callDuration)

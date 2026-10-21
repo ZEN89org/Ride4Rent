@@ -23,6 +23,8 @@ class Call extends Model
     protected function casts(): array
     {
         return [
+            'caller_id' => 'integer',
+            'receiver_id' => 'integer',
             'started_at' => 'datetime',
             'ended_at' => 'datetime',
             'duration' => 'integer',

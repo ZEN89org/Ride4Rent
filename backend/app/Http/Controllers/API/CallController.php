@@ -42,8 +42,8 @@ class CallController extends Controller
      */
     private function generateLiveKitToken(string $roomName, string $identity, string $name): ?string
     {
-        $apiKey = config('services.livekit.api_key');
-        $apiSecret = config('services.livekit.api_secret');
+        $apiKey = trim((string) config('services.livekit.api_key'));
+        $apiSecret = trim((string) config('services.livekit.api_secret'));
 
         if (! $apiKey || ! $apiSecret) {
             return null;
@@ -115,7 +115,8 @@ class CallController extends Controller
             'receiver_id' => ['required', 'exists:users,id'],
         ]);
 
-        if (! config('services.livekit.url') || ! config('services.livekit.api_key') || ! config('services.livekit.api_secret')) {
+        $voiceUrl = parse_url(trim((string) config('services.livekit.url')));
+        if (!$voiceUrl || !in_array($voiceUrl['scheme'] ?? '', ['ws', 'wss']) || empty($voiceUrl['host']) || !trim((string) config('services.livekit.api_key')) || !trim((string) config('services.livekit.api_secret'))) {
             \Illuminate\Support\Facades\Log::warning('Voice calling unavailable: check LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET on the backend service.');
             return response()->json(['message' => 'Voice calls are temporarily unavailable. Please use in-app chat while support restores calling.'], 503);
         }
@@ -150,8 +151,8 @@ class CallController extends Controller
 
         $callerName = trim(($caller->first_name ?? '').' '.($caller->last_name ?? '')) ?: ($caller->name ?? 'User');
 
-        // Dispatch incoming call notification to receiver
-        Notification::create([
+        // Persist the call alert and deliver through the existing device push service.
+        $notification = Notification::create([
             'user_id' => $receiverId,
             'title' => 'Incoming Voice Call',
             'message' => $callerName.' is calling you...',
@@ -159,6 +160,8 @@ class CallController extends Controller
             'action_url' => '/chat/'.$callerId,
             'is_read' => false,
         ]);
+
+        app(\App\Services\DevicePushService::class)->send($notification);
 
         $call->load(['caller.operatorProfile', 'receiver.operatorProfile']);
 
@@ -333,7 +336,7 @@ class CallController extends Controller
         $wasAccepted = $call->status === 'accepted';
 
         if ($wasAccepted && $call->started_at) {
-            $duration = max(1, $now->diffInSeconds($call->started_at));
+            $duration = max(1, (int) $call->started_at->diffInSeconds($now));
             $call->update([
                 'status' => 'ended',
                 'ended_at' => $now,
