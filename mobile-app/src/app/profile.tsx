@@ -1,15 +1,11 @@
+import ProfileInformation from "@/components/common/ProfileInformation";
+import ProfileLogoutButton from "@/components/common/ProfileLogoutButton";
+import { ProfileSummary } from "@/components/common/ProfileSummary";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
-import {
-  ActivityIndicator,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { KeyboardAwareScrollView as ScrollView } from "@/components/common/KeyboardAwareScrollView";
+import { ActivityIndicator, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
@@ -313,67 +309,7 @@ export default function ProfileScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         {/* Clean Horizontal Profile Summary */}
-        <View style={styles.profileHeader}>
-          <View style={styles.avatarWrapper}>
-            {profileImage ? (
-              <Image
-                source={{ uri: profileImage }}
-                style={styles.avatarImage}
-              />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarLetter}>
-                  {user.first_name
-                    ? user.first_name.charAt(0).toUpperCase()
-                    : "U"}
-                </Text>
-              </View>
-            )}
-
-            <TouchableOpacity
-              style={styles.cameraButton}
-              onPress={handlePickImage}
-              activeOpacity={0.85}
-              disabled={uploading}
-            >
-              {uploading ? (
-                <ActivityIndicator size="small" color={Colors.dark} />
-              ) : (
-                <Ionicons name="camera" size={13} color={Colors.dark} />
-              )}
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.profileTextCol}>
-            <Text style={styles.userName} numberOfLines={1}>
-              {fullName || "Ride4Rent User"}
-            </Text>
-            <Text style={styles.userEmail} numberOfLines={1}>
-              {user.email}
-            </Text>
-            <View
-              style={[
-                styles.statusPill,
-                { backgroundColor: licenseInfo.badgeBg },
-              ]}
-            >
-              <View
-                style={[
-                  styles.statusDot,
-                  { backgroundColor: licenseInfo.badgeColor },
-                ]}
-              />
-              <Text
-                style={[
-                  styles.statusPillText,
-                  { color: licenseInfo.badgeColor },
-                ]}
-              >
-                {licenseInfo.badgeText}
-              </Text>
-            </View>
-          </View>
-        </View>
+        <ProfileSummary image={profileImage} title={fullName || "Ride4Rent User"} email={user.email} badge={licenseInfo.badgeText} badgeColor={licenseInfo.badgeColor} badgeBackground={licenseInfo.badgeBg} uploading={uploading} onEdit={handlePickImage} />
 
         {/* Simple Driver's License Row Card */}
         {user.role !== "operator" && (
@@ -399,22 +335,8 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Clean Borderless Personal Information List */}
-        <Text style={styles.sectionLabel}>Personal Information</Text>
-
+        <ProfileInformation title="Personal Information" rows={personalDetails} />
         <View style={styles.personalList}>
-          {personalDetails.map((item) => (
-            <View key={item.label} style={styles.personalRow}>
-              <View style={styles.personalIconBox}>
-                <Ionicons name={item.icon} size={18} color={Colors.dark} />
-              </View>
-              <View style={styles.personalTextCol}>
-                <Text style={styles.personalLabel}>{item.label}</Text>
-                <Text style={styles.personalValue}>{item.value}</Text>
-              </View>
-            </View>
-          ))}
-
           {/* Current Location Row (Connected to Available Vehicles Near You) */}
           {user.role !== "operator" && (
             <TouchableOpacity
@@ -443,6 +365,12 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           )}
         </View>
+        {user.role !== "operator" && <TouchableOpacity style={styles.personalRow} onPress={() => router.push("/payment-method" as any)} accessibilityRole="button">
+          <View style={styles.personalIconBox}><Ionicons name="wallet-outline" size={20} color={Colors.dark} /></View>
+          <View style={styles.personalTextCol}><Text style={styles.personalLabel}>Payment Method</Text><Text style={styles.personalValue}>Manage your saved GCash account</Text></View>
+          <Ionicons name="chevron-forward" size={20} color={Colors.secondary} />
+        </TouchableOpacity>}
+        <ProfileLogoutButton />
       </ScrollView>
     </SafeAreaView>
   );

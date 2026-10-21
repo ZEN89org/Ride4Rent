@@ -7,17 +7,13 @@
     "icon": "./assets/images/applogo.png",
     "scheme": "ride4rent",
     "userInterfaceStyle": "automatic",
-    "backgroundColor": "#FEC103",
+    "backgroundColor": "#FFFFFF",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.zensysorg.ride4rent"
+      "bundleIdentifier": "com.zensysorg.ride4rent",
+      "icon": "./assets/images/applogo.png"
     },
     "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#FFFFFF",
-        "foregroundImage": "./assets/images/applogo.png",
-        "monochromeImage": "./assets/images/applogo.png"
-      },
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -27,11 +23,12 @@
       ],
       "package": "com.zensysorg.ride4rent",
       "softwareKeyboardLayoutMode": "resize",
-      "usesCleartextTraffic": true
+      "usesCleartextTraffic": true,
+      "icon": "./assets/images/applogo.png"
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/applogo.png"
     },
     "plugins": [
       "expo-router",
@@ -45,9 +42,22 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#FEC103",
-          "image": "./assets/images/1st.png",
-          "resizeMode": "cover"
+          "backgroundColor": "#FFFFFF",
+          "resizeMode": "contain",
+          "android": {
+            "drawable": {
+              "icon": "./assets/images/launch-empty.xml"
+            },
+            "dark": {
+              "backgroundColor": "#FFFFFF"
+            }
+          },
+          "ios": {
+            "backgroundColor": "#FFFFFF",
+            "dark": {
+              "backgroundColor": "#FFFFFF"
+            }
+          }
         }
       ],
       "expo-font",

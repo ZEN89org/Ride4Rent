@@ -141,10 +141,10 @@ class BookingController extends Controller
 
         $totalUnits = max(1, (int) ($vehicle->quantity ?? 1));
 
-        if (! $vehicle->is_active || $vehicle->availability_status === 'unavailable' || $activeBookingsCount >= $totalUnits) {
+        if (! $vehicle->is_active || $vehicle->availability_status !== 'available' || $activeBookingsCount >= $totalUnits) {
             return response()->json([
                 'success' => false,
-                'message' => 'All available units of this vehicle are currently reserved or on an active trip.',
+                'message' => $vehicle->availability_status === 'maintenance' ? 'This vehicle is under maintenance and cannot be booked yet.' : 'All available units of this vehicle are currently reserved or on an active trip.',
             ], 422);
         }
 
@@ -349,7 +349,7 @@ class BookingController extends Controller
         $remUnits = max(0, $totalUnits - ($takenUnits + 1));
         $vehicle->update([
             'available_units' => $remUnits,
-            'availability_status' => $remUnits === 0 ? 'unavailable' : 'available',
+            'availability_status' => $vehicle->availability_status === 'maintenance' ? 'maintenance' : ($remUnits === 0 ? 'unavailable' : 'available'),
         ]);
 
         // If no units remain, automatically cancel other competing un-settled pending_payment requests for this vehicle
@@ -450,7 +450,7 @@ class BookingController extends Controller
             $remUnits = max(0, $totalUnits - $activeUnits);
             $vehicle->update([
                 'available_units' => $remUnits,
-                'availability_status' => $remUnits === 0 ? 'unavailable' : 'available',
+                'availability_status' => $vehicle->availability_status === 'maintenance' ? 'maintenance' : ($remUnits === 0 ? 'unavailable' : 'available'),
             ]);
         }
 
@@ -658,8 +658,7 @@ class BookingController extends Controller
             $remUnits = max(0, $totalUnits - $activeUnits);
             $vehicle->update([
                 'available_units' => $remUnits,
-                'availability_status' => $vehicle->availability_status === 'maintenance' ? 'maintenance'
-                    : (($vehicle->availability_status === 'unavailable' && (int) $vehicle->available_units > 0) || !$vehicle->is_active ? 'unavailable' : ($remUnits === 0 ? 'unavailable' : 'available')),
+                'availability_status' => ($vehicle->availability_status === 'unavailable' && (int) $vehicle->available_units > 0) || !$vehicle->is_active ? 'unavailable' : 'maintenance',
             ]);
         }
 
@@ -866,7 +865,7 @@ class BookingController extends Controller
             $remUnits = max(0, $totalUnits - $activeUnits);
             $vehicle->update([
                 'available_units' => $remUnits,
-                'availability_status' => $remUnits === 0 ? 'unavailable' : 'available',
+                'availability_status' => $vehicle->availability_status === 'maintenance' ? 'maintenance' : ($remUnits === 0 ? 'unavailable' : 'available'),
             ]);
         }
 

@@ -9,6 +9,8 @@ export interface AppNotification {
   is_read: boolean;
   time: string;
   created_at: string;
+  group_ids?: string[];
+  group_count?: number;
 }
 
 export const getNotifications = async (): Promise<AppNotification[]> => {

@@ -31,6 +31,7 @@ export interface NearVehicleItem {
   brand?: string;
   distance_km?: number | null;
   available_units?: number;
+  availability_status?: string;
   demand_badge?: string;
   demand_level?: string;
 }
@@ -75,8 +76,9 @@ export default function NearVehicleCard({
         style={styles.backgroundImage}
       />
 
+      {vehicle.availability_status === "maintenance" && <View style={{ position: "absolute", top: 12, left: 12, backgroundColor: "#FFF4CE", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, zIndex: 2 }}><Text style={{ fontFamily: FontFamily.semiBold, fontSize: 11, color: "#92400E" }}>Under Maintenance</Text></View>}
       {/* Top Left Dynamic Demand Badge */}
-      {vehicle.demand_badge && vehicle.demand_level !== "Normal" && (
+      {vehicle.availability_status !== "maintenance" && vehicle.demand_badge && vehicle.demand_level !== "Normal" && (
         <View style={styles.demandBadgeContainer}>
           <Text style={styles.demandBadgeText}>{vehicle.demand_badge}</Text>
         </View>

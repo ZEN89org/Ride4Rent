@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppState } from "react-native";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { useAppToast } from "./ToastContext";
@@ -8,7 +7,10 @@ import {
   startTripTracking,
   stopTripTracking,
   transmitTripLocation,
+  ensureTripLocationPermission,
+  getLocationSharingOffReason,
 } from "@/services/tripLocationService";
+import { reportTripLocationOff } from "@/services/bookingService";
 
 /** Keeps rental tracking alive when the renter leaves the bookings screen. */
 export function TripLocationProvider({
@@ -29,7 +31,6 @@ export function TripLocationProvider({
     let disposed = false;
     let busy = false;
     let trackedId: number | null = null;
-    let background = false;
     let warned = false;
     const refresh = async () => {
       if (busy || disposed || AppState.currentState !== "active") return;
@@ -39,18 +40,20 @@ export function TripLocationProvider({
           await stopTripTracking();
           return;
         }
-        if ((await AsyncStorage.getItem("@settings_location")) === "false") {
+        const bookings = await getMyBookings();
+        if (disposed) return;
+        const offReason = await getLocationSharingOffReason();
+        if (offReason) {
+          await Promise.all(bookings.filter((booking) => ["trip_in_progress", "ongoing", "return_pending"].includes(booking.status)).map((booking) => reportTripLocationOff(booking.id, offReason)));
           await stopTripTracking();
           trackedId = null;
           return;
         }
-        const bookings = await getMyBookings();
-        if (disposed) return;
         const trip = bookings.find(
           (b) =>
             ["trip_in_progress", "ongoing", "return_pending"].includes(
               b.status,
-            ) && !b.is_multi_vehicle_rental,
+            ) && ![true, 1, "1", "true"].includes(b.is_multi_vehicle_rental as boolean | number | string),
         );
         if (!trip) {
           trackedId = null;
@@ -58,28 +61,29 @@ export function TripLocationProvider({
           return;
         }
         if (trackedId !== trip.id) {
-          background = await startTripTracking(trip.id);
-          if (disposed) {
-            await stopTripTracking();
-            return;
-          }
-          trackedId = trip.id;
+          await ensureTripLocationPermission();
+          if (disposed) return;
           await transmitTripLocation(trip.id);
-          if (!background && !warned) {
-            warned = true;
-            warningRef.current(
-              "Trip location",
-              "Keep Ride4Rent open to share your location. Background tracking needs location access and an installed app build.",
-            );
-          }
+          if (disposed) return;
+          trackedId = trip.id;
+          void startTripTracking(trip.id).then(async (background) => {
+            if (disposed) { await stopTripTracking(); return; }
+            if (!background && !warned) {
+              warned = true;
+              warningRef.current("Trip location", "Keep Ride4Rent open to share your location. Background tracking needs location access and an installed app build.");
+            }
+          }).catch(() => { /* Foreground updates continue independently. */ });
+        } else {
+          // The OS may delay background callbacks even after registration succeeds.
+          await transmitTripLocation(trip.id);
         }
-        if (!background) await transmitTripLocation(trip.id);
       } catch (error: any) {
-        if (!warned && !disposed) {
+        console.error("Trip location update failed:", error);
+        if (!warned && !disposed && userId && userRole === "customer") {
           warned = true;
           warningRef.current(
             "Trip location",
-            error.message || "Could not update trip location.",
+            "Location sharing is unavailable. Check location permissions and keep Ride4Rent open during your trip.",
           );
         }
       } finally {
@@ -87,7 +91,7 @@ export function TripLocationProvider({
       }
     };
     refresh();
-    const interval = setInterval(refresh, 20000);
+    const interval = setInterval(refresh, 10000);
     const listener = AppState.addEventListener("change", (state) => {
       if (state === "active") refresh();
     });

@@ -1,15 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useMemo, useState } from "react";
-import {
-    Pressable,
-    ScrollView,
-    StyleProp,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-    ViewStyle,
-} from "react-native";
+import { KeyboardAwareScrollView as ScrollView } from "@/components/common/KeyboardAwareScrollView";
+import { Pressable, StyleProp, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from "react-native";
 
 import AppBottomSheet from "@/components/common/AppBottomSheet";
 import PrimaryButton from "@/components/common/PrimaryButton";

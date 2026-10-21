@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useRef, useState } from "react";
@@ -24,7 +24,7 @@ import {
 import { Vehicle as ApiVehicle } from "@/features/operator/types/vehicle";
 
 import { useFavorites } from "@/context/FavoritesContext";
-import { router, useFocusEffect, useNavigation } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 
 import { VehicleCardSkeleton } from "@/components/common/Skeleton";
 import { getSavedLocation, saveLocation } from "@/storage/locationStorage";
@@ -171,6 +171,7 @@ export default function AvailableVehicles({ searchQuery = "", onViewMore }: Avai
             seats: vehicle.seats,
             transmission: vehicle.transmission,
             available_units: vehicle.available_units,
+            availability_status: vehicle.availability_status,
             demand_badge: (vehicle as any).demand_pricing?.demand_badge,
             demand_level: (vehicle as any).demand_pricing?.demand_level,
           }))
@@ -189,18 +190,13 @@ export default function AvailableVehicles({ searchQuery = "", onViewMore }: Avai
     }, [])
   );
 
-  const navigation = useNavigation<any>();
 
   const handleViewMore = () => {
     if (onViewMore) {
       onViewMore();
       return;
     }
-    try {
-      navigation.navigate("search");
-    } catch {
-      router.navigate("/(tabs)/search" as any);
-    }
+    router.push("/(tabs)/search" as any);
   };
 
   const handleViewVehicle = (vehicle: any) => {
@@ -236,7 +232,7 @@ export default function AvailableVehicles({ searchQuery = "", onViewMore }: Avai
               ? `Search: ${searchQuery.trim()} (${displayedVehicles.length})`
               : "Available Vehicles Near You"}
           </Text>
-          <Ionicons name="arrow-forward" size={17} color={Colors.primary} />
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}><Text style={{ fontFamily: FontFamily.semiBold, fontSize: 12, color: Colors.dark }}>See all</Text><MaterialCommunityIcons name="arrow-top-right" size={18} color={Colors.dark} /></View>
         </TouchableOpacity>
 
         <View style={styles.carouselContainer}>

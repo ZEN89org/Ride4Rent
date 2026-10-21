@@ -1,4 +1,3 @@
-import { resolveBundledStorageUri } from "@/constants/localStorageAssets";
 import { getToken } from "@/features/auth/storage/authStorage";
 import axios, { AxiosError } from "axios";
 import Constants from "expo-constants";
@@ -80,16 +79,6 @@ export const resolveImageUrl = (
     trimmed = doubleUrlMatch[1];
   }
 
-  // If the URL points to a /storage/<subpath>, check if the actual uploaded file is in our local storage bundle first
-  const anyStorageMatch = trimmed.match(/(?:^|\/)storage\/(.+)$/i);
-  if (anyStorageMatch?.[1]) {
-    const subPath = anyStorageMatch[1].replace(/^\/+/, "");
-    const bundledUri = resolveBundledStorageUri(subPath);
-    if (bundledUri) {
-      return bundledUri;
-    }
-  }
-
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
     // Rewrite any localhost or private LAN IP /storage/... URL to the active API_ORIGIN
     const storageMatch = trimmed.match(
@@ -114,10 +103,6 @@ export const resolveImageUrl = (
   const cleanRelative = trimmed
     .replace(/^\/?storage\/+/i, "")
     .replace(/^\/+/, "");
-  const bundledUri = resolveBundledStorageUri(cleanRelative);
-  if (bundledUri) {
-    return bundledUri;
-  }
   return `${API_ORIGIN}/storage/${cleanRelative}`;
 };
 

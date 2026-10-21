@@ -1,20 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Animated,
-  Dimensions,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { KeyboardAwareScrollView as ScrollView } from "@/components/common/KeyboardAwareScrollView";
+import { ActivityIndicator, Animated, Dimensions, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import AppInput from "@/components/common/AppInput";
 import PasswordInput from "@/components/common/PasswordInput";
@@ -22,7 +9,7 @@ import PrimaryButton from "@/components/common/PrimaryButton";
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Radius, Spacing } from "@/constants/theme";
 import { useAppToast } from "@/context/ToastContext";
-import { forgotPassword, resetPassword } from "@/features/auth/services/authService";
+import { forgotPassword, resetPassword, verifyOtp } from "@/features/auth/services/authService";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -216,14 +203,22 @@ export default function ForgotPasswordModal({
   };
 
   // Step 2: Validate OTP entered -> proceed to Step 3
-  const handleConfirmOtp = () => {
+  const handleConfirmOtp = async () => {
     const fullOtp = otp.join("");
     if (fullOtp.length !== 6) {
       setError("Please enter the complete 6-digit verification code.");
       return;
     }
-    setError("");
-    setStep(3);
+    try {
+      setLoading(true);
+      setError("");
+      await verifyOtp(email.trim().toLowerCase(), fullOtp);
+      setStep(3);
+    } catch (error: any) {
+      setError(error.response?.data?.message || "Invalid or expired code. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Step 3: Set new password and submit to backend
@@ -437,6 +432,7 @@ export default function ForgotPasswordModal({
                 <View style={styles.buttonWrap}>
                   <PrimaryButton
                     title="Confirm Code"
+                    loading={loading}
                     onPress={handleConfirmOtp}
                   />
                 </View>

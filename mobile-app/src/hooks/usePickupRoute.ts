@@ -32,24 +32,14 @@ export function usePickupRoute(
   destinationLng: number,
   explicitOrigin?: { latitude: number; longitude: number } | null,
 ) {
-  const [origin, setOrigin] = useState<{
+  const [gpsOrigin, setOrigin] = useState<{
     latitude: number;
     longitude: number;
   } | null>(explicitOrigin ?? null);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
 
-  // Sync if explicitOrigin changes
-  useEffect(() => {
-    if (
-      explicitOrigin &&
-      Number.isFinite(explicitOrigin.latitude) &&
-      Number.isFinite(explicitOrigin.longitude)
-    ) {
-      setOrigin(explicitOrigin);
-      setGpsError(null);
-    }
-  }, [explicitOrigin?.latitude, explicitOrigin?.longitude]);
+  const origin = explicitOrigin && Number.isFinite(explicitOrigin.latitude) && Number.isFinite(explicitOrigin.longitude) ? explicitOrigin : gpsOrigin;
 
   // Load saved location from storage if no explicit origin
   useEffect(() => {
@@ -235,7 +225,7 @@ export function usePickupRoute(
   const currentResult = result?.key === key ? result : null;
   const error = outside
     ? SERVICE_AREA_ERROR
-    : gpsError || currentResult?.error || null;
+    : (!explicitOrigin ? gpsError : null) || currentResult?.error || null;
 
   return {
     origin,

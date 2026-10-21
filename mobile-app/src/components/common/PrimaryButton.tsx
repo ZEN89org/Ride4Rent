@@ -23,6 +23,7 @@ interface Props {
   onPress: () => void;
 
   loading?: boolean;
+  loadingLabel?: string;
 
   disabled?: boolean;
 
@@ -37,6 +38,7 @@ export default function PrimaryButton({
   onPress,
 
   loading = false,
+  loadingLabel,
 
   disabled = false,
 
@@ -62,7 +64,7 @@ export default function PrimaryButton({
 
     >
 
-      {loading ? (
+      {loading && !loadingLabel ? (
 
         <ActivityIndicator color={Colors.dark} />
 
@@ -70,7 +72,7 @@ export default function PrimaryButton({
 
         <Text style={styles.text}>
 
-          {title}
+          {loading ? loadingLabel : title}
 
         </Text>
 

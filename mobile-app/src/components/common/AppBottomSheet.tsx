@@ -1,5 +1,6 @@
 import {
   ReactNode,
+  useContext,
   useCallback,
   useEffect,
   useMemo,
@@ -25,6 +26,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Colors } from "@/constants/colors";
 import { FontFamily } from "@/constants/theme";
+import { ToastOverlayContext } from "@/context/ToastOverlayContext";
+import { AppToast } from "./AppToast";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -73,6 +76,7 @@ export function AppBottomSheet({
   renderAsOverlay = false,
 }: AppBottomSheetProps) {
   const insets = useSafeAreaInsets();
+  const toast = useContext(ToastOverlayContext);
   const [mounted, setMounted] = useState(visible);
   // A newly opened sheet must render before its entry animation can run.
   if (visible && !mounted) setMounted(true);
@@ -262,6 +266,7 @@ export function AppBottomSheet({
           {children}
         </Animated.View>
       </WrapperComponent>
+      {toast ? <AppToast {...toast} /> : null}
     </View>
   );
 

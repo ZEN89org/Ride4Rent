@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { router, usePathname } from "expo-router";
+import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -29,8 +29,6 @@ export default function SideNav({
   const { isVisible, isSettled, animation, closeSideNav, closeImmediate } =
     useSideNav();
 
-  const pathname = usePathname();
-  const openedPathnameRef = useRef<string | null>(null);
   const navigatingRef = useRef(false);
 
   const { logout, user: authUser, isGuest: authIsGuest } = useAuth();
@@ -45,28 +43,8 @@ export default function SideNav({
   const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
-    if (isVisible) {
-      openedPathnameRef.current = pathname;
-      navigatingRef.current = false;
-    } else {
-      openedPathnameRef.current = null;
-      navigatingRef.current = false;
-    }
-  }, [isVisible, pathname]);
-
-  // Close the drawer silently in the background ONLY after the target screen has mounted
-  useEffect(() => {
-    if (
-      isVisible &&
-      openedPathnameRef.current !== null &&
-      pathname !== openedPathnameRef.current
-    ) {
-      const timer = setTimeout(() => {
-        closeImmediate();
-      }, 180);
-      return () => clearTimeout(timer);
-    }
-  }, [pathname, isVisible, closeImmediate]);
+    if (!isVisible) navigatingRef.current = false;
+  }, [isVisible]);
 
   useEffect(() => {
     if (!isVisible) return;
@@ -97,10 +75,8 @@ export default function SideNav({
       return;
     }
     navigatingRef.current = true;
+    closeImmediate();
     router.navigate(path as any);
-    setTimeout(() => {
-      navigatingRef.current = false;
-    }, 500);
   };
 
   const handleAccountPress = () => {

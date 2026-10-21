@@ -3,6 +3,7 @@ import {
   ReactNode,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -11,6 +12,8 @@ import {
   Dimensions,
   Easing,
 } from "react-native";
+import { usePathname } from "expo-router";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 
 const { width } = Dimensions.get("window");
 
@@ -36,9 +39,18 @@ interface SideNavProviderProps {
 }
 
 export function SideNavProvider({ children }: SideNavProviderProps) {
+  const pathname = usePathname();
+  const { token } = useAuth();
   const [isVisible, setIsVisible] = useState(false);
   const [isSettled, setIsSettled] = useState(false);
   const [animation] = useState(() => new Animated.Value(0));
+  const [navigationScope, setNavigationScope] = useState({ pathname, token });
+  // Reset before children render so a returning screen cannot flash an old drawer.
+  if (navigationScope.pathname !== pathname || navigationScope.token !== token) {
+    setNavigationScope({ pathname, token });
+    setIsVisible(false);
+    setIsSettled(false);
+  }
 
   const openSideNav = useCallback(() => {
     animation.stopAnimation();
@@ -80,6 +92,13 @@ export function SideNavProvider({ children }: SideNavProviderProps) {
   }, [animation]);
 
   const closeImmediate = useCallback(() => closeSideNav(true), [closeSideNav]);
+
+  // The provider survives screen changes, so drawer state must not follow the
+  // user into a new route or a different authenticated session.
+  useEffect(() => {
+    animation.stopAnimation();
+    animation.setValue(0);
+  }, [pathname, token, animation]);
 
   const actionsValue = useMemo<SideNavActionsContextType>(
     () => ({

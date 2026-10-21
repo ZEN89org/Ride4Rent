@@ -1,5 +1,6 @@
 # Ignore dependencies and unnecessary build artifacts
 node_modules/
+.tmp/
 .expo/
 dist/
 web-build/

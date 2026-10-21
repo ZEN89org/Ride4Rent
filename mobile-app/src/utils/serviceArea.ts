@@ -40,11 +40,12 @@ export function isInServiceArea(latitude: number, longitude: number): boolean {
 
 /** Draw a passive outline without changing map gestures or the viewport. */
 export const serviceAreaMapScript = (mapName: string) => `
-  L.geoJSON(${JSON.stringify(boundary)}, {
+  var r4rOutline = L.geoJSON(${JSON.stringify(boundary)}, {
     style: {color: '#FEC103', weight: 3, fill: false},
     interactive: false,
     smoothFactor: 2
   }).addTo(${mapName});
+  window.r4rMindoroBounds = r4rOutline.getBounds();
   L.control.attribution({prefix: false}).addTo(${mapName}).addAttribution('Boundary: NAMRIA / PSA / OCHA, geoBoundaries (CC BY 3.0 IGO)');
 `;
 
@@ -55,7 +56,7 @@ export const serviceAreaMapScript = (mapName: string) => `
  * - Restricts panning to the province bounds and prevents zooming out past it.
  * - Exposes `window.r4rIsInServiceArea(lat, lng)` and `window.r4rMindoroBounds`.
  */
-export const serviceAreaLockScript = (mapName: string) => `
+export const serviceAreaLockScript = (mapName: string, lockViewport = true) => `
   (function () {
     var R4R_BOUNDARY = ${JSON.stringify(boundary)};
     var geom = R4R_BOUNDARY.geometry;
@@ -106,6 +107,7 @@ export const serviceAreaLockScript = (mapName: string) => `
 
     var bounds = outline.getBounds();
     window.r4rMindoroBounds = bounds;
+    ${lockViewport ? `
     ${mapName}.setMaxBounds(bounds.pad(0.08));
     ${mapName}.options.maxBoundsViscosity = 1.0;
 
@@ -115,6 +117,8 @@ export const serviceAreaLockScript = (mapName: string) => `
     }
     applyMinZoom();
     setTimeout(applyMinZoom, 300);
+
+    ` : ""}
 
     L.control.attribution({ prefix: false }).addTo(${mapName})
       .addAttribution('Boundary: NAMRIA / PSA / OCHA, geoBoundaries (CC BY 3.0 IGO)');

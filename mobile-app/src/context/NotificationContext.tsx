@@ -14,9 +14,8 @@ import {
   AppNotification,
 } from "@/services/notificationService";
 import { getMyBookings } from "@/services/bookingService";
+import { registerPushDevice } from "@/services/pushRegistration";
 import {
-  setupNotificationChannel,
-  requestDeviceNotificationPermission,
   triggerDeviceNotification,
   registerNotificationTapListener,
   cancelAllBookingReminders,
@@ -69,9 +68,6 @@ export function NotificationProvider({
   });
 
   useEffect(() => {
-    setupNotificationChannel()
-      .then(() => requestDeviceNotificationPermission())
-      .catch(() => {});
     return registerNotificationTapListener();
   }, []);
 
@@ -87,11 +83,11 @@ export function NotificationProvider({
           session.knownIds.add(String(notification.id)),
         );
         session.initialized = true;
-        if (userRole !== "operator") {
+        {
           getMyBookings()
             .then((bookings) => {
               if (feedSession.current === session)
-                return syncBookingsReminders(bookings);
+                return syncBookingsReminders(bookings, userRole);
             })
             .catch(() => {});
         }
@@ -135,6 +131,7 @@ export function NotificationProvider({
       return;
     }
     let active = true;
+    void registerPushDevice();
     fetchNotificationFeed()
       .then((feed) => {
         if (active) return receiveFeed(feed);

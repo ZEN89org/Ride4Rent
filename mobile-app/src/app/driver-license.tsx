@@ -1,14 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useState } from "react";
-import {
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { KeyboardAwareScrollView as ScrollView } from "@/components/common/KeyboardAwareScrollView";
+import { AppState, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 
@@ -20,6 +14,7 @@ import { useAppToast } from "@/context/ToastContext";
 import { useNotificationCount } from "@/context/NotificationContext";
 import { resolveImageUrl } from "@/services/api";
 import { uploadDriversLicense } from "@/services/profileService";
+import { diagnoseLicensePhoto } from "@/services/licenseDiagnostics";
 
 export default function DriverLicenseScreen() {
   const { user, isGuest, updateUser, refreshUser } = useAuth();
@@ -27,44 +22,30 @@ export default function DriverLicenseScreen() {
   const { refreshUnreadCount } = useNotificationCount();
 
   const [frontDraft, setFrontImage] = useState<string | null>(null);
-  const frontImage = frontDraft ?? resolveImageUrl(user?.drivers_license_front);
+  const frontImage = frontDraft ?? resolveImageUrl(user?.drivers_license_front_url || user?.drivers_license_front);
   const [backDraft, setBackImage] = useState<string | null>(null);
-  const backImage = backDraft ?? resolveImageUrl(user?.drivers_license_back);
+  const backImage = backDraft ?? resolveImageUrl(user?.drivers_license_back_url || user?.drivers_license_back);
   const [uploading, setUploading] = useState(false);
+
+  const [editing, setEditing] = useState(false);
+  const [imageRevision, setImageRevision] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
+      if (isGuest) return;
       let active = true;
-      const runSync = () => {
-        if (!active) return;
-        refreshUser?.().then((latestUser) => {
-          if (!active) return;
-          if (latestUser?.drivers_license_front) {
-            setFrontImage(resolveImageUrl(latestUser.drivers_license_front));
-          }
-          if (latestUser?.drivers_license_back) {
-            setBackImage(resolveImageUrl(latestUser.drivers_license_back));
-          }
-        });
+      const refresh = async () => {
+        // Server URLs expire. Never store them in the local image-picker drafts.
+        await refreshUser?.();
+        if (active) setImageRevision((previous) => previous + 1);
       };
-
-      const idleId =
-        typeof requestIdleCallback === "function"
-          ? requestIdleCallback(runSync)
-          : setTimeout(runSync, 150);
-
-      return () => {
-        active = false;
-        if (
-          typeof cancelIdleCallback === "function" &&
-          typeof idleId === "number"
-        ) {
-          cancelIdleCallback(idleId);
-        } else {
-          clearTimeout(idleId as any);
-        }
-      };
-    }, [refreshUser]),
+      void refresh();
+      const interval = setInterval(() => void refresh(), 10 * 60 * 1000);
+      const subscription = AppState.addEventListener("change", (state) => {
+        if (state === "active") void refresh();
+      });
+      return () => { active = false; clearInterval(interval); subscription.remove(); };
+    }, [refreshUser, isGuest]),
   );
 
   const isVerified =
@@ -83,7 +64,8 @@ export default function DriverLicenseScreen() {
 
   const isPending = verificationStatus === "pending";
   const isRejected = verificationStatus === "rejected";
-  const canEdit = !isVerified;
+  const hasLicense = Boolean(user?.drivers_license_front || user?.drivers_license_back);
+  const canEdit = (editing || !hasLicense) && !uploading;
 
   const statusInfo = isVerified
     ? {
@@ -98,7 +80,7 @@ export default function DriverLicenseScreen() {
           color: "#92400E",
           bg: "#FEF3C7",
           subtext:
-            "Submitted for administrator review. Approval is required when booking verification is enabled.",
+            "Submitted for operator review. Your operator will check the latest photos when reviewing your booking.",
         }
       : isRejected
         ? {
@@ -118,13 +100,7 @@ export default function DriverLicenseScreen() {
           };
 
   const handlePickImage = async (side: "front" | "back") => {
-    if (isVerified) {
-      showError(
-        "Already Verified",
-        "Your driver's license is already verified and approved.",
-      );
-      return;
-    }
+    if (!canEdit) return;
 
     try {
       const permission =
@@ -155,28 +131,23 @@ export default function DriverLicenseScreen() {
   };
 
   const handleSubmit = async () => {
-    if (isVerified) {
-      showSuccess("Verified", "Your driver's license is already verified.");
-      return;
-    }
-
-    if (!frontImage || !backImage) {
-      showError(
-        "Missing License Photo",
-        "Please upload both the Front and Back sides of your driver's license.",
-      );
+    if (!frontDraft || !backDraft) {
+      showError("Select Both Photos", "Choose a new front and back photo before saving your license.");
       return;
     }
 
     try {
       setUploading(true);
-      const updatedUser = await uploadDriversLicense(frontImage, backImage);
+      const updatedUser = await uploadDriversLicense(frontDraft, backDraft);
       await updateUser(updatedUser);
+      setFrontImage(null);
+      setBackImage(null);
+      setEditing(false);
       await refreshUser?.();
       await refreshUnreadCount().catch(() => {});
       showSuccess(
         "License Saved",
-        "Driver's license saved! An administrator will review your documents.",
+        "Driver's license saved! An operator will review your documents.",
       );
       router.back();
     } catch (e: any) {
@@ -279,7 +250,7 @@ export default function DriverLicenseScreen() {
           <View style={styles.cardBlock}>
             <View style={styles.cardHeaderRow}>
               <Text style={styles.cardLabel}>Front Side</Text>
-              {frontImage && <Text style={styles.readyTag}>Uploaded</Text>}
+              {frontImage && <Text style={styles.readyTag}>{frontDraft ? "Selected" : "Uploaded"}</Text>}
             </View>
 
             <TouchableOpacity
@@ -294,9 +265,13 @@ export default function DriverLicenseScreen() {
               {frontImage ? (
                 <View style={styles.imageWrapper}>
                   <Image
+                    key={`front-${imageRevision}-${frontImage}`}
                     source={{ uri: frontImage }}
                     style={styles.licenseImage}
-                    resizeMode="cover"
+                    resizeMode="contain"
+                    onError={() => {
+                      void diagnoseLicensePhoto("front", frontImage);
+                    }}
                   />
                   {canEdit && (
                     <View style={styles.changePill}>
@@ -327,7 +302,7 @@ export default function DriverLicenseScreen() {
           <View style={styles.cardBlock}>
             <View style={styles.cardHeaderRow}>
               <Text style={styles.cardLabel}>Back Side</Text>
-              {backImage && <Text style={styles.readyTag}>Uploaded</Text>}
+              {backImage && <Text style={styles.readyTag}>{backDraft ? "Selected" : "Uploaded"}</Text>}
             </View>
 
             <TouchableOpacity
@@ -342,9 +317,13 @@ export default function DriverLicenseScreen() {
               {backImage ? (
                 <View style={styles.imageWrapper}>
                   <Image
+                    key={`back-${imageRevision}-${backImage}`}
                     source={{ uri: backImage }}
                     style={styles.licenseImage}
-                    resizeMode="cover"
+                    resizeMode="contain"
+                    onError={() => {
+                      void diagnoseLicensePhoto("back", backImage);
+                    }}
                   />
                   {canEdit && (
                     <View style={styles.changePill}>
@@ -372,24 +351,21 @@ export default function DriverLicenseScreen() {
           </View>
         </View>
 
-        {/* Action Button */}
-        {!isVerified && (
-          <View style={styles.buttonContainer}>
-            <PrimaryButton
-              title={
-                uploading
-                  ? "Saving..."
-                  : isRejected
-                    ? "Re-upload License"
-                    : user?.drivers_license_front
-                      ? "Update License"
-                      : "Save License"
-              }
-              onPress={handleSubmit}
-              loading={uploading}
-            />
-          </View>
-        )}
+        <View style={styles.buttonContainer}>
+          {hasLicense && !editing ? (
+            <PrimaryButton title="Update License" onPress={() => setEditing(true)} />
+          ) : (
+            <>
+              <Text style={[styles.pageSubtext, { marginBottom: 12 }]}>Select both sides of your license. Saved updates will be reviewed by the operator.</Text>
+              <PrimaryButton title={hasLicense ? "Save Updated License" : "Save License"} onPress={handleSubmit} loading={uploading} />
+              {hasLicense && (
+                <TouchableOpacity disabled={uploading} onPress={() => { setFrontImage(null); setBackImage(null); setEditing(false); }} style={{ alignItems: "center", padding: 14 }}>
+                  <Text style={{ fontFamily: FontFamily.semiBold, color: Colors.secondary }}>Cancel</Text>
+                </TouchableOpacity>
+              )}
+            </>
+          )}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );

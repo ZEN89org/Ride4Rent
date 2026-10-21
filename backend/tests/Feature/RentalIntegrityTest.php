@@ -27,6 +27,17 @@ class RentalIntegrityTest extends TestCase
 
     private Booking $booking;
 
+    public function test_maintenance_vehicle_stays_visible_but_cannot_be_booked(): void
+    {
+        $this->vehicle->update(['availability_status' => 'maintenance', 'is_active' => true]);
+        $this->booking->update(['status' => 'completed']);
+        $response = $this->getJson('/api/v1/vehicles')->assertOk();
+        $visible = collect($response->json('data'))->firstWhere('id', $this->vehicle->id);
+        $this->assertNotNull($visible); $this->assertSame('maintenance', $visible['availability_status']); $this->assertFalse($visible['is_available']);
+        $this->actingAs($this->renter, 'sanctum')->postJson('/api/v1/bookings', ['vehicle_id' => $this->vehicle->id, 'start_date' => today()->addDay()->toDateString(), 'end_date' => today()->addDays(3)->toDateString()])->assertUnprocessable()->assertJsonPath('message', 'This vehicle is under maintenance and cannot be booked yet.');
+        $this->assertSame('maintenance', $this->vehicle->fresh()->availability_status);
+    }
+
     public function test_early_return_approval_keeps_charges_inventory_and_gps_until_inspection(): void
     {
         $this->booking->update(['status' => 'ongoing', 'return_at' => now()->addDays(2), 'rental_paid_amount' => 1200, 'start_mileage' => 100]);
@@ -49,6 +60,8 @@ class RentalIntegrityTest extends TestCase
         $this->assertSame('200.00', $current->reservation_fee);
         $this->assertSame('1200.00', $current->rental_paid_amount);
         $this->assertTrue($current->return_at->equalTo($current->booked_return_at));
+        $this->assertSame('maintenance', $this->vehicle->fresh()->availability_status);
+        $this->patchJson('/api/v1/operator/vehicles/'.$this->vehicle->id, ['availability_status' => 'available'])->assertOk();
         $this->assertSame('available', $this->vehicle->fresh()->availability_status);
         $this->assertNull($current->early_return_refund_recorded_at);
         $this->actingAs($this->renter, 'sanctum')->postJson($url.'/location', ['latitude' => 13.0453, 'longitude' => 121.4878])->assertUnprocessable();

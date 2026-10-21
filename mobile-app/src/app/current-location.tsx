@@ -1,3 +1,4 @@
+import { useMapSheetGesture } from "@/hooks/useMapSheetGesture";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { router, useLocalSearchParams } from "expo-router";
@@ -6,7 +7,6 @@ import {
   ActivityIndicator,
   Alert,
   AppState,
-  LayoutAnimation,
   Linking,
   Platform,
   StyleSheet,
@@ -57,6 +57,7 @@ export default function CurrentLocation() {
     "streets",
   );
   const [isSheetExpanded, setIsSheetExpanded] = useState(true);
+  const sheetPanHandlers = useMapSheetGesture(setIsSheetExpanded);
   const [region, setRegion] = useState<LocationData | null>(null);
   const [mapInitialRegion, setMapInitialRegion] = useState<LocationData | null>(
     null,
@@ -71,10 +72,6 @@ export default function CurrentLocation() {
   const outsideBannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const geocodeRequest = useRef(0);
 
-  const toggleSheet = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setIsSheetExpanded((prev) => !prev);
-  };
 
   const showOutsideError = () => {
     setOutsideBanner(true);
@@ -955,15 +952,11 @@ export default function CurrentLocation() {
         ]}
       >
         {/* Handle for drag/toggle */}
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={toggleSheet}
-          style={styles.sheetHandleTouch}
-        >
+        <View {...sheetPanHandlers} style={styles.sheetHandleTouch} accessible accessibilityLabel="Swipe up to expand location details or down to collapse">
           <View style={styles.sheetHandle} />
-        </TouchableOpacity>
+        </View>
 
-        <TouchableOpacity activeOpacity={0.9} onPress={toggleSheet}>
+        <View>
           <Text style={styles.sheetStreetText} numberOfLines={1}>
             {getAddressText()}
           </Text>
@@ -972,7 +965,7 @@ export default function CurrentLocation() {
               {getCityText()}
             </Text>
           )}
-        </TouchableOpacity>
+        </View>
 
         {isSheetExpanded && (
           <View style={styles.sheetExpandedContent}>

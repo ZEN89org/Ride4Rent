@@ -1,19 +1,9 @@
+import { useCall } from "@/context/CallContext";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
-import {
-  Dimensions,
-  Image,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { KeyboardAwareScrollView as ScrollView } from "@/components/common/KeyboardAwareScrollView";
+import { Dimensions, useWindowDimensions, Image, Modal, Platform, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppBottomSheet } from "@/components/common/AppBottomSheet";
@@ -39,8 +29,11 @@ import { createBooking, getMyBookings } from "@/services/bookingService";
 import { scheduleBookingReminders } from "@/services/deviceNotificationService";
 
 export default function VehicleDetailsScreen() {
+  const { height: screenHeight } = useWindowDimensions();
+  const [showBookingPolicies, setShowBookingPolicies] = useState(false);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user, isGuest } = useAuth();
+  const { startCall } = useCall();
   const { isFavorite, toggleFavorite } = useFavorites();
   const { showSuccess, showError, showWarning, showModal } = useAppToast();
 
@@ -87,7 +80,6 @@ export default function VehicleDetailsScreen() {
   const [secondaryDriverPhone, setSecondaryDriverPhone] = useState("");
 
   // Operator vehicle management state
-  const [deleting, setDeleting] = useState(false);
 
   const loadVehicle = () => {
     setLoadedId(null);
@@ -133,39 +125,6 @@ export default function VehicleDetailsScreen() {
     user?.role === "operator" &&
     ((vehicle as any)?.operator_id === user?.id ||
       (vehicle as any)?.operator?.id === user?.id);
-
-  const handleDeleteVehicle = () => {
-    showModal(
-      "Delete Listing",
-      "Are you sure you want to remove this vehicle from your fleet?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setDeleting(true);
-              await api.delete(`/operator/vehicles/${vehicle?.id}`);
-              showSuccess(
-                "Listing Removed",
-                "Vehicle deleted from your fleet.",
-              );
-              router.replace("/operator-vehicles" as any);
-            } catch (e: any) {
-              showError(
-                "Error",
-                e.response?.data?.message || "Could not delete vehicle.",
-              );
-            } finally {
-              setDeleting(false);
-            }
-          },
-        },
-      ],
-      "confirm",
-    );
-  };
 
   const handleToggleAvailability = async () => {
     if (!vehicle) return;
@@ -429,6 +388,8 @@ export default function VehicleDetailsScreen() {
         vehicle_id: vehicle.id,
         start_date: startDateStr,
         end_date: endDateStr,
+        pickup_time: selectedStartTime,
+        return_time: selectedEndTime,
         notes: bookingNotes.trim()
           ? `${bookingNotes.trim()} • Schedule: ${selectedStartTime} pickup → ${selectedEndTime} return`
           : `Schedule: ${selectedStartTime} pickup → ${selectedEndTime} return`,
@@ -517,7 +478,7 @@ export default function VehicleDetailsScreen() {
         </TouchableOpacity>
 
         <Text style={styles.headerTitle} numberOfLines={1}>
-          {isOwner ? "Manage Vehicle" : vehicle.name}
+          {isOwner ? "Vehicle Preview" : vehicle.name}
         </Text>
 
         {!isOwner ? (
@@ -535,15 +496,7 @@ export default function VehicleDetailsScreen() {
               color={isFav ? Colors.primary : Colors.dark}
             />
           </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={styles.circleButton}
-            onPress={handleDeleteVehicle}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="trash-outline" size={20} color={Colors.error} />
-          </TouchableOpacity>
-        )}
+        ) : <View style={{ width: 38 }} />}
       </View>
 
       <ScrollView
@@ -618,7 +571,7 @@ export default function VehicleDetailsScreen() {
                 <Text style={styles.statusTagText}>
                   {vehicle.availability_status === "available"
                     ? "Available"
-                    : "Unavailable / Rented"}
+                    : vehicle.availability_status === "maintenance" ? "Under Maintenance" : "Unavailable / Rented"}
                 </Text>
               </View>
 
@@ -884,25 +837,13 @@ export default function VehicleDetailsScreen() {
             </View>
             <View style={styles.breakdownRow}>
               <Text style={styles.breakdownLabel}>
-                Required Reservation Fee
+                Reservation Fee (50% of selected rental)
               </Text>
               <Text style={[styles.breakdownValue, { color: Colors.primary }]}>
-                ₱{Number(vehicle.reservation_fee || 500).toLocaleString()}
+                ₱{(Math.round(Number(vehicle.price_per_day) * Math.max(1, Math.round((selectedEndDate.getTime() - selectedStartDate.getTime()) / 86400000)) * 50) / 100).toLocaleString()}
               </Text>
             </View>
-            <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>
-                Remaining Balance on Handover
-              </Text>
-              <Text style={styles.breakdownValue}>
-                ₱
-                {Math.max(
-                  0,
-                  Number(vehicle.price_per_day) -
-                    Number(vehicle.reservation_fee || 500),
-                ).toLocaleString()}
-              </Text>
-            </View>
+
           </View>
 
           {/* Rental Requirements & Policies */}
@@ -920,9 +861,14 @@ export default function VehicleDetailsScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.policyTitle}>Driver Requirements</Text>
                 <Text style={styles.policyDesc}>
-                  Age {vehicle.min_driver_age || 21}+ with valid Philippine or
-                  International Driver&apos;s License and 1 secondary ID.
+                  Valid, unexpired driver’s license with clear front and back details.
                 </Text>
+                {Number(vehicle.min_driver_age) > 0 && (
+                  <Text style={[styles.policyDesc, { marginTop: 6 }]}>Minimum driver age for this vehicle: {vehicle.min_driver_age}.</Text>
+                )}
+                {vehicle.min_driving_experience && (
+                  <Text style={[styles.policyDesc, { marginTop: 4 }]}>Driving experience: {/^\d+(\.\d+)?$/.test(String(vehicle.min_driving_experience)) ? `${vehicle.min_driving_experience} year(s)` : vehicle.min_driving_experience}.</Text>
+                )}
               </View>
             </View>
 
@@ -1000,7 +946,7 @@ export default function VehicleDetailsScreen() {
                   params: {
                     type: "pickup",
                     mode: "pickup",
-                    title: "Pickup & Garage Location",
+                    title: "Pickup Location",
                     vehicleName: vehicle.name,
                     address: addressToUse,
                     latitude: String(finalLat),
@@ -1096,87 +1042,7 @@ export default function VehicleDetailsScreen() {
             </View>
           )}
 
-          {/* Operator Controls or Renter Host Section */}
-          {isOwner ? (
-            <View style={styles.ownerControlsCard}>
-              <Text style={styles.ownerTitle}>Operator Management Actions</Text>
-
-              {vehicle.is_rented && (
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    backgroundColor: "#FEF3C7",
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
-                    borderRadius: 8,
-                    marginBottom: 12,
-                    gap: 8,
-                  }}
-                >
-                  <Ionicons name="lock-closed" size={16} color="#D97706" />
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      color: "#92400E",
-                      flex: 1,
-                      fontFamily: FontFamily?.medium || undefined,
-                    }}
-                  >
-                    This vehicle is currently on an active rental trip.
-                    Availability cannot be manually altered until the booking
-                    completes.
-                  </Text>
-                </View>
-              )}
-
-              <View style={styles.ownerButtonsRow}>
-                <TouchableOpacity
-                  style={[
-                    styles.ownerBtn,
-                    { backgroundColor: Colors.inputBackground },
-                    vehicle.is_rented && { opacity: 0.5 },
-                  ]}
-                  onPress={handleToggleAvailability}
-                  disabled={vehicle.is_rented}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons
-                    name={vehicle.is_rented ? "lock-closed" : "swap-horizontal"}
-                    size={16}
-                    color={Colors.dark}
-                  />
-                  <Text style={styles.ownerBtnText}>
-                    {vehicle.is_rented
-                      ? "Currently Rented"
-                      : vehicle.availability_status === "available"
-                        ? "Set Unavailable"
-                        : "Set Available"}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.ownerBtn,
-                    { backgroundColor: "#FEF2F2" },
-                    vehicle.is_rented && { opacity: 0.5 },
-                  ]}
-                  onPress={handleDeleteVehicle}
-                  disabled={vehicle.is_rented || deleting}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons
-                    name="trash-outline"
-                    size={16}
-                    color={Colors.error}
-                  />
-                  <Text style={[styles.ownerBtnText, { color: Colors.error }]}>
-                    Delete
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : (
+          {!isOwner && (
             <>
               {/* Operator / Location Info with Avatar & Chat Button */}
               <View style={styles.sectionDivider} />
@@ -1201,7 +1067,6 @@ export default function VehicleDetailsScreen() {
                   style={{
                     flexDirection: "row",
                     alignItems: "center",
-                    flex: 1,
                     gap: 12,
                     minWidth: 0,
                   }}
@@ -1248,6 +1113,7 @@ export default function VehicleDetailsScreen() {
                 </TouchableOpacity>
 
                 {operator?.id && (
+                  <View style={styles.hostContactActions}>
                   <TouchableOpacity
                     style={styles.chatHostButton}
                     onPress={() => {
@@ -1272,6 +1138,20 @@ export default function VehicleDetailsScreen() {
                     />
                     <Text style={styles.chatHostButtonText}>Message</Text>
                   </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.chatHostButton}
+                    accessibilityRole="button"
+                    accessibilityLabel="Call operator in app"
+                    onPress={() => {
+                      if (isGuest) { setShowAuthSheet(true); return; }
+                      void startCall({ id: Number(operator.id), name: operator.business_name || operator.name || "Host", role: "operator", profile_photo: operator.profile_photo });
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="call-outline" size={18} color={Colors.dark} />
+                    <Text style={styles.chatHostButtonText}>Call</Text>
+                  </TouchableOpacity>
+                  </View>
                 )}
               </View>
             </>
@@ -1337,7 +1217,7 @@ export default function VehicleDetailsScreen() {
               <Text style={styles.bookNowText}>
                 {vehicle.availability_status === "available"
                   ? "Book Vehicle"
-                  : "Currently Unavailable"}
+                  : vehicle.availability_status === "maintenance" ? "Under Maintenance" : "Currently Unavailable"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1359,29 +1239,38 @@ export default function VehicleDetailsScreen() {
         visible={showBookingModal}
         onClose={() => setShowBookingModal(false)}
         position="bottom"
-        showHandle={false}
-        sheetStyle={styles.modalCard}
+        showHandle={true}
+        sheetStyle={[styles.modalCard, { maxHeight: screenHeight * 0.92 }]}
         renderAsOverlay={true}
       >
         <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Select Trip Dates</Text>
-          <TouchableOpacity onPress={() => setShowBookingModal(false)}>
-            <Ionicons name="close-circle" size={24} color={Colors.secondary} />
+          <View style={styles.scheduleHeading}>
+            <View style={styles.scheduleHeadingIcon}><Ionicons name="calendar-outline" size={22} color={Colors.dark} /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.modalTitle}>Select Trip Dates</Text>
+              <Text style={styles.scheduleHint}>Plan your pickup and return</Text>
+            </View>
+          </View>
+          <TouchableOpacity style={styles.scheduleClose} onPress={() => setShowBookingModal(false)} accessibilityLabel="Close trip dates">
+            <Ionicons name="close" size={20} color={Colors.dark} />
           </TouchableOpacity>
         </View>
-
-        <Text style={styles.modalSubtitle}>
-          {vehicle.name} - ₱{Number(vehicle.price_per_day).toLocaleString()}/day
-        </Text>
 
         <ScrollView
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: Spacing.md }}
-          style={{ maxHeight: Dimensions.get("window").height * 0.65 }}
+          contentContainerStyle={styles.scheduleScrollContent}
+          style={{ flexShrink: 1, maxHeight: screenHeight * 0.56 }}
         >
           {/* Responsive Trip Date & Time Selection Cards & Modal (Images 1 & 2) */}
-          <Text style={styles.fieldLabel}>Pick Trip Schedule</Text>
+          <View style={styles.scheduleVehicle}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.scheduleVehicleName} numberOfLines={2}>{vehicle.name}</Text>
+              <Text style={styles.scheduleHint}>₱{Number(vehicle.price_per_day).toLocaleString()} per day</Text>
+            </View>
+            <View style={styles.scheduleDuration}><Ionicons name="time-outline" size={14} color={Colors.dark} /><Text style={styles.scheduleDurationText}>{tripDurationDays} {tripDurationDays === 1 ? "day" : "days"}</Text></View>
+          </View>
+          <Text style={styles.fieldLabel}>Your schedule</Text>
           <TripDateTimeSelector
             startDate={selectedStartDate}
             endDate={selectedEndDate}
@@ -1397,7 +1286,7 @@ export default function VehicleDetailsScreen() {
 
           {/* Quick Duration Shortcuts */}
           <Text style={[styles.fieldLabel, { marginTop: Spacing.sm }]}>
-            Quick Duration
+            Quick duration
           </Text>
           <View style={styles.pickerRow}>
             {[
@@ -1409,6 +1298,8 @@ export default function VehicleDetailsScreen() {
             ].map((opt) => (
               <TouchableOpacity
                 key={opt.days}
+                accessibilityRole="button"
+                accessibilityState={{ selected: tripDurationDays === opt.days }}
                 style={[
                   styles.pickerPill,
                   tripDurationDays === opt.days && styles.pickerPillActive,
@@ -1432,63 +1323,36 @@ export default function VehicleDetailsScreen() {
             ))}
           </View>
 
-          {/* Selected Date Summary */}
           <View style={styles.dateSummaryBox}>
-            <Ionicons name="calendar-outline" size={18} color={Colors.dark} />
+            <Ionicons name="calendar-outline" size={16} color={Colors.secondary} />
             <Text style={styles.dateSummaryText}>{displaySummary}</Text>
           </View>
 
-          {/* Minimal reservation fee summary */}
           <View style={styles.reservationSummaryCard}>
-            <View style={styles.reservationSummaryHeader}>
-              <View style={styles.reservationSummaryIcon}>
-                <Ionicons
-                  name="shield-checkmark-outline"
-                  size={18}
-                  color={Colors.dark}
-                />
-              </View>
-              <View style={styles.reservationSummaryHeading}>
-                <Text style={styles.reservationSummaryTitle}>
-                  Reservation fee
-                </Text>
-                <Text style={styles.reservationSummaryCaption}>
-                  Pay now via GCash only
-                </Text>
-              </View>
-              <Text style={styles.reservationDepositAmount}>
-                ₱{Number(vehicle.reservation_fee || 500).toLocaleString()}
-              </Text>
+            <Text style={styles.reservationSummaryTitle}>Price summary</Text>
+            <View style={styles.reservationSummaryRow}>
+              <Text style={styles.reservationSummaryLabel}>₱{Number(vehicle.price_per_day).toLocaleString()} × {tripDurationDays} {tripDurationDays === 1 ? "day" : "days"}</Text>
+              <Text style={styles.reservationSummaryValue}>₱{(Number(vehicle.price_per_day) * tripDurationDays).toLocaleString()}</Text>
             </View>
-
             <View style={styles.reservationSummaryDivider} />
-
             <View style={styles.reservationSummaryRow}>
-              <Text style={styles.reservationSummaryLabel}>
-                Rental total for {tripDurationDays}{" "}
-                {tripDurationDays === 1 ? "day" : "days"}
-              </Text>
-              <Text style={styles.reservationSummaryValue}>
-                ₱
-                {(
-                  Number(vehicle.price_per_day) * tripDurationDays
-                ).toLocaleString()}
-              </Text>
-            </View>
-            <View style={styles.reservationSummaryRow}>
-              <Text style={styles.reservationSummaryLabel}>
-                Balance at meetup
-              </Text>
-              <Text style={styles.reservationSummaryValue}>
-                ₱
-                {Math.max(
-                  0,
-                  Number(vehicle.price_per_day) * tripDurationDays -
-                    Number(vehicle.reservation_fee || 500),
-                ).toLocaleString()}
-              </Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.reservationSummaryTitle}>Reservation fee · 50%</Text>
+                <Text style={styles.reservationSummaryCaption}>Part of your rental total</Text>
+              </View>
+              <Text style={styles.reservationDepositAmount}>₱{(Math.round(Number(vehicle.price_per_day) * tripDurationDays * 50) / 100).toLocaleString()}</Text>
             </View>
           </View>
+          <View style={styles.schedulePaymentHint}>
+            <Ionicons name="wallet-outline" size={17} color={Colors.secondary} />
+            <Text style={[styles.schedulePolicyText, { flex: 1 }]}>50% via GCash, credited to your rental. Remaining 50% before pickup.</Text>
+          </View>
+          <Text style={styles.schedulePolicyText}>Early returns keep the agreed rental total. Unused days have no automatic refund; arrange handover and inspection with the operator.</Text>
+          <TouchableOpacity style={styles.schedulePolicyToggle} onPress={() => setShowBookingPolicies((current) => !current)} accessibilityRole="button" accessibilityState={{ expanded: showBookingPolicies }}>
+            <Text style={styles.schedulePolicyLink}>Extension & no-show policy</Text>
+            <Ionicons name={showBookingPolicies ? "chevron-up" : "chevron-down"} size={16} color={Colors.secondary} />
+          </TouchableOpacity>
+          {showBookingPolicies && <Text style={styles.schedulePolicyText}>Extensions are paid in full via GCash after approval. An approved booking without handover closes as a no-show 24 hours after scheduled pickup, and the reservation fee is retained. Contact support to request admin dispute review.</Text>}
 
           {/* Multi-Vehicle Rental Verification Notice */}
           {hasActiveTripOverlap && (
@@ -1537,16 +1401,16 @@ export default function VehicleDetailsScreen() {
             placeholder="Special requests or pickup preferences..."
           />
 
-          <View style={{ marginTop: Spacing.lg }}>
-            <PrimaryButton
-              title={
-                submittingBooking ? "Creating Booking..." : "Proceed to Payment"
-              }
-              onPress={handleConfirmReservation}
-              loading={submittingBooking}
-            />
-          </View>
         </ScrollView>
+        <View style={styles.scheduleFooter}>
+          <View>
+            <Text style={styles.reservationSummaryCaption}>Reservation · 50%</Text>
+            <Text style={styles.scheduleFooterAmount}>₱{(Math.round(Number(vehicle.price_per_day) * tripDurationDays * 50) / 100).toLocaleString()}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <PrimaryButton title={submittingBooking ? "Creating Booking..." : "Proceed to Payment"} onPress={handleConfirmReservation} loading={submittingBooking} />
+          </View>
+        </View>
       </AppBottomSheet>
 
       <AuthRequiredBottomSheet
@@ -1794,8 +1658,8 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
   operatorRow: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: "column",
+    alignItems: "stretch",
     backgroundColor: Colors.inputBackground,
     padding: Spacing.md,
     borderRadius: 16,
@@ -1893,12 +1757,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   reservationSummaryCard: {
-    backgroundColor: Colors.white,
-    borderColor: Colors.border,
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 14,
-    marginTop: 12,
+    backgroundColor: Colors.white, borderColor: Colors.border, borderWidth: 1,
+    borderRadius: 14, padding: 14, marginTop: 12,
   },
   reservationSummaryHeader: {
     flexDirection: "row",
@@ -1946,12 +1806,12 @@ const styles = StyleSheet.create({
   reservationSummaryLabel: {
     flex: 1,
     fontFamily: FontFamily.regular,
-    fontSize: 11,
+    fontSize: 13,
     color: Colors.secondary,
   },
   reservationSummaryValue: {
     fontFamily: FontFamily.semiBold,
-    fontSize: 12,
+    fontSize: 13,
     color: Colors.dark,
   },
   breakdownRow: {
@@ -2175,7 +2035,13 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: Spacing.sm,
   },
+  hostContactActions: {
+    flexDirection: "row",
+    gap: 10,
+  },
   chatHostButton: {
+    flex: 1,
+    justifyContent: "center",
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
@@ -2274,12 +2140,27 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "flex-end",
   },
+  scheduleHeading: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
+  scheduleHeadingIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: Colors.logoBackground, alignItems: "center", justifyContent: "center" },
+  scheduleHint: { fontFamily: FontFamily.regular, fontSize: 12, color: Colors.secondary, marginTop: 3 },
+  scheduleClose: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.inputBackground, alignItems: "center", justifyContent: "center" },
+  scheduleScrollContent: { paddingBottom: 18, gap: 4 },
+  scheduleVehicle: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, backgroundColor: "#F8FAFC", borderWidth: 1, borderColor: Colors.border, borderRadius: 16, marginTop: 16, marginBottom: 10 },
+  scheduleVehicleName: { fontFamily: FontFamily.semiBold, fontSize: 14, color: Colors.dark },
+  scheduleDuration: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.border, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 7 },
+  scheduleDurationText: { fontFamily: FontFamily.semiBold, fontSize: 12, color: Colors.dark },
+  schedulePaymentHint: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginTop: 12, paddingHorizontal: 2 },
+  schedulePolicyText: { fontFamily: FontFamily.regular, fontSize: 12, lineHeight: 18, color: Colors.secondary },
+  schedulePolicyToggle: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 12 },
+  schedulePolicyLink: { fontFamily: FontFamily.medium, fontSize: 12, color: Colors.dark },
+  scheduleFooter: { flexDirection: "row", alignItems: "center", gap: 16, borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 14 },
+  scheduleFooterAmount: { fontFamily: FontFamily.bold, fontSize: 20, color: Colors.dark, marginTop: 2 },
   modalCard: {
     backgroundColor: Colors.white,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.lg,
+    paddingTop: 8,
     paddingBottom: Platform.OS === "ios" ? 28 : 20,
     maxHeight: Dimensions.get("window").height * 0.85,
   },
@@ -2314,6 +2195,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   pickerPill: {
+    minHeight: 42,
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: Colors.border,
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 10,
@@ -2343,9 +2228,11 @@ const styles = StyleSheet.create({
     marginVertical: 6,
   },
   dateSummaryText: {
-    fontFamily: FontFamily.bold,
-    fontSize: 13,
-    color: Colors.dark,
+    flex: 1,
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+    color: Colors.secondary,
+    lineHeight: 18,
   },
   modalInput: {
     backgroundColor: Colors.inputBackground,

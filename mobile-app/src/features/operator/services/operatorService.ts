@@ -7,6 +7,7 @@ import {
   OperatorRevenueData,
   OperatorStatus,
   RevenueBookingItem,
+  SubmitRemittancePayload,
 } from "@/features/operator/types/operatorService";
 
 export const registerOperator = async (
@@ -340,3 +341,36 @@ export const resubmitOperatorDocuments = async (data: {
 
   return response.data;
 };
+
+export const submitRemittanceProof = async (
+  data: SubmitRemittancePayload
+): Promise<any> => {
+  const formData = new FormData();
+  formData.append("billing_month", data.billing_month);
+  formData.append("payment_method", data.payment_method);
+  formData.append("payment_reference", data.payment_reference);
+
+  if (data.receipt_image) {
+    const filename = data.receipt_image.split("/").pop() || "receipt.jpg";
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : `image/jpeg`;
+    formData.append("receipt_image", {
+      uri: data.receipt_image,
+      name: filename,
+      type: type,
+    } as any);
+  }
+
+  if (data.operator_notes) {
+    formData.append("operator_notes", data.operator_notes);
+  }
+
+  const response = await api.post("/operator/remittance", formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+
+  return response.data;
+};
+

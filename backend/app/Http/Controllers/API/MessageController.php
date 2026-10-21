@@ -11,6 +11,7 @@ use App\Models\Vehicle;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 
 class MessageController extends Controller
 {
@@ -22,12 +23,35 @@ class MessageController extends Controller
         $userId = $request->user()->id;
         $host = $request->getSchemeAndHttpHost();
 
-        $otherUserIds = Message::where('sender_id', $userId)
-            ->pluck('receiver_id')
-            ->merge(
-                Message::where('receiver_id', $userId)->pluck('sender_id')
-            )
-            ->unique();
+        // Select only this page of contacts before loading profiles and message previews.
+        $recent = DB::table('messages')->selectRaw('CASE WHEN sender_id = ? THEN receiver_id ELSE sender_id END AS contact_id, MAX(created_at) AS latest_at, MAX(id) AS latest_id', [$userId])
+            ->where(fn ($q) => $q->where('sender_id', $userId)->orWhere('receiver_id', $userId))
+            ->groupByRaw('CASE WHEN sender_id = ? THEN receiver_id ELSE sender_id END', [$userId]);
+        $contacts = DB::query()->fromSub($recent, 'recent')->join('users as contact', 'contact.id', '=', 'recent.contact_id')
+            ->leftJoin('conversation_states as state', function ($join) use ($userId) {
+                $join->on('state.other_user_id', '=', 'recent.contact_id')->where('state.user_id', $userId);
+            })->whereNull('state.deleted_at');
+        $archivedCount = (clone $contacts)->whereNotNull('state.archived_at')->count();
+        $paged = $request->has('page') || $request->has('limit');
+        if ($paged) {
+            $contacts->whereIn('contact.role', $request->user()->role === 'operator' ? ['customer', 'renter'] : ['operator']);
+            if ($request->input('folder') === 'archived') $contacts->whereNotNull('state.archived_at');
+            else $contacts->whereNull('state.archived_at');
+            $search = trim((string) $request->input('search', ''));
+            if ($search !== '') {
+                $contacts->where(function ($q) use ($search) {
+                    $q->whereRaw("LOWER(COALESCE(contact.first_name, '') || ' ' || COALESCE(contact.last_name, '')) LIKE ?", ['%'.mb_strtolower($search).'%'])
+                        ->orWhereExists(fn ($business) => $business->selectRaw('1')->from('operator_profiles')->whereColumn('operator_profiles.user_id', 'contact.id')->whereRaw('LOWER(business_name) LIKE ?', ['%'.mb_strtolower($search).'%']));
+                });
+            }
+        }
+        $contacts->orderByDesc('recent.latest_at')->orderByDesc('recent.latest_id');
+        $limit = min(max((int) $request->input('limit', 20), 1), 100);
+        $page = max(1, (int) $request->input('page', 1));
+        if ($paged) $contacts->offset(($page - 1) * $limit)->limit($limit + 1);
+        $rows = $contacts->get(['recent.contact_id']);
+        $hasMore = $paged && $rows->count() > $limit;
+        $otherUserIds = ($paged ? $rows->take($limit) : $rows)->pluck('contact_id');
         $conversationStates = ConversationState::where('user_id', $userId)
             ->whereIn('other_user_id', $otherUserIds)
             ->get()
@@ -103,6 +127,7 @@ class MessageController extends Controller
         return response()->json([
             'success' => true,
             'data' => collect($conversations)->sortBy([['last_message_at', 'desc'], ['last_message_id', 'desc']])->values(),
+            'has_more' => $hasMore, 'page' => $page, 'archived_count' => $archivedCount,
         ]);
     }
 
@@ -130,12 +155,10 @@ class MessageController extends Controller
         $limit = min(max((int) $request->input('limit', 40), 1), 100);
         $beforeId = $request->input('before_id');
 
-        $query = Message::where(function ($q) use ($userId, $otherUserId) {
-                $q->where('sender_id', $userId)->where('receiver_id', $otherUserId);
-            })
-            ->orWhere(function ($q) use ($userId, $otherUserId) {
-                $q->where('sender_id', $otherUserId)->where('receiver_id', $userId);
-            });
+        $query = Message::where(function ($pair) use ($userId, $otherUserId) {
+            $pair->where(fn ($q) => $q->where('sender_id', $userId)->where('receiver_id', $otherUserId))
+                ->orWhere(fn ($q) => $q->where('sender_id', $otherUserId)->where('receiver_id', $userId));
+        });
 
         if (!empty($beforeId) && is_numeric($beforeId)) {
             $query->where('id', '<', (int) $beforeId);
@@ -148,14 +171,7 @@ class MessageController extends Controller
         $earliestId = $rawMessages->last()?->id;
         $hasMore = false;
         if ($earliestId) {
-            $hasMore = Message::where(function ($q) use ($userId, $otherUserId) {
-                    $q->where('sender_id', $userId)->where('receiver_id', $otherUserId);
-                })
-                ->orWhere(function ($q) use ($userId, $otherUserId) {
-                    $q->where('sender_id', $otherUserId)->where('receiver_id', $userId);
-                })
-                ->where('id', '<', $earliestId)
-                ->exists();
+            $hasMore = (clone $query)->where('id', '<', $earliestId)->exists();
         }
 
         $messages = $rawMessages->reverse()->values()->map(function ($msg) use ($userId, $host) {

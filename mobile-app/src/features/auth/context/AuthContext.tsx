@@ -22,6 +22,7 @@ import {
   registerSessionExpiredHandler,
 } from "@/services/api";
 import { useAppToast } from "@/context/ToastContext";
+import { unregisterPushDevice } from "@/services/pushRegistration";
 
 interface AuthContextType {
   user: any;
@@ -34,6 +35,7 @@ interface AuthContextType {
   isOperatorPending: boolean;
   isOperatorActive: boolean;
   isOperatorRejected: boolean;
+  isOperatorFrozen: boolean;
   login: (user: any, token: string) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (user: any) => Promise<void>;
@@ -115,6 +117,7 @@ export function AuthProvider({ children }: Props) {
           const currentUser = normalizeApiImages(
             response?.data ?? response?.user,
           );
+          if (tokenRef.current !== storedToken) return;
 
           if (!currentUser) {
             throw new Error("Invalid user response.");
@@ -126,6 +129,7 @@ export function AuthProvider({ children }: Props) {
             setUser(currentUser);
           }
         } catch (error) {
+          if (tokenRef.current !== storedToken) return;
           console.log("Stored authentication is invalid. Clearing session.");
 
           await clearAuth();
@@ -168,6 +172,7 @@ export function AuthProvider({ children }: Props) {
   };
 
   const logout = async () => {
+    await unregisterPushDevice().catch((error) => console.warn("Could not unregister notification device:", error));
     try {
       await authService.logout();
     } catch (error) {
@@ -188,8 +193,11 @@ export function AuthProvider({ children }: Props) {
   };
 
   const refreshUser = useCallback(async () => {
+    const requestToken = tokenRef.current;
+    if (!requestToken) return null;
     try {
       const response = await authService.getCurrentUser();
+      if (tokenRef.current !== requestToken) return null;
       const currentUser = normalizeApiImages(response?.data ?? response?.user);
       if (currentUser) {
         setUser((prevUser: any) => {
@@ -207,6 +215,8 @@ export function AuthProvider({ children }: Props) {
               currentUser.drivers_license_front &&
             prevUser.drivers_license_back ===
               currentUser.drivers_license_back &&
+            prevUser.drivers_license_front_url === currentUser.drivers_license_front_url &&
+            prevUser.drivers_license_back_url === currentUser.drivers_license_back_url &&
             JSON.stringify(
               prevUser.operatorProfile || prevUser.operator_profile || {},
             ) ===
@@ -278,6 +288,8 @@ export function AuthProvider({ children }: Props) {
 
   const isOperatorRejected = isOperator && user?.account_status === "rejected";
 
+  const isOperatorFrozen = isOperator && Boolean(user?.is_frozen);
+
   return (
     <AuthContext.Provider
       value={{
@@ -291,6 +303,7 @@ export function AuthProvider({ children }: Props) {
         isOperatorPending,
         isOperatorActive,
         isOperatorRejected,
+        isOperatorFrozen,
         login,
         logout,
         updateUser,

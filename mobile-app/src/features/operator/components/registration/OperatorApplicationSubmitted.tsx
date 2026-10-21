@@ -1,14 +1,8 @@
-import { Ionicons } from "@expo/vector-icons";
-import { useEffect, useState } from "react";
-import {
-    Animated,
-    Dimensions,
-    Modal,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-} from "react-native";
+import { AppBottomSheet } from "@/components/common/AppBottomSheet";
+import RentalSheetHeader from "@/components/common/RentalSheetHeader";
+import { rentalSheetStyle } from "@/constants/rentalDesign";
+import { KeyboardAwareScrollView as ScrollView } from "@/components/common/KeyboardAwareScrollView";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import PrimaryButton from "@/components/common/PrimaryButton";
 import { Colors } from "@/constants/colors";
@@ -25,103 +19,17 @@ type OperatorApplicationSubmittedBottomSheetProps = {
   onBackToLogin: () => void;
 };
 
-const { height } = Dimensions.get("window");
 
 export default function OperatorApplicationSubmittedBottomSheet({
   visible,
   onExploreDashboard,
   onBackToLogin,
 }: OperatorApplicationSubmittedBottomSheetProps) {
-  const [translateY] = useState(
-    () => new Animated.Value(height)
-  );
-
-  const [backdropOpacity] = useState(
-    () => new Animated.Value(0)
-  );
-
-  useEffect(() => {
-    if (!visible) {
-      return;
-    }
-
-    translateY.setValue(height);
-    backdropOpacity.setValue(0);
-
-    Animated.parallel([
-      Animated.spring(translateY, {
-        toValue: 0,
-        useNativeDriver: true,
-        tension: 65,
-        friction: 11,
-      }),
-
-      Animated.timing(backdropOpacity, {
-        toValue: 1,
-        duration: 220,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [
-    visible,
-    translateY,
-    backdropOpacity,
-  ]);
-
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      statusBarTranslucent={true}
-      onRequestClose={() => {}}
-    >
-      <View style={styles.container}>
-        <Animated.View
-          style={[
-            styles.backdrop,
-            {
-              opacity: backdropOpacity,
-            },
-          ]}
-        />
-
-        <Animated.View
-          style={[
-            styles.sheet,
-            {
-              transform: [
-                {
-                  translateY,
-                },
-              ],
-            },
-          ]}
-        >
-          <View style={styles.handle} />
-
-          <View style={styles.iconContainer}>
-            <Ionicons
-              name="checkmark"
-              size={32}
-              color={Colors.primary}
-            />
-          </View>
-
-          <Text style={styles.title}>
-            Application Submitted!
-          </Text>
-
-          <Text style={styles.description}>
-            Thank you for registering as a Ride4Rent
-            Operator.
-          </Text>
-
-          <Text style={styles.description}>
-            Our team is reviewing your application to
-            ensure a safe and trusted marketplace.
-          </Text>
-
+    <AppBottomSheet visible={visible} onClose={() => {}} dismissOnBackdrop={false} sheetStyle={rentalSheetStyle}>
+      <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ paddingBottom: 12 }}>
+        <RentalSheetHeader title="Application Submitted" subtitle="Your operator account is under review." icon="checkmark-circle-outline" />
+          <Text style={styles.description}>We’ll review your permits and identification. You can preview your dashboard while waiting for verification.</Text>
           <View style={styles.reviewCard}>
             <Text style={styles.reviewLabel}>
               Estimated review time
@@ -129,13 +37,6 @@ export default function OperatorApplicationSubmittedBottomSheet({
 
             <Text style={styles.reviewTime}>
               12–24 Hours
-            </Text>
-          </View>
-
-          <View style={styles.previewModeBox}>
-            <Ionicons name="sparkles" size={16} color="#D97706" />
-            <Text style={styles.previewModeText}>
-              You can navigate and preview your Operator Dashboard now while waiting for verification.
             </Text>
           </View>
 
@@ -152,73 +53,23 @@ export default function OperatorApplicationSubmittedBottomSheet({
           >
             <Text style={styles.secondaryButtonText}>Back to Login</Text>
           </TouchableOpacity>
-        </Animated.View>
-      </View>
-    </Modal>
+      </ScrollView>
+    </AppBottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
 
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: "rgba(0, 0, 0, 0.45)",
-  },
 
-  sheet: {
-    backgroundColor: Colors.white,
-    borderTopLeftRadius: Radius.xl,
-    borderTopRightRadius: Radius.xl,
-    paddingHorizontal: Spacing.xl,
-    paddingTop: 12,
-    paddingBottom: 35,
-    elevation: 12,
 
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    shadowOffset: {
-      width: 0,
-      height: -4,
-    },
-  },
 
-  handle: {
-    alignSelf: "center",
-    width: 42,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: "#D9D9D9",
-    marginBottom: Spacing.xl,
-  },
 
-  iconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignSelf: "center",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FFF4E8",
-    marginBottom: Spacing.lg,
-  },
-
-  title: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.title,
-    color: Colors.dark,
-    textAlign: "center",
-  },
 
   description: {
     marginTop: Spacing.md,
     fontFamily: FontFamily.regular,
-    fontSize: FontSize.body,
-    lineHeight: 23,
+    fontSize: 13,
+    lineHeight: 21,
     color: Colors.secondary,
     textAlign: "center",
   },
@@ -229,7 +80,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     borderRadius: Radius.md,
     backgroundColor: "#F7F7F7",
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
 
   reviewLabel: {
@@ -245,26 +101,7 @@ const styles = StyleSheet.create({
     color: Colors.dark,
   },
 
-  previewModeBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: Spacing.md,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    backgroundColor: "#FEF3C7",
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: "#FDE68A",
-  },
 
-  previewModeText: {
-    flex: 1,
-    fontFamily: FontFamily.medium,
-    fontSize: 12,
-    color: "#92400E",
-    lineHeight: 16,
-  },
 
   button: {
     marginTop: Spacing.lg,

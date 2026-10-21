@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
 
 import PrimaryButton from "@/components/common/PrimaryButton";
@@ -102,7 +102,7 @@ async function reverseGeocodeLocation(
   const expoResults = await Location.reverseGeocodeAsync({
     latitude: lat,
     longitude: lng,
-  });
+  }).catch(() => []);
   if (expoResults && expoResults.length > 0) {
     const item = expoResults[0];
     street = [item.streetNumber, item.street].filter(Boolean).join(" ");
@@ -111,7 +111,11 @@ async function reverseGeocodeLocation(
     fullText =
       item.formattedAddress ||
       `${street}, ${rawDistrict}, ${rawCity}`.replace(/^, |, $/g, "");
-  } else {
+  }
+  if (!rawDistrict || /[23456789CFGHJMPQRVWX]{2,8}\+[23456789CFGHJMPQRVWX]{2,}/i.test(rawDistrict) || /[23456789CFGHJMPQRVWX]{2,8}\+[23456789CFGHJMPQRVWX]{2,}/i.test(fullText)) {
+    rawDistrict = "";
+    fullText = [street, rawCity].filter(Boolean).join(", ");
+    // Fall back to a readable street / municipality if no barangay is available.
     // Fallback to OpenStreetMap Nominatim
     const resp = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
@@ -174,6 +178,7 @@ function MapLocationPickerSession({
   initialMunicipality,
   onConfirm,
 }: MapLocationPickerProps) {
+  const insets = useSafeAreaInsets();
   const webViewRef = useRef<WebView>(null);
 
   const muniCoords =
@@ -195,6 +200,7 @@ function MapLocationPickerSession({
     ? candidateLng
     : DEFAULT_ORIENTAL_MINDORO.longitude;
   const [outsideAttempt, setOutsideAttempt] = useState(false);
+  const [detailsHeight, setDetailsHeight] = useState(210);
   const [outsideBanner, setOutsideBanner] = useState(false);
   const outsideBannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -379,7 +385,7 @@ function MapLocationPickerSession({
     }
     .layer-selector {
       position: absolute;
-      top: 12px;
+      top: 125px;
       right: 12px;
       z-index: 1000;
       display: flex;
@@ -515,7 +521,7 @@ function MapLocationPickerSession({
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <SafeAreaView edges={["top", "bottom"]} style={styles.container}>
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { top: Math.max(insets.top + 8, 16) }]}>
           <TouchableOpacity
             onPress={onClose}
             style={styles.headerBtn}
@@ -546,7 +552,7 @@ function MapLocationPickerSession({
 
           {/* Floating Current Location Button */}
           <TouchableOpacity
-            style={styles.currentLocationBtn}
+            style={[styles.currentLocationBtn, { bottom: detailsHeight + 14 }]}
             onPress={handleUseCurrentLocation}
             disabled={locating}
             activeOpacity={0.8}
@@ -574,7 +580,7 @@ function MapLocationPickerSession({
         </View>
 
         {/* Bottom Location Details Card */}
-        <View style={styles.bottomCard}>
+        <View style={styles.bottomCard} onLayout={(event) => setDetailsHeight(event.nativeEvent.layout.height)}>
           {outsideAttempt && (
             <Text
               accessibilityRole="alert"
@@ -640,6 +646,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
   },
   header: {
+    position: "absolute", top: 48, left: 16, right: 16, zIndex: 20, borderRadius: 20,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -670,8 +677,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   mapWrap: {
-    flex: 1,
-    position: "relative",
+    ...StyleSheet.absoluteFill,
   },
   map: {
     flex: 1,
@@ -693,6 +699,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   bottomCard: {
+    position: "absolute", bottom: 0, left: 0, right: 0,
     backgroundColor: Colors.white,
     padding: Spacing.lg,
     borderTopLeftRadius: 24,

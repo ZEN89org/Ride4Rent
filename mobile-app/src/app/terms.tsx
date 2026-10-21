@@ -1,13 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React from "react";
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { KeyboardAwareScrollView as ScrollView } from "@/components/common/KeyboardAwareScrollView";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Colors } from "@/constants/colors";
@@ -31,7 +26,7 @@ export default function TermsScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.updatedDate}>Last updated: August 2026</Text>
+        <Text style={styles.updatedDate}>Last updated: October 2026</Text>
 
         <Text style={styles.sectionHeader}>1. Acceptance of Terms</Text>
         <Text style={styles.paragraph}>
@@ -57,6 +52,9 @@ export default function TermsScreen() {
           levels restored as agreed upon with the operator.
         </Text>
 
+        <Text style={styles.sectionHeader}>Early Return</Text>
+        <Text style={styles.paragraph}>Request an early return time from an active booking and coordinate with the operator. The trip and location sharing remain active until actual handover, inspection and final settlement. The agreed rental total remains unchanged; unused rental days have no automatic refund. Any separately agreed refund is recorded after completion and confirmed by the renter once received.</Text>
+
         <Text style={styles.sectionHeader}>4. Operator Responsibilities</Text>
         <Text style={styles.paragraph}>
           Operators warrant that listed vehicles are registered, roadworthy,
@@ -70,6 +68,8 @@ export default function TermsScreen() {
           rules, refund criteria, and security deposit terms are governed by
           individual vehicle listings and confirmed booking agreements.
         </Text>
+        <Text style={styles.sectionHeader}>Reservation, handover and extensions</Text>
+        <Text style={styles.paragraph}>The reservation fee is 50% of the rental booking total and is credited toward that total. Pay the remaining 50% to the operator before vehicle handover. Approved extensions are paid in full through GCash and take effect after the operator verifies payment. Bookings without pickup or handover are automatically closed as a no-show 24 hours after scheduled pickup; the reservation fee is retained. Contact support to request admin review of a disputed no-show.</Text>
       </ScrollView>
     </SafeAreaView>
   );

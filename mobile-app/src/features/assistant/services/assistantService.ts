@@ -6,12 +6,13 @@ export interface AssistantVehicle {
   price_per_day: number;
   rating?: number | null;
   rating_count?: number;
-  seats?: number;
-  transmission?: string;
-  image_url?: string;
+  seats?: number | null;
+  transmission?: string | null;
+  image_url?: string | null;
 }
 
 export interface AssistantResponse {
+  knowledge_version?: string;
   reply: string;
   vehicles?: AssistantVehicle[];
   quick_replies?: string[];

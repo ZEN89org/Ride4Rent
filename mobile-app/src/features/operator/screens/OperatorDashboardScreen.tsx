@@ -1,19 +1,14 @@
+import { KeyboardAwareScrollView as ScrollView } from "@/components/common/KeyboardAwareScrollView";
+import RentalSheetHeader from "@/components/common/RentalSheetHeader";
+import { rentalSheetStyle } from "@/constants/rentalDesign";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import {
-  Dimensions,
-  FlatList,
-  Linking,
-  Modal,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { FlatList, Linking, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native";
 
+import { AppBottomSheet } from "@/components/common/AppBottomSheet";
 import { Colors } from "@/constants/colors";
 import { FontFamily, Radius, Spacing } from "@/constants/theme";
 import { useCall } from "@/context/CallContext";
@@ -23,13 +18,11 @@ import { useAuth } from "@/features/auth/hooks/useAuth";
 import OperatorRevenueModal from "@/features/operator/components/dashboard/OperatorRevenueModal";
 import OperatorShell from "@/features/operator/components/navigation/OperatorShell";
 import { getOperatorRevenue } from "@/features/operator/services/operatorService";
-import { getMyVehicles } from "@/features/operator/services/vehicleService";
 import { OperatorRevenueData } from "@/features/operator/types/operatorService";
 import { resolveImageUrl } from "@/services/api";
 import { Booking, getMyBookings } from "@/services/bookingService";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const CARD_WIDTH = SCREEN_WIDTH * 0.82;
+
 
 const DEFAULT_CAR_FALLBACK =
   "https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=60";
@@ -61,13 +54,14 @@ const formatDate = (dateStr?: string | null): string => {
 };
 
 export default function OperatorDashboardScreen() {
-  const { user, isOperatorPending } = useAuth();
+  const { width } = useWindowDimensions();
+  const cardWidth = Math.min(420, width - Spacing.lg * 2);
+  const { user, isOperatorPending, isOperatorFrozen } = useAuth();
   const { showModal, showError } = useAppToast();
   const { startCall } = useCall();
   const { unreadCount } = useNotificationCount();
   const profile = user?.operatorProfile ?? user?.operator_profile;
 
-  const [fleet, setFleet] = useState<any[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [revenueData, setRevenueData] = useState<OperatorRevenueData | null>(
     null,
@@ -80,13 +74,11 @@ export default function OperatorDashboardScreen() {
     async (isManualRefresh: boolean = false) => {
       if (isManualRefresh) setRefreshing(true);
       try {
-        const [vehiclesData, bookingsData, revData] = await Promise.all([
-          getMyVehicles().catch(() => []),
+        const [bookingsData, revData] = await Promise.all([
           getMyBookings().catch(() => []),
           getOperatorRevenue().catch(() => null),
         ]);
 
-        setFleet(vehiclesData);
         setBookings(bookingsData);
         if (revData) {
           setRevenueData(revData);
@@ -117,7 +109,7 @@ export default function OperatorDashboardScreen() {
   const activeTrips = useMemo(
     () =>
       bookings.filter(
-        (b) => b.status === "trip_in_progress" || b.status === "ongoing",
+        (b) => b.status === "trip_in_progress" || b.status === "ongoing" || b.status === "return_pending",
       ),
     [bookings],
   );
@@ -140,6 +132,21 @@ export default function OperatorDashboardScreen() {
   const hasMissingPaymentSetup = !Boolean(
     profile?.account_number && String(profile.account_number).trim(),
   );
+
+  const isAccountFrozen =
+    Boolean(isOperatorFrozen) ||
+    Boolean(user?.is_frozen) ||
+    Boolean(revenueData?.remittance?.is_account_frozen);
+
+  const remittance = revenueData?.remittance;
+  const isGraceActive =
+    !isAccountFrozen &&
+    remittance?.status === "pending" &&
+    !remittance?.is_grace_expired &&
+    (remittance?.grace_hours_remaining ?? 0) > 0 &&
+    (revenueData?.commission_due ?? 0) > 0 &&
+    !revenueData?.is_current_cycle;
+
 
   const firstName =
     user?.first_name ||
@@ -321,6 +328,48 @@ export default function OperatorDashboardScreen() {
            ========================================================================= */}
 
             {/* Conditional Critical Alerts */}
+            {isAccountFrozen && (
+              <TouchableOpacity
+                style={styles.frozenAlertBanner}
+                onPress={() => setShowRevenueModal(true)}
+                activeOpacity={0.85}
+              >
+                <View style={styles.frozenAlertIconBox}>
+                  <Ionicons name="snow" size={18} color="#DC2626" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.frozenAlertTitle}>
+                    Listings Temporarily Frozen
+                  </Text>
+                  <Text style={styles.frozenAlertDesc}>
+                    Your vehicle listings are paused from receiving new bookings due to an unsettled monthly commission. Settle payment in Track Revenue to restore bookings.
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#DC2626" />
+              </TouchableOpacity>
+            )}
+
+            {isGraceActive && (
+              <TouchableOpacity
+                style={styles.graceAlertBanner}
+                onPress={() => setShowRevenueModal(true)}
+                activeOpacity={0.85}
+              >
+                <View style={styles.graceAlertIconBox}>
+                  <Ionicons name="time" size={18} color="#D97706" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.graceAlertTitle}>
+                    Commission Remittance Due ({remittance?.grace_hours_remaining}h left)
+                  </Text>
+                  <Text style={styles.graceAlertDesc}>
+                    48-hour grace period is active. Settle Ride4Rent platform fee in Track Revenue to prevent automatic listing freeze.
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#D97706" />
+              </TouchableOpacity>
+            )}
+
             {isOperatorPending && (
               <View style={styles.alertCard}>
                 <Ionicons name="time" size={16} color="#D97706" />
@@ -344,6 +393,17 @@ export default function OperatorDashboardScreen() {
               </TouchableOpacity>
             )}
 
+            <ScrollView style={styles.operationsScroll} contentContainerStyle={styles.dashboardContent} showsVerticalScrollIndicator={false}>
+            <View style={styles.operationalSections}>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="View fleet maintenance recommendations" activeOpacity={0.85} onPress={() => router.push("/operator-maintenance" as any)} style={styles.maintenanceCard}>
+              <View style={styles.maintenanceCardHeader}>
+                <View style={styles.maintenanceIcon}><Ionicons name="build-outline" size={22} color={Colors.dark} /></View>
+                <View style={{ flex: 1 }}><Text style={styles.maintenanceTitle}>Fleet Maintenance</Text><Text style={styles.maintenanceSubtitle}>Service reminders and vehicle care</Text></View>
+                <Ionicons name="chevron-forward" size={20} color={Colors.dark} />
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.operationalSection}>
             {/* =========================================================================
             3. SECTION: FLEET IN MOTION
            ========================================================================= */}
@@ -380,7 +440,7 @@ export default function OperatorDashboardScreen() {
                     : "Customer";
 
                   return (
-                    <View style={styles.fleetCard}>
+                    <TouchableOpacity style={[styles.fleetCard, { width: cardWidth }]} onPress={() => router.push("/operator-bookings" as any)} activeOpacity={0.9}>
                       <Image
                         source={{ uri: resolveVehicleImage(item.vehicle) }}
                         contentFit="cover"
@@ -397,7 +457,7 @@ export default function OperatorDashboardScreen() {
                         style={styles.fleetCardGradient}
                       >
                         <View style={styles.fleetCardBottomRow}>
-                          <View style={{ flex: 1, paddingRight: 8 }}>
+                          <View style={styles.fleetCardCopy}>
                             <Text
                               style={styles.fleetCardTitle}
                               numberOfLines={1}
@@ -453,74 +513,19 @@ export default function OperatorDashboardScreen() {
                           </View>
                         </View>
                       </LinearGradient>
-                    </View>
+                    </TouchableOpacity>
                   );
                 }}
               />
-            ) : fleet.length > 0 ? (
-              /* Fallback: Displays Listed Fleet Cars */
-              <FlatList
-                data={fleet}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.horizontalList}
-                contentContainerStyle={styles.horizontalListContent}
-                keyExtractor={(item) => `fleet-${item.id}`}
-                renderItem={({ item }) => (
-                  <View style={styles.fleetCard}>
-                    <Image
-                      source={{ uri: resolveVehicleImage(item) }}
-                      contentFit="cover"
-                      style={styles.fleetCardImage}
-                    />
-
-                    <LinearGradient
-                      colors={[
-                        "transparent",
-                        "rgba(0,0,0,0.45)",
-                        "rgba(0,0,0,0.92)",
-                      ]}
-                      style={styles.fleetCardGradient}
-                    >
-                      <View style={styles.fleetCardBottomRow}>
-                        <View style={{ flex: 1, paddingRight: 8 }}>
-                          <Text style={styles.fleetCardTitle} numberOfLines={1}>
-                            {item.name || "Vehicle Display Name"}
-                          </Text>
-                          <Text style={styles.fleetCardPrice}>
-                            PHP{" "}
-                            {Number(item.price_per_day || 0).toLocaleString()}
-                          </Text>
-                          <Text
-                            style={styles.fleetCardRenter}
-                            numberOfLines={1}
-                          >
-                            Plate: {item.plate_number || "Verified"}
-                          </Text>
-                        </View>
-
-                        <TouchableOpacity
-                          style={styles.seeLocationBtn}
-                          onPress={() =>
-                            router.push("/operator-vehicles" as any)
-                          }
-                          activeOpacity={0.85}
-                        >
-                          <Text style={styles.seeLocationBtnText}>Manage</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </LinearGradient>
-                  </View>
-                )}
-              />
             ) : (
               <View style={styles.emptyCardWrap}>
-                <Text style={styles.emptyCardText}>
-                  No vehicles currently listed.
-                </Text>
+                <Text style={[styles.emptyCardText, { fontFamily: FontFamily.semiBold, color: Colors.dark }]}>No active rentals</Text>
+                <Text style={styles.emptyCardText}>Ongoing rentals will appear here.</Text>
               </View>
             )}
 
+            </View>
+            <View style={styles.operationalSection}>
             {/* =========================================================================
             4. SECTION: ACTION REQUIRED
            ========================================================================= */}
@@ -598,6 +603,9 @@ export default function OperatorDashboardScreen() {
                 </View>
               </View>
             )}
+            </View>
+            </View>
+            </ScrollView>
           </View>
 
           {/* Historical Track Revenue Modal */}
@@ -607,135 +615,18 @@ export default function OperatorDashboardScreen() {
           />
 
           {/* Revenue Sharing Policy Info Modal */}
-          <Modal
-            visible={showRevenueInfoModal}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setShowRevenueInfoModal(false)}
-          >
-            <View style={styles.infoModalOverlay}>
-              <View style={styles.infoModalCard}>
-                {/* Header */}
-                <View style={styles.infoModalHeader}>
-                  <View style={styles.infoModalIconCircle}>
-                    <Ionicons
-                      name="information-circle"
-                      size={24}
-                      color="#D97706"
-                    />
-                  </View>
-                  <Text style={styles.infoModalTitle}>
-                    Revenue Share Policy
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => setShowRevenueInfoModal(false)}
-                    style={styles.infoModalCloseBtn}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Ionicons name="close" size={20} color="#64748B" />
-                  </TouchableOpacity>
-                </View>
-
-                {/* Description */}
-                <Text style={styles.infoModalDescription}>
-                  Ride4Rent uses a transparent revenue-sharing policy designed
-                  to support your vehicle rental operations:
-                </Text>
-
-                {/* Breakdown Cards */}
-                <View style={styles.infoShareBreakdown}>
-                  {/* Operator: 90% */}
-                  <View style={styles.infoShareRow}>
-                    <View
-                      style={[
-                        styles.infoShareBadge,
-                        { backgroundColor: "#ECFDF5" },
-                      ]}
-                    >
-                      <Text
-                        style={[styles.infoSharePercent, { color: "#059669" }]}
-                      >
-                        90%
-                      </Text>
-                    </View>
-                    <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text style={styles.infoShareItemTitle}>
-                        Operator Net Earnings
-                      </Text>
-                      <Text style={styles.infoShareItemDesc}>
-                        You keep 90% of all gross rental revenue from your
-                        completed vehicle bookings.
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Ride4Rent: 10% */}
-                  <View style={[styles.infoShareRow, { marginTop: 10 }]}>
-                    <View
-                      style={[
-                        styles.infoShareBadge,
-                        { backgroundColor: "#FEF3C7" },
-                      ]}
-                    >
-                      <Text
-                        style={[styles.infoSharePercent, { color: "#D97706" }]}
-                      >
-                        10%
-                      </Text>
-                    </View>
-                    <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text style={styles.infoShareItemTitle}>
-                        Ride4Rent Platform Share
-                      </Text>
-                      <Text style={styles.infoShareItemDesc}>
-                        A 10% platform commission is shared with Ride4Rent every
-                        end of the month to maintain marketing, verified
-                        renters, and platform security.
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                {/* Settlement Note */}
-                <View style={styles.infoSettlementNote}>
-                  <Ionicons name="calendar-outline" size={16} color="#0284C7" />
-                  <Text style={styles.infoSettlementText}>
-                    Billing cycles are calculated monthly. The 10% commission is
-                    remitted at the end of each month.
-                  </Text>
-                </View>
-
-                {/* Action Buttons */}
-                <View style={styles.infoModalActions}>
-                  <TouchableOpacity
-                    style={styles.infoTrackBtn}
-                    onPress={() => {
-                      setShowRevenueInfoModal(false);
-                      setShowRevenueModal(true);
-                    }}
-                    activeOpacity={0.85}
-                  >
-                    <Ionicons
-                      name="trending-up"
-                      size={16}
-                      color={Colors.dark}
-                    />
-                    <Text style={styles.infoTrackBtnText}>
-                      Track Monthly Revenue
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.infoGotItBtn}
-                    onPress={() => setShowRevenueInfoModal(false)}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.infoGotItBtnText}>Got it</Text>
-                  </TouchableOpacity>
-                </View>
+          <AppBottomSheet visible={showRevenueInfoModal} onClose={() => setShowRevenueInfoModal(false)} sheetStyle={rentalSheetStyle}>
+            <RentalSheetHeader title="Revenue Sharing" subtitle="From completed rentals" icon="pie-chart-outline" onClose={() => setShowRevenueInfoModal(false)} />
+            <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ gap: 14, paddingBottom: 16 }}>
+              <View style={styles.revenueShareSummary}>
+                <View style={styles.revenueShareRow}><Text style={styles.revenueShareLabel}>Your share</Text><Text style={styles.revenueShareValue}>{100 - Number(revenueData?.commission_percent ?? 10)}%</Text></View>
+                <View style={styles.revenueShareRule} />
+                <View style={styles.revenueShareRow}><Text style={styles.revenueShareLabel}>Platform commission</Text><Text style={styles.revenueShareValue}>{Number(revenueData?.commission_percent ?? 10)}%</Text></View>
               </View>
-            </View>
-          </Modal>
+              <Text style={styles.revenueShareHint}>Commission is calculated from completed rental revenue. Check Revenue for your billing period and amount due.</Text>
+            </ScrollView>
+            <TouchableOpacity style={styles.revenueShareButton} onPress={() => { setShowRevenueInfoModal(false); setShowRevenueModal(true); }}><Text style={styles.revenueShareButtonText}>View Revenue</Text></TouchableOpacity>
+          </AppBottomSheet>
         </>
       )}
     </OperatorShell>
@@ -747,6 +638,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.white,
   },
+
+  operationsScroll: { flex: 1 },
+  dashboardContent: { paddingTop: 10 },
+  operationalSections: { gap: 24, paddingBottom: 20, flexShrink: 0 },
+  operationalSection: { gap: 12, flexShrink: 0 },
+  fleetCardCopy: { flexGrow: 1, flexShrink: 1, flexBasis: 140, minWidth: 0 },
 
   // =========================================================================
   // 1. YELLOW HEADER CONTAINER
@@ -904,55 +801,86 @@ const styles = StyleSheet.create({
   // =========================================================================
   // 2. STAT PILLS ROW
   // =========================================================================
-  pillsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    marginTop: 18,
-    gap: 8,
-  },
-  pillBtn: {
-    flex: 1,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: Colors.white,
-    borderWidth: 1.2,
-    borderColor: "#CBD5E1",
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-  },
-  pillBtnText: {
-    fontFamily: FontFamily.bold,
-    fontSize: 11.5,
-    color: Colors.dark,
-  },
-  pillBadge: {
-    position: "absolute",
-    top: -7,
-    right: -5,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: Colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  pillBadgeText: {
-    fontFamily: FontFamily.bold,
-    fontSize: 10,
-    color: Colors.dark,
-  },
+
+
+
+
+
 
   // =========================================================================
   // ALERTS
   // =========================================================================
+  frozenAlertBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#FEF2F2",
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+    borderColor: "#FECACA",
+    marginHorizontal: Spacing.lg,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 14,
+    shadowColor: "#EF4444",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  frozenAlertIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#FEE2E2",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  frozenAlertTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 12.5,
+    color: "#991B1B",
+  },
+  frozenAlertDesc: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11,
+    color: "#B91C1C",
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  graceAlertBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#FFFBEB",
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+    borderColor: "#FDE68A",
+    marginHorizontal: Spacing.lg,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 14,
+  },
+  graceAlertIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#FEF3C7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  graceAlertTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 12.5,
+    color: "#92400E",
+  },
+  graceAlertDesc: {
+    fontFamily: FontFamily.regular,
+    fontSize: 11,
+    color: "#B45309",
+    lineHeight: 16,
+    marginTop: 2,
+  },
   alertCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -972,6 +900,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#92400E",
   },
+  revenueShareSummary: { backgroundColor: "#F8FAFC", borderRadius: 16, padding: 16, gap: 14 },
+  revenueShareRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  revenueShareLabel: { fontFamily: FontFamily.medium, fontSize: 13, color: Colors.dark, flexShrink: 1 },
+  revenueShareValue: { fontFamily: FontFamily.bold, fontSize: 20, color: Colors.dark },
+  revenueShareRule: { height: 1, backgroundColor: "#E2E8F0" },
+  revenueShareHint: { fontFamily: FontFamily.regular, fontSize: 12, lineHeight: 20, color: Colors.secondary },
+  revenueShareButton: { minHeight: 50, borderRadius: 14, backgroundColor: Colors.primary, alignItems: "center", justifyContent: "center", padding: 12 },
+  revenueShareButtonText: { fontFamily: FontFamily.semiBold, fontSize: 13, color: Colors.dark },
+  maintenanceCard: { marginHorizontal: Spacing.lg, padding: 16, borderRadius: 18, backgroundColor: Colors.white, borderWidth: 1, borderColor: "#E2E8F0" },
+  maintenanceCardHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
+  maintenanceIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: Colors.logoBackground, alignItems: "center", justifyContent: "center" },
+  maintenanceTitle: { fontFamily: FontFamily.semiBold, fontSize: 15, lineHeight: 22, color: Colors.dark },
+  maintenanceSubtitle: { fontFamily: FontFamily.regular, fontSize: 11, lineHeight: 17, color: Colors.secondary, marginTop: 2 },
+
+
+
+
   alertActionCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -995,30 +940,10 @@ const styles = StyleSheet.create({
   // =========================================================================
   // 3. SECTION HEADERS
   // =========================================================================
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: Spacing.lg,
-    marginTop: 20,
-    marginBottom: 8,
-  },
-  sectionTitle: {
-    fontFamily: FontFamily.bold,
-    fontSize: 14.5,
-    color: Colors.dark,
-  },
-  yellowLine: {
-    flex: 1,
-    height: 2.5,
-    backgroundColor: Colors.primary,
-    borderRadius: 2,
-    marginHorizontal: 8,
-  },
-  seeAllBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-  },
+  sectionHeader: { flexDirection: "row", alignItems: "center", minHeight: 44, gap: 8, paddingHorizontal: Spacing.lg },
+  sectionTitle: { fontFamily: FontFamily.bold, fontSize: 14.5, color: Colors.dark, flexShrink: 1 },
+  yellowLine: { flex: 1, minWidth: 12, height: 2.5, backgroundColor: Colors.primary, borderRadius: 2 },
+  seeAllBtn: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 3, flexShrink: 0 },
   seeAllText: {
     fontFamily: FontFamily.medium,
     fontSize: 12,
@@ -1028,46 +953,16 @@ const styles = StyleSheet.create({
   // =========================================================================
   // 4. FLEET IN MOTION CARDS
   // =========================================================================
-  horizontalList: {
-    flexGrow: 0,
-  },
-  horizontalListContent: {
-    paddingHorizontal: Spacing.lg,
-    gap: 14,
-    marginTop: 5,
-  },
-  fleetCard: {
-    width: CARD_WIDTH,
-    height: 180,
-    borderRadius: 18,
-    overflow: "hidden",
-    backgroundColor: "#1E1E1E",
-    position: "relative",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation: 4,
-  },
+  horizontalList: { flexGrow: 0, flexShrink: 0 },
+  horizontalListContent: { paddingHorizontal: Spacing.lg, paddingVertical: 4, gap: 14, alignItems: "flex-start" },
+  fleetCard: { minHeight: 180, borderRadius: 18, overflow: "hidden", backgroundColor: "#1E1E1E", position: "relative" },
   fleetCardImage: {
     width: "100%",
     height: "100%",
     position: "absolute",
   },
-  fleetCardGradient: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 14,
-    paddingBottom: 14,
-    paddingTop: 45,
-  },
-  fleetCardBottomRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-  },
+  fleetCardGradient: { minHeight: 180, justifyContent: "flex-end", paddingHorizontal: 14, paddingBottom: 14, paddingTop: 48 },
+  fleetCardBottomRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "flex-end", gap: 12 },
   fleetCardTitle: {
     fontFamily: FontFamily.bold,
     fontSize: 15,
@@ -1085,44 +980,15 @@ const styles = StyleSheet.create({
     color: "#E2E8F0",
     marginTop: 3,
   },
-  fleetCardActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-  },
-  fleetCallBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.white,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  seeLocationBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: 20,
-    paddingHorizontal: 13,
-    paddingVertical: 7.5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 2,
-  },
+  fleetCardActions: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
+  fleetCallBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.white, alignItems: "center", justifyContent: "center" },
+  seeLocationBtn: { minHeight: 44, justifyContent: "center", alignItems: "center", backgroundColor: Colors.primary, borderRadius: 14, paddingHorizontal: 13, paddingVertical: 10, flexShrink: 0 },
   seeLocationBtnText: {
     fontFamily: FontFamily.bold,
     fontSize: 11.5,
     color: Colors.dark,
   },
-  emptyCardWrap: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: 14,
-  },
+  emptyCardWrap: { marginHorizontal: Spacing.lg, padding: 16, minHeight: 80, justifyContent: "center", borderWidth: 1, borderColor: "#E2E8F0", borderRadius: 14 },
   emptyCardText: {
     fontFamily: FontFamily.regular,
     fontSize: 12,
@@ -1132,11 +998,7 @@ const styles = StyleSheet.create({
   // =========================================================================
   // 5. ACTION REQUIRED LIST
   // =========================================================================
-  actionList: {
-    paddingHorizontal: Spacing.lg,
-    gap: 8,
-    marginTop: 5,
-  },
+  actionList: { paddingHorizontal: Spacing.lg, gap: 12, flexShrink: 0 },
   actionItemCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -1159,6 +1021,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F1F5F9",
   },
   actionDetails: {
+    minWidth: 0,
     flex: 1,
   },
   actionCarTitle: {
@@ -1216,132 +1079,24 @@ const styles = StyleSheet.create({
   // =========================================================================
   // REVENUE SHARE INFO MODAL
   // =========================================================================
-  infoModalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.65)",
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 20,
-  },
-  infoModalCard: {
-    width: "100%",
-    maxWidth: 380,
-    backgroundColor: Colors.white,
-    borderRadius: 24,
-    padding: 22,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.25,
-    shadowRadius: 18,
-    elevation: 10,
-  },
-  infoModalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 14,
-  },
-  infoModalIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "#FEF3C7",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 10,
-  },
-  infoModalTitle: {
-    flex: 1,
-    fontFamily: FontFamily.bold,
-    fontSize: 18,
-    color: Colors.dark,
-  },
-  infoModalCloseBtn: {
-    padding: 4,
-  },
-  infoModalDescription: {
-    fontFamily: FontFamily.regular,
-    fontSize: 13,
-    color: "#64748B",
-    lineHeight: 18,
-    marginBottom: 16,
-  },
-  infoShareBreakdown: {
-    marginBottom: 16,
-  },
-  infoShareRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    backgroundColor: "#F8FAFC",
-    borderRadius: 14,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  infoShareBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  infoSharePercent: {
-    fontFamily: FontFamily.bold,
-    fontSize: 14,
-  },
-  infoShareItemTitle: {
-    fontFamily: FontFamily.bold,
-    fontSize: 13,
-    color: Colors.dark,
-  },
-  infoShareItemDesc: {
-    fontFamily: FontFamily.regular,
-    fontSize: 11.5,
-    color: "#64748B",
-    marginTop: 2,
-    lineHeight: 16,
-  },
-  infoSettlementNote: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F0F9FF",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 8,
-    marginBottom: 18,
-  },
-  infoSettlementText: {
-    flex: 1,
-    fontFamily: FontFamily.medium,
-    fontSize: 11.5,
-    color: "#0369A1",
-    lineHeight: 15,
-  },
-  infoModalActions: {
-    gap: 8,
-  },
-  infoTrackBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: 14,
-    height: 44,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  infoTrackBtnText: {
-    fontFamily: FontFamily.bold,
-    fontSize: 13.5,
-    color: Colors.dark,
-  },
-  infoGotItBtn: {
-    height: 38,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  infoGotItBtnText: {
-    fontFamily: FontFamily.medium,
-    fontSize: 13,
-    color: "#64748B",
-  },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 });

@@ -1,3 +1,7 @@
+import PinnedChatPayment from "@/components/common/PinnedChatPayment";
+import { formatReceiptDateTime, getPinnedPayment, isFaceToFaceReceipt, receiptHeading } from "@/utils/chatPayment";
+
+import { useChatKeyboardFrame } from "@/hooks/useChatKeyboardFrame";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
@@ -7,10 +11,11 @@ import { ActivityIndicator, Dimensions, FlatList, KeyboardAvoidingView, Modal, P
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppBottomSheet } from "@/components/common/AppBottomSheet";
+import { Skeleton } from "@/components/common/Skeleton";
 import { Colors } from "@/constants/colors";
 import { FontFamily, Spacing } from "@/constants/theme";
-import { useAppToast } from "@/context/ToastContext";
 import { useCall } from "@/context/CallContext";
+import { useAppToast } from "@/context/ToastContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import {
   BookingContext,
@@ -101,7 +106,7 @@ const parseReplyData = (text?: string | null) => {
 };
 
 interface ReceiptData {
-  type: "reservation" | "extension";
+  type: "reservation" | "extension" | "handover" | "return" | "refund";
   vehicle?: string;
   schedule?: string;
   method?: string;
@@ -126,7 +131,7 @@ const parseReceiptData = (text?: string | null): ReceiptData | null => {
   }
 
   const data: ReceiptData = {
-    type: isExtension ? "extension" : "reservation",
+    type: isExtension ? "extension" : text.includes("HANDOVER PAYMENT RECEIPT") ? "handover" : text.includes("RETURN PAYMENT RECEIPT") ? "return" : text.includes("REFUND PAYMENT RECEIPT") ? "refund" : "reservation",
   };
   const lines = text.split("\n");
 
@@ -224,39 +229,6 @@ const maskPhone = (phone?: string): string => {
   return "Not provided";
 };
 
-const formatReceiptDateTime = (dateStr?: string): string => {
-  if (!dateStr) return "Date unavailable";
-  try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    const months = [
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
-      "May",
-      "Jun",
-      "Jul",
-      "Aug",
-      "Sep",
-      "Oct",
-      "Nov",
-      "Dec",
-    ];
-    const m = months[d.getMonth()];
-    const day = d.getDate();
-    const year = d.getFullYear();
-    let hours = d.getHours();
-    const minutes = String(d.getMinutes()).padStart(2, "0");
-    const ampm = hours >= 12 ? "PM" : "AM";
-    hours = hours % 12;
-    hours = hours ? hours : 12;
-    return `${m} ${day}, ${year} ${hours}:${minutes} ${ampm}`;
-  } catch {
-    return dateStr;
-  }
-};
-
 interface CallLogData {
   type: "voice" | "missed";
   duration: number;
@@ -328,6 +300,7 @@ const ChatImage = ({
 };
 
 export default function ChatThreadScreen() {
+  const { rootRef, measure, keyboardVisible, frameStyle } = useChatKeyboardFrame();
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
   const { user } = useAuth();
   const { showError } = useAppToast();
@@ -337,12 +310,14 @@ export default function ChatThreadScreen() {
   const [bookingContext, setBookingContext] = useState<BookingContext | null>(
     null,
   );
-  const [showBookingBanner, setShowBookingBanner] = useState<boolean>(true);
   const [messages, setMessages] = useState<ChatThreadMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const [hasMore, setHasMore] = useState(false);
+  const [historyPageFull, setHistoryPageFull] = useState(false);
+  const earlierPending = useRef(false);
+  const historyUserScrolling = useRef(false);
   const [sending, setSending] = useState(false);
   const [selectedViewerImage, setSelectedViewerImage] = useState<string | null>(
     null,
@@ -459,6 +434,7 @@ export default function ChatThreadScreen() {
         setChatUser(res.other_user);
         setBookingContext(res.booking_context || null);
         setHasMore(Boolean(res.has_more));
+        setHistoryPageFull((res.messages || []).length >= 40);
         setMessages(
           (res.messages || []).filter(
             (message) => !deletedForMeIds.has(message.id),
@@ -479,11 +455,12 @@ export default function ChatThreadScreen() {
   }, [id, deletedForMeIds]);
 
   const handleLoadEarlier = async () => {
-    if (loadingEarlier || !hasMore || messages.length === 0) return;
+    if (earlierPending.current || loadingEarlier || !hasMore || messages.length === 0) return;
     const earliestMessage = messages.find((m) => !m.id.startsWith("temp_"));
     if (!earliestMessage) return;
 
     try {
+      earlierPending.current = true;
       setLoadingEarlier(true);
       shouldScrollToEndRef.current = false;
       const res = await getChatThread(id, {
@@ -491,6 +468,7 @@ export default function ChatThreadScreen() {
         limit: 40,
       });
       setHasMore(Boolean(res.has_more));
+      setHistoryPageFull((res.messages || []).length >= 40);
       if (res.messages && res.messages.length > 0) {
         const olderFiltered = res.messages.filter(
           (m) => !deletedForMeIds.has(m.id),
@@ -504,6 +482,7 @@ export default function ChatThreadScreen() {
     } catch (e) {
       console.log("Error loading earlier messages:", e);
     } finally {
+      earlierPending.current = false;
       setLoadingEarlier(false);
     }
   };
@@ -690,7 +669,7 @@ export default function ChatThreadScreen() {
     const textToCopy =
       cleanText || target.text || (target.image_url ? "Photo link" : "");
     if (textToCopy) {
-      await copyToClipboard(textToCopy);
+      if (!(await copyToClipboard(textToCopy))) return;
     }
     setShowCopiedToast(true);
     setTimeout(() => {
@@ -760,7 +739,7 @@ export default function ChatThreadScreen() {
 
   const operatorPhone =
     chatUser?.business_contact_number || chatUser?.mobile_number;
-  const paymentInfo = bookingContext?.operator_payment_info;
+  const pinnedPayment = getPinnedPayment(bookingContext);
 
   // The recipient of rental payments on official receipts is ALWAYS the Operator / Host's REAL name
   const resolvedOperatorName = (() => {
@@ -792,7 +771,8 @@ export default function ChatThreadScreen() {
   })();
 
   return (
-    <SafeAreaView edges={["top", "bottom"]} style={styles.container}>
+    <View ref={rootRef} onLayout={measure} style={styles.container}>
+    <SafeAreaView edges={keyboardVisible ? ["top"] : ["top", "bottom"]} style={[styles.container, frameStyle]}>
       <View style={styles.chatContent}>
         {/* Modern Messenger-Inspired Header */}
         <View style={styles.headerBar}>
@@ -807,10 +787,9 @@ export default function ChatThreadScreen() {
           <TouchableOpacity
             style={styles.headerCenter}
             onPress={() =>
-              chatUser?.role === "operator" &&
-              router.push(`/operator/${id}` as any)
+              chatUser && router.push((user?.role === "operator" ? `/renter/${chatUser.id || id}` : `/operator/${chatUser.id || id}`) as any)
             }
-            activeOpacity={chatUser?.role === "operator" ? 0.75 : 1}
+            activeOpacity={0.75}
           >
             {/* Avatar with Online Badge */}
             <View style={styles.avatarWrapper}>
@@ -836,7 +815,7 @@ export default function ChatThreadScreen() {
               </Text>
               <View style={styles.statusRow}>
                 <Text style={styles.headerSubtitle} numberOfLines={1}>
-                  {chatUser?.role === "operator" ? "Operator" : "Active now"}
+                  View profile
                 </Text>
               </View>
             </View>
@@ -864,165 +843,40 @@ export default function ChatThreadScreen() {
           </View>
         </View>
 
-        {/* Active Booking & Payment Context Card (collapsible - only shown when pending payment and unpaid) */}
-        {bookingContext &&
-          bookingContext.status === "pending_payment" &&
-          bookingContext.payment_status === "unpaid" && (
-            <View style={styles.contextBanner}>
-              <TouchableOpacity
-                style={styles.contextHeader}
-                onPress={() => setShowBookingBanner(!showBookingBanner)}
-                activeOpacity={0.8}
-              >
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 6,
-                    flex: 1,
-                  }}
-                >
-                  <Ionicons name="car-sport" size={17} color="#854D0E" />
-                  <Text style={styles.contextTitle} numberOfLines={1}>
-                    {bookingContext.vehicle_name}
-                  </Text>
-                </View>
-                <Ionicons
-                  name={showBookingBanner ? "chevron-up" : "chevron-down"}
-                  size={18}
-                  color="#854D0E"
-                />
-              </TouchableOpacity>
-
-              {showBookingBanner && (
-                <View style={styles.contextBody}>
-                  <View style={styles.amountsRow}>
-                    <View style={styles.amountItem}>
-                      <Text style={styles.amountLabel}>Total Rental</Text>
-                      <Text style={styles.amountVal}>
-                        ₱{bookingContext.total_price.toLocaleString()}
-                      </Text>
-                    </View>
-                    <View style={styles.amountDivider} />
-                    <View style={styles.amountItem}>
-                      <Text style={styles.amountLabel}>Downpayment</Text>
-                      <Text style={[styles.amountVal, { color: "#16A34A" }]}>
-                        ₱{bookingContext.reservation_fee.toLocaleString()}
-                      </Text>
-                    </View>
-                    <View style={styles.amountDivider} />
-                    <View style={styles.amountItem}>
-                      <Text style={styles.amountLabel}>Balance Due</Text>
-                      <Text style={[styles.amountVal, { color: "#DC2626" }]}>
-                        ₱{bookingContext.balance_due.toLocaleString()}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {paymentInfo && (
-                    <View style={styles.paymentInfoCard}>
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 5,
-                          marginBottom: 4,
-                        }}
-                      >
-                        <Ionicons
-                          name="shield-checkmark"
-                          size={14}
-                          color="#166534"
-                        />
-                        <Text style={styles.paymentInfoTitle}>
-                          Host Payment Details (
-                          {paymentInfo.business_name || "Verified"})
-                        </Text>
-                      </View>
-
-                      {paymentInfo.account_name && (
-                        <View style={styles.infoRow}>
-                          <Text style={styles.infoLabel}>Account Name:</Text>
-                          <Text style={styles.infoValue}>
-                            {paymentInfo.account_name}
-                          </Text>
-                        </View>
-                      )}
-                      {paymentInfo.account_number && (
-                        <View style={styles.infoRow}>
-                          <Text style={styles.infoLabel}>GCash / Bank No:</Text>
-                          <Text
-                            style={[
-                              styles.infoValue,
-                              { fontFamily: FontFamily.bold },
-                            ]}
-                          >
-                            {paymentInfo.account_number}
-                          </Text>
-                        </View>
-                      )}
-
-                      {paymentInfo.qr_code_url ? (
-                        <TouchableOpacity
-                          style={styles.qrRow}
-                          onPress={() =>
-                            setSelectedViewerImage(
-                              paymentInfo.qr_code_url || null,
-                            )
-                          }
-                          activeOpacity={0.8}
-                        >
-                          <Image
-                            source={{ uri: paymentInfo.qr_code_url }}
-                            style={styles.qrThumb}
-                          />
-                          <View style={{ flex: 1 }}>
-                            <Text
-                              style={[
-                                styles.infoLabel,
-                                { fontFamily: FontFamily.medium },
-                              ]}
-                            >
-                              Payment QR Code attached
-                            </Text>
-                            <Text
-                              style={{ fontSize: 10, color: Colors.secondary }}
-                            >
-                              Tap to view & scan QR
-                            </Text>
-                          </View>
-                          <Ionicons
-                            name="expand-outline"
-                            size={16}
-                            color="#0F172A"
-                          />
-                        </TouchableOpacity>
-                      ) : null}
-                    </View>
-                  )}
-                </View>
-              )}
-            </View>
-          )}
+        {bookingContext && pinnedPayment && (
+          <PinnedChatPayment
+            key={`${bookingContext.id}:${pinnedPayment}`}
+            context={bookingContext}
+            kind={pinnedPayment}
+            keyboardVisible={keyboardVisible}
+            onViewQr={setSelectedViewerImage}
+          />
+        )}
 
         <KeyboardAvoidingView
           style={styles.keyboardContainer}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          enabled={Platform.OS === "ios"}
+          behavior="padding"
           keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
         >
           {loading ? (
             <View style={styles.loadingWrap}>
-              <ActivityIndicator size="small" color={Colors.primary} />
-              <Text style={styles.loadingText}>Loading conversation...</Text>
+              <View style={{ width: "100%", padding: 20, gap: 16 }}><Skeleton width="75%" height={60} /><Skeleton width="60%" height={40} /><Skeleton height={80} /></View>
             </View>
           ) : (
             <FlatList
               ref={flatListRef}
+              style={{ flex: 1, minHeight: 0 }}
               data={messages}
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.messagesList}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
+              onLayout={() => { if (shouldScrollToEndRef.current) flatListRef.current?.scrollToEnd({ animated: false }); }}
+              onScroll={({ nativeEvent }) => { shouldScrollToEndRef.current = nativeEvent.contentSize.height - nativeEvent.layoutMeasurement.height - nativeEvent.contentOffset.y < 100; if (historyUserScrolling.current && nativeEvent.contentOffset.y < 60 && hasMore && !loadingEarlier && historyPageFull) void handleLoadEarlier(); }}
+              onScrollBeginDrag={() => { historyUserScrolling.current = true; }}
+              maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+              scrollEventThrottle={100}
               initialNumToRender={12}
               maxToRenderPerBatch={8}
               updateCellsBatchingPeriod={50}
@@ -1034,7 +888,7 @@ export default function ChatThreadScreen() {
                 }
               }}
               ListHeaderComponent={
-                hasMore ? (
+                hasMore && historyPageFull ? (
                   <View style={styles.loadMoreWrap}>
                     {loadingEarlier ? (
                       <ActivityIndicator size="small" color={Colors.primary} />
@@ -1044,13 +898,8 @@ export default function ChatThreadScreen() {
                         onPress={handleLoadEarlier}
                         activeOpacity={0.7}
                       >
-                        <Ionicons
-                          name="time-outline"
-                          size={14}
-                          color="#64748B"
-                        />
                         <Text style={styles.loadMoreText}>
-                          Load earlier messages
+                          Earlier messages
                         </Text>
                       </TouchableOpacity>
                     )}
@@ -1184,10 +1033,7 @@ export default function ChatThreadScreen() {
                               numberOfLines={1}
                             >
                               {maskName(
-                                resolvedOperatorName &&
-                                  resolvedOperatorName !== "Vehicle Host"
-                                  ? resolvedOperatorName
-                                  : receipt.recipient || "Vehicle Host",
+                                receipt.recipient || resolvedOperatorName || "Payment recipient",
                               )}
                             </Text>
 
@@ -1200,43 +1046,13 @@ export default function ChatThreadScreen() {
                               </Text>
                             </View>
 
-                            {/* Subtitle */}
-                            <Text style={styles.gcashSubtitle}>
-                              Payment record •{" "}
-                              {receipt.method || "Method not provided"}
-                            </Text>
-                            <Text style={styles.gcashSubtitle}>
-                              Confirm receipt with the host
-                            </Text>
-
-                            {/* Thin Divider */}
+                            {!isFaceToFaceReceipt(receipt) && !!receipt.method && <Text style={styles.gcashSubtitle}>{receipt.method}</Text>}
                             <View style={styles.gcashDivider} />
-
-                            {/* Amount Row */}
-                            <View style={styles.gcashRow}>
-                              <Text style={styles.gcashRowLabel}>Amount</Text>
-                              <Text style={styles.gcashRowValue}>
-                                {(() => {
-                                  const num = parseFloat(
-                                    (receipt.amount || "").replace(
-                                      /[^0-9.]/g,
-                                      "",
-                                    ),
-                                  );
-                                  return isNaN(num)
-                                    ? "Not provided"
-                                    : num.toFixed(2);
-                                })()}
-                              </Text>
-                            </View>
-
-                            {/* Thin Divider */}
-                            <View style={styles.gcashDivider} />
-
+                            <Text style={{ fontFamily: FontFamily.semiBold, fontSize: 12, color: /awaiting|submitted|correction|not verified/i.test(receipt.status || "") ? "#B45309" : Colors.dark, marginBottom: 10 }}>{receiptHeading(receipt)}</Text>
                             {/* Total Amount Sent Row */}
                             <View style={styles.gcashTotalRow}>
                               <Text style={styles.gcashTotalLabel}>
-                                Reported Amount
+                                Amount
                               </Text>
                               <Text style={styles.gcashTotalValue}>
                                 ₱{" "}
@@ -1257,11 +1073,12 @@ export default function ChatThreadScreen() {
                             {/* Soft Ice Blue Footer with Copyable Ref & Timestamp */}
                             <TouchableOpacity
                               activeOpacity={0.75}
+                              disabled={isFaceToFaceReceipt(receipt) || !receipt.reference}
                               style={styles.gcashFooter}
                               onPress={async () => {
                                 const ref = receipt.reference;
                                 if (!ref) return;
-                                await copyToClipboard(ref);
+                                if (!(await copyToClipboard(ref))) return;
                                 setShowCopiedToast(true);
                                 setTimeout(
                                   () => setShowCopiedToast(false),
@@ -1269,12 +1086,12 @@ export default function ChatThreadScreen() {
                                 );
                               }}
                             >
-                              <Text style={styles.gcashRefText}>
+                              {!isFaceToFaceReceipt(receipt) && !!receipt.reference && <Text style={styles.gcashRefText}>
                                 Ref No.{" "}
                                 <Text style={styles.gcashRefNum}>
                                   {receipt.reference || "Not provided"}
                                 </Text>
-                              </Text>
+                              </Text>}
                               <Text style={styles.gcashDateText}>
                                 {formatReceiptDateTime(item.created_at)}
                               </Text>
@@ -1445,6 +1262,7 @@ export default function ChatThreadScreen() {
               placeholderTextColor={Colors.secondary}
               value={inputMessage}
               onChangeText={setInputMessage}
+              onFocus={() => { shouldScrollToEndRef.current = true; requestAnimationFrame(() => flatListRef.current?.scrollToEnd({ animated: true })); }}
               multiline
             />
 
@@ -1661,6 +1479,7 @@ export default function ChatThreadScreen() {
         </Modal>
       </View>
     </SafeAreaView>
+    </View>
   );
 }
 
@@ -1765,6 +1584,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   contextBanner: {
+    borderRadius: 16,
     backgroundColor: "#FEF9C3",
     borderBottomWidth: 1,
     borderBottomColor: "#FDE047",
@@ -1856,6 +1676,7 @@ const styles = StyleSheet.create({
   },
   keyboardContainer: {
     flex: 1,
+    minHeight: 0,
   },
   loadingWrap: {
     flex: 1,
@@ -2103,6 +1924,7 @@ const styles = StyleSheet.create({
     color: "#64748B",
   },
   inputContainer: {
+    flexShrink: 0,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.white,

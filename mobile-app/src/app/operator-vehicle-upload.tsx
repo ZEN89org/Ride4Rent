@@ -1,20 +1,15 @@
+import { AppBottomSheet } from "@/components/common/AppBottomSheet";
+import { rentalSheetStyle } from "@/constants/rentalDesign";
+import RentalSheetHeader from "@/components/common/RentalSheetHeader";
+import { validateVehicleFields } from "@/utils/vehicleValidation";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
-import {
-  Image,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { KeyboardAwareScrollView as ScrollView } from "@/components/common/KeyboardAwareScrollView";
+import { ActivityIndicator, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
-import PrimaryButton from "@/components/common/PrimaryButton";
 import ScreenContainer from "@/components/common/ScreenContainer";
 import { Colors } from "@/constants/colors";
 import { MUNICIPALITY_COORDINATES } from "@/constants/orientalMindoroLocations";
@@ -70,20 +65,20 @@ const initialForm: VehicleFormData = {
 const FORM_STEPS = [
   {
     id: 1,
-    title: "Basics & Photos",
-    shortTitle: "Basics",
+    title: "Vehicle Essentials",
+    shortTitle: "Vehicle",
     icon: "car-info" as const,
   },
   {
     id: 2,
-    title: "Specs & Rates",
-    shortTitle: "Specs",
+    title: "Specifications & Price",
+    shortTitle: "Pricing",
     icon: "car-shift-pattern" as const,
   },
   {
     id: 3,
-    title: "Features & Rules",
-    shortTitle: "Features",
+    title: "Features & Pickup",
+    shortTitle: "Pickup",
     icon: "shield-car" as const,
   },
 ];
@@ -91,6 +86,8 @@ const FORM_STEPS = [
 export default function OperatorVehicleUpload() {
   const { showModal, showWarning } = useAppToast();
   const [currentStep, setCurrentStep] = useState(1);
+  const formScrollRef = useRef<ScrollView>(null);
+  useEffect(() => { formScrollRef.current?.scrollTo({ y: 0, animated: false }); }, [currentStep]);
   const [form, setForm] = useState<VehicleFormData>(initialForm);
   const [selectedAmenities, setSelectedAmenities] = useState<string[]>(
     getDefaultAmenitiesForType("Sedan"),
@@ -129,7 +126,7 @@ export default function OperatorVehicleUpload() {
         [
           {
             text: "Go to Payment Setup",
-            onPress: () => router.replace("/operator-profile" as any),
+            onPress: () => router.replace("/operator-payment" as any),
           },
         ],
         "warning",
@@ -223,8 +220,8 @@ export default function OperatorVehicleUpload() {
   };
 
   const handleSaveCustomBrand = () => {
-    if (!customBrandText.trim()) {
-      showWarning("Brand Name Required", "Please enter a brand name.");
+    if (!/\p{L}/u.test(customBrandText.trim()) || customBrandText.trim().length > 100) {
+      showWarning("Brand Name Required", "Enter a brand name containing letters, up to 100 characters.");
       return;
     }
     setForm((current) => ({
@@ -316,6 +313,8 @@ export default function OperatorVehicleUpload() {
   };
 
   const handleNextStep = () => {
+    const validationError = validateVehicleFields(form as unknown as Record<string, unknown>, currentStep);
+    if (validationError) { showWarning("Check vehicle details", validationError); return; }
     if (currentStep === 1) {
       if (images.length === 0) {
         showWarning(
@@ -363,6 +362,10 @@ export default function OperatorVehicleUpload() {
   };
 
   const submit = async () => {
+    for (const step of [1, 2]) {
+      const validationError = validateVehicleFields(form as unknown as Record<string, unknown>, step);
+      if (validationError) { setError(validationError); setCurrentStep(step); return; }
+    }
     if (isOperatorPending) {
       showModal(
         "Listing Locked",
@@ -381,7 +384,7 @@ export default function OperatorVehicleUpload() {
           { text: "Cancel", style: "cancel" },
           {
             text: "Set Up Now",
-            onPress: () => router.push("/operator-profile" as any),
+            onPress: () => router.push("/operator-payment" as any),
           },
         ],
         "warning",
@@ -458,37 +461,25 @@ export default function OperatorVehicleUpload() {
 
       router.replace("/operator-vehicles");
     } catch (requestError: any) {
-      setError(
-        requestError?.response?.data?.message ?? "Unable to list this vehicle.",
-      );
+      const errors = requestError?.response?.data?.errors;
+      const firstFieldError = errors ? Object.values(errors).flat()[0] : undefined;
+      setError(typeof firstFieldError === "string" ? firstFieldError : requestError?.response?.status === 422 ? requestError.response.data.message : "Unable to list this vehicle. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <ScreenContainer>
-      <ScrollView
+    <ScreenContainer backgroundColor="#F8FAFC" edges={["top", "bottom"]}>
+      <View style={styles.listingHeader}><TouchableOpacity accessibilityLabel="Back to fleet" style={styles.backButton} disabled={isSubmitting} onPress={() => router.back()}><Ionicons name="chevron-back" size={22} color={Colors.dark} /></TouchableOpacity><View style={{ flex: 1 }}><Text style={styles.listingHeaderTitle}>New Vehicle</Text><Text style={styles.listingHeaderHint}>Build your fleet listing</Text></View><Text style={styles.listingHeaderHint}>{currentStep} / 3</Text></View>
+      <View style={styles.listingSteps}>{FORM_STEPS.map(step => <TouchableOpacity key={step.id} accessibilityRole="tab" accessibilityState={{ selected: currentStep === step.id }} disabled={step.id > currentStep + 1 || isSubmitting} style={[styles.listingStep, currentStep === step.id && styles.listingStepActive]} onPress={() => { if (step.id < currentStep) setCurrentStep(step.id); else if (step.id === currentStep + 1) handleNextStep(); }}><Text style={[styles.listingStepText, currentStep === step.id && { color: Colors.dark }]}>{currentStep > step.id ? "✓ " : ""}{step.shortTitle}</Text><View style={[styles.stepTrack, currentStep >= step.id && { backgroundColor: Colors.primary }]} /></TouchableOpacity>)}</View>
+      <ScrollView ref={formScrollRef} style={{ flex: 1 }}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         nestedScrollEnabled={true}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header Bar */}
-        <View style={styles.topBar}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="arrow-back" size={20} color={Colors.dark} />
-          </TouchableOpacity>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.screenTitle}>List a Vehicle</Text>
-          </View>
-        </View>
-
         {/* Status / Review Notices */}
         {isOperatorPending && (
           <View style={styles.pendingWarningBanner}>
@@ -523,7 +514,7 @@ export default function OperatorVehicleUpload() {
               </Text>
               <TouchableOpacity
                 style={styles.paymentSetupActionBtn}
-                onPress={() => router.push("/operator-profile" as any)}
+                onPress={() => router.push("/operator-payment" as any)}
                 activeOpacity={0.85}
               >
                 <Text style={styles.paymentSetupActionBtnText}>
@@ -535,104 +526,8 @@ export default function OperatorVehicleUpload() {
           </View>
         )}
 
-        {/* Modern Responsive Step Stepper / Pagination Header */}
-        <View style={styles.paginationCard}>
-          {/* Top Status Row */}
-          <View style={styles.paginationTopRow}>
-            <View style={styles.stepBadge}>
-              <Text style={styles.stepBadgeText}>STEP {currentStep} OF 3</Text>
-            </View>
-            <View style={styles.stepMetaRight}>
-              <MaterialCommunityIcons
-                name={FORM_STEPS[currentStep - 1].icon}
-                size={16}
-                color={Colors.dark}
-              />
-              <Text style={styles.stepCurrentTitle}>
-                {FORM_STEPS[currentStep - 1].title}
-              </Text>
-            </View>
-          </View>
-
-          {/* 3-Segment Fluid Progress Line (Adapts to any width) */}
-          <View style={styles.segmentTrackRow}>
-            {FORM_STEPS.map((step) => {
-              const isPast = currentStep > step.id;
-              const isCurrent = currentStep === step.id;
-              return (
-                <TouchableOpacity
-                  key={step.id}
-                  style={styles.segmentTouch}
-                  onPress={() => setCurrentStep(step.id)}
-                  activeOpacity={0.7}
-                >
-                  <View
-                    style={[
-                      styles.segmentBar,
-                      isCurrent && styles.segmentBarCurrent,
-                      isPast && styles.segmentBarPast,
-                    ]}
-                  />
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          {/* Quick-Jump Step Pills (Clean, compact, shortTitle will never wrap or truncate) */}
-          <View style={styles.stepChipsRow}>
-            {FORM_STEPS.map((step) => {
-              const isPast = currentStep > step.id;
-              const isCurrent = currentStep === step.id;
-              return (
-                <TouchableOpacity
-                  key={step.id}
-                  style={[
-                    styles.stepChip,
-                    isCurrent && styles.stepChipActive,
-                    isPast && styles.stepChipPast,
-                  ]}
-                  onPress={() => setCurrentStep(step.id)}
-                  activeOpacity={0.75}
-                >
-                  <View
-                    style={[
-                      styles.stepChipDot,
-                      isCurrent && styles.stepChipDotActive,
-                      isPast && styles.stepChipDotPast,
-                    ]}
-                  >
-                    {isPast ? (
-                      <Ionicons
-                        name="checkmark"
-                        size={10}
-                        color={Colors.white}
-                      />
-                    ) : (
-                      <Text
-                        style={[
-                          styles.stepChipDotNum,
-                          isCurrent && styles.stepChipDotNumActive,
-                        ]}
-                      >
-                        {step.id}
-                      </Text>
-                    )}
-                  </View>
-                  <Text
-                    style={[
-                      styles.stepChipText,
-                      isCurrent && styles.stepChipTextActive,
-                      isPast && styles.stepChipTextPast,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {step.shortTitle}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
+        <View style={styles.listingIntro}><View style={styles.introIcon}><MaterialCommunityIcons name={FORM_STEPS[currentStep - 1].icon} size={26} color={Colors.primary} /></View><Text style={styles.introEyebrow}>STEP {currentStep} OF 3</Text><Text style={styles.listingIntroTitle}>{currentStep === 1 ? "Make a great first impression" : currentStep === 2 ? "Set your rental details" : "Ready for the road"}</Text><Text style={styles.listingIntroHint}>{currentStep === 1 ? "Add clear photos and the details renters look for." : currentStep === 2 ? "Choose the specifications, daily rate and driver requirements." : "Add the pickup point, amenities and rental policies."}</Text></View>
+        {currentStep === 3 && <View style={styles.reviewListing}><View style={{ flex: 1 }}><Text style={styles.cardTitle}>{form.name || "Your vehicle"}</Text><Text style={styles.cardSubtitle}>{form.plate_number} · {form.year_model}</Text><Text style={styles.reviewRate}>₱{Number(form.daily_rate || 0).toLocaleString()} / day</Text></View>{!!images[0] && <Image source={{ uri: images[0] }} style={{ width: 76, height: 76, borderRadius: 12 }} />}</View>}
 
         {/* ========================================================================= */}
         {/* STEP 1: BASICS & PHOTOS                                                   */}
@@ -865,13 +760,6 @@ export default function OperatorVehicleUpload() {
               />
             </View>
 
-            {/* Step 1 Actions */}
-            <View style={styles.actionsRow}>
-              <PrimaryButton
-                title="Continue to Specifications"
-                onPress={handleNextStep}
-              />
-            </View>
           </View>
         )}
 
@@ -1039,17 +927,7 @@ export default function OperatorVehicleUpload() {
                 required
               />
 
-              <FormField
-                label="Advance Reservation Fee"
-                value={form.reservation_fee}
-                onChangeText={(val) =>
-                  update("reservation_fee", val.replace(/[^\d.]/g, ""))
-                }
-                placeholder="500"
-                keyboardType="decimal-pad"
-                prefix="₱"
-                helperText="Secures booking dates; deductible from the total balance"
-              />
+              <Text style={{ color: Colors.secondary, marginBottom: 16 }}>The reservation fee is automatically 50% of the renter’s selected booking total. The remaining 50% is collected before handover.</Text>
 
               <View style={styles.row}>
                 <View style={styles.col}>
@@ -1078,23 +956,6 @@ export default function OperatorVehicleUpload() {
               </View>
             </View>
 
-            {/* Step 2 Actions */}
-            <View style={styles.twoButtonRow}>
-              <TouchableOpacity
-                style={styles.secondaryStepBtn}
-                onPress={() => setCurrentStep(1)}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="arrow-back" size={16} color={Colors.dark} />
-                <Text style={styles.secondaryStepBtnText}>Back</Text>
-              </TouchableOpacity>
-              <View style={{ flex: 1 }}>
-                <PrimaryButton
-                  title="Continue to Features"
-                  onPress={handleNextStep}
-                />
-              </View>
-            </View>
           </View>
         )}
 
@@ -1296,71 +1157,23 @@ export default function OperatorVehicleUpload() {
               </View>
             </View>
 
-            {/* Error Message */}
-            {error ? (
-              <View style={styles.errorBox}>
-                <Ionicons name="alert-circle" size={18} color="#EF4444" />
-                <Text style={styles.errorBoxText}>{error}</Text>
-              </View>
-            ) : null}
-
-            {/* Step 3 Actions */}
-            <View style={styles.twoButtonRow}>
-              <TouchableOpacity
-                style={styles.secondaryStepBtn}
-                onPress={() => setCurrentStep(2)}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="arrow-back" size={16} color={Colors.dark} />
-                <Text style={styles.secondaryStepBtnText}>Back</Text>
-              </TouchableOpacity>
-              <View style={{ flex: 1 }}>
-                <PrimaryButton
-                  title={
-                    isOperatorPending
-                      ? "Publishing Locked (Under Review)"
-                      : "Publish Vehicle to Fleet"
-                  }
-                  onPress={submit}
-                  loading={isSubmitting}
-                />
-              </View>
-            </View>
           </View>
         )}
       </ScrollView>
+      <View style={styles.listingFooter}>
+        {!!error && <Text accessibilityRole="alert" style={styles.listingError}>{error}</Text>}
+        <View style={styles.listingFooterRow}>
+          {currentStep > 1 && <TouchableOpacity disabled={isSubmitting} style={styles.listingBack} onPress={() => setCurrentStep(step => Math.max(1, step - 1))}><Text style={styles.listingButtonText}>Back</Text></TouchableOpacity>}
+          <TouchableOpacity disabled={isSubmitting || (currentStep === 3 && isOperatorPending)} style={[styles.listingContinue, (isSubmitting || (currentStep === 3 && isOperatorPending)) && { opacity: 0.5 }]} onPress={currentStep === 3 ? submit : handleNextStep}>{isSubmitting ? <ActivityIndicator color={Colors.dark} /> : <><Text style={styles.listingButtonText}>{currentStep === 3 ? isOperatorPending ? "Under Review" : "Publish Vehicle" : "Continue"}</Text><Ionicons name={currentStep === 3 ? "checkmark" : "arrow-forward"} size={17} color={Colors.dark} /></>}</TouchableOpacity>
+        </View>
+      </View>
+
 
       {/* ========================================================================= */}
       {/* OPTION PICKER BOTTOM SHEET MODAL                                          */}
       {/* ========================================================================= */}
-      <Modal
-        visible={picker !== null}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-        onRequestClose={() => {
-          setPicker(null);
-          setPickerSearch("");
-          setShowCustomBrandInput(false);
-        }}
-      >
-        <View style={styles.modalBackdrop}>
-          <TouchableOpacity
-            style={StyleSheet.absoluteFill}
-            activeOpacity={1}
-            onPress={() => {
-              setPicker(null);
-              setPickerSearch("");
-              setShowCustomBrandInput(false);
-            }}
-          />
-
-          <View style={styles.modalCard}>
-            <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>
-              Choose {picker?.replaceAll("_", " ")}
-            </Text>
-
+      <AppBottomSheet visible={picker !== null} sheetStyle={rentalSheetStyle} onClose={() => { setPicker(null); setPickerSearch(""); setShowCustomBrandInput(false); }}>
+        <RentalSheetHeader title={`Choose ${picker?.replaceAll("_", " ") || "option"}`} icon="options-outline" onClose={() => { setPicker(null); setPickerSearch(""); setShowCustomBrandInput(false); }} />
             {picker === "vehicle_brands" && showCustomBrandInput ? (
               <View style={styles.customBrandWrap}>
                 <Text style={styles.customBrandLabel}>
@@ -1421,7 +1234,8 @@ export default function OperatorVehicleUpload() {
                 )}
 
                 <ScrollView
-                  style={{ maxHeight: 330 }}
+                  style={{ flexShrink: 1 }}
+                  keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator={false}
                 >
                   {filteredOptions.map((option) => (
@@ -1469,9 +1283,7 @@ export default function OperatorVehicleUpload() {
             >
               <Text style={styles.modalCancelText}>Cancel</Text>
             </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      </AppBottomSheet>
     </ScreenContainer>
   );
 }
@@ -1586,16 +1398,33 @@ function DropdownField({
 // =========================================================================
 
 const styles = StyleSheet.create({
-  content: {
-    padding: Spacing.lg,
-    paddingBottom: 40,
-  },
-  topBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: Spacing.sm,
-    marginBottom: Spacing.md,
-  },
+  listingStepActive: {},
+  stepTrack: { height: 3, backgroundColor: "#E2E8F0", width: "100%", borderRadius: 2 },
+  introIcon: { marginBottom: 4 },
+  introEyebrow: { fontFamily: FontFamily.semiBold, fontSize: 10, letterSpacing: 1, color: Colors.primary },
+  reviewListing: { flexDirection: "row", alignItems: "center", gap: 16, borderRadius: 18, backgroundColor: Colors.logoBackground, padding: 18, marginBottom: 20 },
+  reviewRate: { fontFamily: FontFamily.semiBold, fontSize: 16, color: Colors.dark, marginTop: 8 },
+  listingHeader: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 14, backgroundColor: Colors.white },
+  listingHeaderTitle: { fontFamily: FontFamily.bold, fontSize: 20, color: Colors.dark },
+  listingHeaderHint: { fontFamily: FontFamily.regular, fontSize: 11, color: Colors.secondary, marginTop: 2 },
+  listingSteps: { flexDirection: "row", gap: 12, paddingHorizontal: 24, paddingBottom: 0, backgroundColor: Colors.white },
+  listingStep: { flex: 1, minHeight: 48, justifyContent: "space-between", paddingTop: 8, gap: 10 },
+  listingStepNumber: { width: 24, height: 24, borderRadius: 8, backgroundColor: "#F1F5F9", alignItems: "center", justifyContent: "center" },
+  listingStepNumberText: { fontFamily: FontFamily.semiBold, fontSize: 11, color: Colors.dark },
+  listingStepText: { fontFamily: FontFamily.semiBold, fontSize: 13, color: Colors.secondary },
+  listingProgressTrack: { height: 3, backgroundColor: "#E2E8F0" },
+  listingProgressFill: { height: "100%", backgroundColor: Colors.primary },
+  listingIntro: { padding: 22, borderRadius: 20, backgroundColor: Colors.dark, gap: 8, marginBottom: 20 },
+  listingIntroTitle: { fontFamily: FontFamily.semiBold, fontSize: 23, lineHeight: 32, color: Colors.white },
+  listingIntroHint: { fontFamily: FontFamily.regular, fontSize: 12, lineHeight: 20, color: "#CBD5E1" },
+  listingFooter: { backgroundColor: Colors.white, borderTopWidth: 1, borderTopColor: "#E2E8F0", paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
+  listingFooterRow: { flexDirection: "row", gap: 10 },
+  listingBack: { minHeight: 50, paddingHorizontal: 22, paddingVertical: 12, borderRadius: 14, borderWidth: 1, borderColor: "#E2E8F0", alignItems: "center", justifyContent: "center" },
+  listingContinue: { flex: 1, minHeight: 50, padding: 12, borderRadius: 14, backgroundColor: Colors.primary, flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center" },
+  listingButtonText: { fontFamily: FontFamily.semiBold, fontSize: 13, color: Colors.dark },
+  listingError: { fontFamily: FontFamily.regular, fontSize: 11, lineHeight: 17, color: Colors.error },
+  content: { padding: 16, paddingBottom: 24 },
+
   backButton: {
     width: 38,
     height: 38,
@@ -1606,184 +1435,40 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  screenEyebrow: {
-    color: Colors.secondary,
-    fontFamily: FontFamily.bold,
-    fontSize: 10,
-    letterSpacing: 0.8,
-  },
-  screenTitle: {
-    color: Colors.dark,
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.heading,
-  },
+
+
 
   // Responsive Stepper / Pagination Header
-  paginationCard: {
-    backgroundColor: Colors.white,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    padding: Spacing.md,
-    marginBottom: Spacing.md,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  paginationTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 10,
-  },
-  stepBadge: {
-    backgroundColor: Colors.logoBackground,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-  },
-  stepBadgeText: {
-    fontFamily: FontFamily.bold,
-    fontSize: 10,
-    color: Colors.dark,
-    letterSpacing: 0.5,
-  },
-  stepMetaRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  stepCurrentTitle: {
-    fontFamily: FontFamily.bold,
-    fontSize: 13,
-    color: Colors.dark,
-  },
-  segmentTrackRow: {
-    flexDirection: "row",
-    gap: 6,
-    marginBottom: 10,
-  },
-  segmentTouch: {
-    flex: 1,
-    paddingVertical: 3,
-  },
-  segmentBar: {
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#F1F5F9",
-  },
-  segmentBarCurrent: {
-    backgroundColor: Colors.primary,
-  },
-  segmentBarPast: {
-    backgroundColor: Colors.dark,
-  },
-  stepChipsRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  stepChip: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 7,
-    paddingHorizontal: 4,
-    borderRadius: Radius.md,
-    backgroundColor: "#F8FAFC",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  stepChipActive: {
-    backgroundColor: Colors.logoBackground,
-    borderColor: Colors.primary,
-  },
-  stepChipPast: {
-    backgroundColor: Colors.white,
-    borderColor: Colors.border,
-  },
-  stepChipDot: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: "#E2E8F0",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stepChipDotActive: {
-    backgroundColor: Colors.primary,
-  },
-  stepChipDotPast: {
-    backgroundColor: Colors.dark,
-  },
-  stepChipDotNum: {
-    fontFamily: FontFamily.bold,
-    fontSize: 10,
-    color: "#64748B",
-  },
-  stepChipDotNumActive: {
-    color: Colors.dark,
-  },
-  stepChipText: {
-    fontFamily: FontFamily.medium,
-    fontSize: 12,
-    color: "#64748B",
-  },
-  stepChipTextActive: {
-    fontFamily: FontFamily.bold,
-    color: Colors.dark,
-  },
-  stepChipTextPast: {
-    fontFamily: FontFamily.medium,
-    color: Colors.dark,
-  },
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   // Form Cards
-  formCard: {
-    backgroundColor: Colors.white,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    padding: Spacing.md,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOpacity: 0.03,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: Spacing.md,
-    paddingBottom: Spacing.xs,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
-  },
-  cardHeaderIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: Colors.logoBackground,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  cardTitle: {
-    fontFamily: FontFamily.bold,
-    fontSize: 14,
-    color: Colors.dark,
-  },
-  cardSubtitle: {
-    fontFamily: FontFamily.regular,
-    fontSize: 11,
-    color: Colors.secondary,
-    marginTop: 1,
-  },
+  formCard: { backgroundColor: Colors.white, borderRadius: 18, borderWidth: 1, borderColor: "#E9EDF2", padding: 20 },
+  cardHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: "#F1F5F9" },
+  cardHeaderIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: "#F8FAFC", alignItems: "center", justifyContent: "center" },
+  cardTitle: { fontFamily: FontFamily.semiBold, fontSize: 14, color: Colors.dark },
+  cardSubtitle: { fontFamily: FontFamily.regular, fontSize: 11, lineHeight: 17, color: Colors.secondary, marginTop: 2 },
   photoCountBadge: {
     backgroundColor: "#F1F5F9",
     paddingHorizontal: 8,
@@ -1876,28 +1561,14 @@ const styles = StyleSheet.create({
   },
 
   // Two Column Layout
-  row: {
-    flexDirection: "row",
-    gap: Spacing.sm,
-  },
-  col: {
-    flex: 1,
-  },
+  row: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  col: { flexGrow: 1, flexBasis: 110, minWidth: 0 },
 
   // Photos Section
   photosContainer: {
     gap: Spacing.sm,
   },
-  emptyUploader: {
-    backgroundColor: "#F8FAFC",
-    borderWidth: 1.5,
-    borderStyle: "dashed",
-    borderColor: "#CBD5E1",
-    borderRadius: Radius.lg,
-    padding: Spacing.lg,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  emptyUploader: { backgroundColor: "#FFFCF0", padding: 24, borderRadius: 14, borderWidth: 1, borderStyle: "dashed", borderColor: "#CBD5E1", alignItems: "center", gap: 8 },
   emptyUploaderIconCircle: {
     width: 52,
     height: 52,
@@ -2152,50 +1823,14 @@ const styles = StyleSheet.create({
   },
 
   // Action Buttons
-  actionsRow: {
-    marginTop: Spacing.xs,
-  },
-  twoButtonRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginTop: Spacing.xs,
-  },
-  secondaryStepBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    backgroundColor: Colors.white,
-  },
-  secondaryStepBtnText: {
-    fontFamily: FontFamily.bold,
-    fontSize: 14,
-    color: Colors.dark,
-  },
+
+
+
+
 
   // Error Box
-  errorBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "#FEF2F2",
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    borderColor: "#FCA5A5",
-    padding: Spacing.md,
-  },
-  errorBoxText: {
-    fontFamily: FontFamily.medium,
-    fontSize: 12,
-    color: "#B91C1C",
-    flex: 1,
-  },
+
+
 
   // Banners
   pendingWarningBanner: {
@@ -2270,33 +1905,6 @@ const styles = StyleSheet.create({
   },
 
   // Bottom Sheet Modal
-  modalBackdrop: {
-    backgroundColor: "rgba(0,0,0,0.5)",
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  modalCard: {
-    backgroundColor: Colors.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: Spacing.lg,
-    paddingBottom: Spacing.xl,
-  },
-  modalHandle: {
-    width: 40,
-    height: 4,
-    backgroundColor: "#E2E8F0",
-    borderRadius: 2,
-    alignSelf: "center",
-    marginBottom: Spacing.sm,
-  },
-  modalTitle: {
-    color: Colors.dark,
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.title,
-    marginBottom: Spacing.md,
-    textTransform: "capitalize",
-  },
   searchBox: {
     flexDirection: "row",
     alignItems: "center",

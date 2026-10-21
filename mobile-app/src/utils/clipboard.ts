@@ -1,57 +1,22 @@
-import { Share } from "react-native";
+import { requireOptionalNativeModule } from "expo";
+import { Platform } from "react-native";
 
-/**
- * Safely copies text to the device clipboard across all environments.
- * Gracefully falls back if native clipboard modules (e.g. ExpoClipboard)
- * are not linked in the current binary build, preventing app crashes.
- */
+/** Returns true only when text was actually copied. Missing native support is safe. */
 export async function copyToClipboard(text: string, cleanSpaces = false): Promise<boolean> {
   if (!text) return false;
   const content = cleanSpaces ? text.replace(/\s+/g, "") : text;
-
-  // 1. Try expo-clipboard lazily with safe catch
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const ExpoClipboard = require("expo-clipboard");
-    if (ExpoClipboard && typeof ExpoClipboard.setStringAsync === "function") {
-      await ExpoClipboard.setStringAsync(content);
-      return true;
-    }
-  } catch {
-    // Native module 'ExpoClipboard' is not linked in the active runtime
-  }
-
-  // 2. Try Web / DOM navigator.clipboard if running in web context
-  try {
-    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    if (Platform.OS === "web") {
+      if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) return false;
       await navigator.clipboard.writeText(content);
       return true;
     }
+    // Check availability before importing the package: its entry point throws
+    // immediately when an older development binary lacks ExpoClipboard.
+    if (!requireOptionalNativeModule("ExpoClipboard")) return false;
+    const clipboard = require("expo-clipboard") as typeof import("expo-clipboard");
+    return (await clipboard.setStringAsync(content)) !== false;
   } catch {
-    // Web clipboard not available
+    return false;
   }
-
-  // 3. Try React Native legacy Clipboard if bundled
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const RN = require("react-native");
-    if (RN.Clipboard && typeof RN.Clipboard.setString === "function") {
-      RN.Clipboard.setString(content);
-      return true;
-    }
-  } catch {
-    // Legacy RN clipboard not available
-  }
-
-  // 4. Universal Fallback: Use native Share sheet which allows copying to clipboard on all Android & iOS devices
-  try {
-    await Share.share({
-      message: content,
-    });
-    return true;
-  } catch {
-    // Share dismissed or cancelled
-  }
-
-  return false;
 }

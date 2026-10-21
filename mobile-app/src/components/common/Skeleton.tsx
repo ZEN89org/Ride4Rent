@@ -57,7 +57,7 @@ export function VehicleCardSkeleton({
   width = 300,
   height = 230,
 }: {
-  width?: number;
+  width?: number | `${number}%`;
   height?: number;
 }) {
   return (

@@ -1,5 +1,7 @@
 import {
   StyleSheet,
+  StyleProp,
+  TextStyle,
   Text,
   TouchableOpacity,
   View,
@@ -15,6 +17,8 @@ import {
 import { Colors } from "@/constants/colors";
 
 interface Props {
+  textStyle?: StyleProp<TextStyle>;
+  compact?: boolean;
 
   title: string;
 
@@ -31,13 +35,15 @@ export default function SocialButton({
   icon,
 
   onPress,
+  compact = false,
+  textStyle,
 
 }: Props) {
 
   return (
 
     <TouchableOpacity
-      style={styles.button}
+      style={[styles.button, compact && { paddingVertical: 12, minHeight: 50, marginBottom: 12 }]}
       onPress={onPress}
       activeOpacity={0.8}
     >
@@ -46,7 +52,7 @@ export default function SocialButton({
 
         {icon}
 
-        <Text style={styles.text}>
+        <Text style={[styles.text, textStyle]}>
 
           {title}
 

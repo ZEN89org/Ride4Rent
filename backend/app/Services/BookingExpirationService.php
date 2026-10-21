@@ -32,7 +32,7 @@ class BookingExpirationService
                 if ($vehicle) {
                     $active = Booking::where('vehicle_id', $vehicle->id)->whereIn('status', Booking::ACTIVE_STATUSES)->count();
                     $remaining = max(0, max(1, (int) $vehicle->quantity) - $active);
-                    $vehicle->update(['available_units' => $remaining, 'availability_status' => $remaining > 0 ? 'available' : 'unavailable']);
+                    $vehicle->update(['available_units' => $remaining, 'availability_status' => $vehicle->availability_status === 'maintenance' ? 'maintenance' : ($remaining > 0 ? 'available' : 'unavailable')]);
                 }
                 Notification::create([
                     'user_id' => $booking->renter_id, 'title' => 'Booking Expired',

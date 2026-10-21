@@ -1,20 +1,19 @@
+import RenterProfileContent from "@/components/common/RenterProfileContent";
+import { bookingPaymentSummary } from "@/utils/bookingPaymentSummary";
+import RentalSheetHeader from "@/components/common/RentalSheetHeader";
+import ExtensionFlowSheet from "@/components/common/ExtensionFlowSheet";
+import EarlyReturnPanel from "@/components/common/EarlyReturnPanel";
+import { rentalCardStyle, rentalSheetStyle } from "@/constants/rentalDesign";
+import { syncBookingsReminders } from "@/services/deviceNotificationService";
+import { sanitizeMoney } from "@/utils/inputValidation";
+import { paginateItems } from "@/utils/paginateItems";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { router, useFocusEffect } from "expo-router";
 import React, { useEffect, useState } from "react";
-import {
-  FlatList,
-  Modal,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { KeyboardAwareScrollView as ScrollView } from "@/components/common/KeyboardAwareScrollView";
+import { FlatList, Modal, Platform, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { AppBottomSheet } from "@/components/common/AppBottomSheet";
 import ListPagination from "@/components/common/ListPagination";
@@ -27,20 +26,17 @@ import { useAuth } from "@/features/auth/hooks/useAuth";
 import OperatorShell from "@/features/operator/components/navigation/OperatorShell";
 import { resolveImageUrl } from "@/services/api";
 import {
-  approveBookingExtension,
   Booking,
   completeTrip,
   confirmOperatorPayment,
-  confirmExtensionPayment,
   deleteBooking,
   getMyBookings,
   processBookingRefund,
-  rejectBookingExtension,
   startTrip,
   updateBookingStatus,
 } from "@/services/bookingService";
 
-type OperatorTabType = "all" | "pending" | "approved" | "ongoing" | "history";
+type OperatorTabType = "all" | "pending" | "approved" | "ongoing" | "history" | "cancelled";
 
 const cleanDate = (d: string | null | undefined): string => {
   if (!d) return "";
@@ -373,6 +369,8 @@ export default function OperatorBookingsScreen() {
   const [startFuelLevelInput, setStartFuelLevelInput] = useState<number>(100);
   const [startNotesInput, setStartNotesInput] = useState<string>("");
   const [startTripPhotos, setStartTripPhotos] = useState<string[]>([]);
+  const [balanceCollected, setBalanceCollected] = useState(false);
+  const [settlementConfirmed, setSettlementConfirmed] = useState(false);
   const [submittingStartTrip, setSubmittingStartTrip] =
     useState<boolean>(false);
 
@@ -390,28 +388,33 @@ export default function OperatorBookingsScreen() {
   const [submittingReturnTrip, setSubmittingReturnTrip] =
     useState<boolean>(false);
 
+  const verificationId = verifyModalBooking?.id;
+  useEffect(() => {
+    if (!verificationId) return;
+    let active = true;
+    const refreshDocuments = async () => {
+      try {
+        const fresh = (await getMyBookings()).find((booking) => booking.id === verificationId);
+        if (active && fresh) setVerifyModalBooking((current) => current?.id === verificationId ? fresh : current);
+      } catch (error) { console.warn("Could not refresh verification documents:", error); }
+    };
+    void refreshDocuments();
+    const interval = setInterval(refreshDocuments, 10 * 60 * 1000);
+    return () => { active = false; clearInterval(interval); };
+  }, [verificationId]);
+
   // Dedicated Trip Extension Review Modal State
+  const [extensionFlowMode, setExtensionFlowMode] = useState<"review" | "verify">("review");
   const [reviewExtensionBooking, setReviewExtensionBooking] =
     useState<Booking | null>(null);
-  const [submittingExtensionAction, setSubmittingExtensionAction] =
-    useState<boolean>(false);
 
-  // Progressive Disclosure: Track expanded cards
-  const [expandedCardIds, setExpandedCardIds] = useState<
-    Record<number, boolean>
-  >({});
-
-  const toggleExpandCard = (bookingId: number) => {
-    setExpandedCardIds((prev) => ({
-      ...prev,
-      [bookingId]: !prev[bookingId],
-    }));
-  };
+  const [detailsBooking, setDetailsBooking] = useState<Booking | null>(null);
 
   const loadOperatorBookings = React.useCallback(async (silent = false) => {
     try {
       const data = await getMyBookings();
       setBookings(data);
+      void syncBookingsReminders(data, "operator");
     } catch (e) {
       if (!silent) console.error("Failed to load operator bookings", e);
     } finally {
@@ -592,108 +595,6 @@ export default function OperatorBookingsScreen() {
     }
   };
 
-  const handleApproveExtension = (bookingId: number) => {
-    showModal(
-      "Agree to Extension Schedule",
-      "Agree to extend the rental by the requested days? Once agreed, the renter will be prompted to settle the extension payment via GCash.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Agree & Request Payment",
-          style: "default",
-          onPress: async () => {
-            try {
-              await approveBookingExtension(bookingId);
-              showSuccess(
-                "Extension Schedule Agreed",
-                "Renter notified to settle the extension fee.",
-              );
-              loadOperatorBookings();
-            } catch (e: any) {
-              showError(
-                "Error",
-                e.response?.data?.message || "Could not agree to extension.",
-              );
-            }
-          },
-        },
-      ],
-      "confirm",
-    );
-  };
-
-  const handleRejectExtension = (bookingId: number) => {
-    showModal(
-      "Decline Extension",
-      "Are you sure you want to decline this rental extension request?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Decline Request",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await rejectBookingExtension(bookingId);
-              showSuccess(
-                "Extension Declined",
-                "Rental extension request was rejected.",
-              );
-              loadOperatorBookings();
-            } catch (e: any) {
-              showError(
-                "Error",
-                e.response?.data?.message || "Could not reject extension.",
-              );
-            }
-          },
-        },
-      ],
-      "confirm",
-    );
-  };
-
-  const handleConfirmApproveExtensionModal = async () => {
-    if (!reviewExtensionBooking) return;
-    try {
-      setSubmittingExtensionAction(true);
-      await approveBookingExtension(reviewExtensionBooking.id);
-      showSuccess(
-        "Extension Schedule Agreed",
-        "Renter has been notified to settle the extension fee via GCash.",
-      );
-      setReviewExtensionBooking(null);
-      loadOperatorBookings();
-    } catch (e: any) {
-      showError(
-        "Approval Error",
-        e.response?.data?.message || "Could not agree to extension.",
-      );
-    } finally {
-      setSubmittingExtensionAction(false);
-    }
-  };
-
-  const handleConfirmRejectExtensionModal = async () => {
-    if (!reviewExtensionBooking) return;
-    try {
-      setSubmittingExtensionAction(true);
-      await rejectBookingExtension(reviewExtensionBooking.id);
-      showSuccess(
-        "Extension Declined",
-        "Rental extension request was declined.",
-      );
-      setReviewExtensionBooking(null);
-      loadOperatorBookings();
-    } catch (e: any) {
-      showError(
-        "Error",
-        e.response?.data?.message || "Could not decline extension.",
-      );
-    } finally {
-      setSubmittingExtensionAction(false);
-    }
-  };
-
   const pickStartPhotos = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -737,9 +638,10 @@ export default function OperatorBookingsScreen() {
   };
 
   const openStartTripModal = (booking: Booking) => {
+    setBalanceCollected(false);
     setStartTripModalBooking(booking);
     setStartMileageInput(
-      booking.vehicle?.mileage ? String(booking.vehicle.mileage) : "25000",
+      String(booking.vehicle?.current_odometer ?? booking.vehicle?.mileage ?? ""),
     );
     setStartFuelLevelInput(100);
     setStartNotesInput("");
@@ -748,6 +650,7 @@ export default function OperatorBookingsScreen() {
 
   const handleExecuteStartTrip = async () => {
     if (!startTripModalBooking) return;
+    if (!balanceCollected) { showError("Payment required", "Confirm collection of the remaining rental balance before handing over the vehicle."); return; }
     const mileageNum = parseInt(startMileageInput, 10);
     if (isNaN(mileageNum) || mileageNum < 0) {
       showError(
@@ -761,6 +664,7 @@ export default function OperatorBookingsScreen() {
       setSubmittingStartTrip(true);
       if (startTripPhotos.length > 0) {
         const formData = new FormData();
+        formData.append("rental_balance_collected", "1");
         formData.append("start_mileage", String(mileageNum));
         formData.append("start_fuel_level", String(startFuelLevelInput));
         if (startNotesInput.trim()) {
@@ -776,6 +680,7 @@ export default function OperatorBookingsScreen() {
         await startTrip(startTripModalBooking.id, formData);
       } else {
         await startTrip(startTripModalBooking.id, {
+          rental_balance_collected: true,
           start_mileage: mileageNum,
           start_fuel_level: startFuelLevelInput,
           start_inspection_notes: startNotesInput.trim() || undefined,
@@ -799,9 +704,9 @@ export default function OperatorBookingsScreen() {
   };
 
   const openReturnTripModal = (booking: Booking) => {
+    setSettlementConfirmed(false);
     setReturnTripModalBooking(booking);
-    const estimatedEndMileage = (booking.start_mileage ?? 25000) + 50;
-    setEndMileageInput(String(estimatedEndMileage));
+    setEndMileageInput("");
     setEndFuelLevelInput(booking.start_fuel_level ?? 100);
     setFuelChargeInput("0");
     setDamageChargeInput("0");
@@ -824,6 +729,7 @@ export default function OperatorBookingsScreen() {
 
   const handleExecuteReturnTrip = async () => {
     if (!returnTripModalBooking) return;
+    if (!settlementConfirmed) { showError("Settlement required", "Confirm all outstanding payments have been collected."); return; }
     const endMileageNum = parseInt(endMileageInput, 10);
     if (isNaN(endMileageNum) || endMileageNum < 0) {
       showError(
@@ -851,6 +757,7 @@ export default function OperatorBookingsScreen() {
 
       if (returnTripPhotos.length > 0) {
         const formData = new FormData();
+        formData.append("settlement_confirmed", "1");
         formData.append("end_mileage", String(endMileageNum));
         formData.append("end_fuel_level", String(endFuelLevelInput));
         formData.append("fuel_charge", String(fuelVal));
@@ -870,6 +777,7 @@ export default function OperatorBookingsScreen() {
         await completeTrip(returnTripModalBooking.id, formData);
       } else {
         await completeTrip(returnTripModalBooking.id, {
+          settlement_confirmed: true,
           end_mileage: endMileageNum,
           end_fuel_level: endFuelLevelInput,
           fuel_charge: fuelVal,
@@ -942,14 +850,8 @@ export default function OperatorBookingsScreen() {
       if (activeTab === "all") {
         return true;
       }
-      if (activeTab === "history") {
-        return (
-          b.status === "completed" ||
-          b.status === "rejected" ||
-          b.status === "cancelled" ||
-          b.status === "no_show"
-        );
-      }
+      if (activeTab === "history") return b.status === "completed";
+      if (activeTab === "cancelled") return ["cancelled", "rejected", "no_show"].includes(b.status);
       if (activeTab === "pending") {
         return (
           b.status === "pending_payment" ||
@@ -987,10 +889,9 @@ export default function OperatorBookingsScreen() {
     });
 
   const totalBookingsCount = filteredBookings.length;
-  const isPaginating = activeTab === "all" || totalBookingsCount > 15;
-  const paginatedBookings = isPaginating
-    ? filteredBookings.slice((currentPage - 1) * 15, currentPage * 15)
-    : filteredBookings;
+  const pagination = paginateItems(filteredBookings, currentPage, 5);
+  const isPaginating = totalBookingsCount > 5;
+  const paginatedBookings = pagination.items;
 
   const getStatusConfig = (item: Booking) => {
     if (
@@ -1119,6 +1020,8 @@ export default function OperatorBookingsScreen() {
     }
   };
 
+  const currentDetails = detailsBooking ? bookings.find(booking => booking.id === detailsBooking.id) || detailsBooking : null;
+  const detailsPayment = currentDetails ? bookingPaymentSummary(currentDetails) : null;
   return (
     <OperatorShell activeRoute="bookings">
       <View style={styles.container}>
@@ -1142,7 +1045,7 @@ export default function OperatorBookingsScreen() {
 
         {/* Urgent Pending Refunds Banner */}
         {pendingRefundsCount > 0 && (
-          <View style={styles.urgentRefundAlertBanner}>
+          <TouchableOpacity style={styles.urgentRefundAlertBanner} onPress={() => { setActiveTab("pending"); setCurrentPage(1); }}>
             <Ionicons name="warning" size={20} color="#DC2626" />
             <View style={{ flex: 1 }}>
               <Text style={styles.urgentRefundAlertTitle}>
@@ -1150,15 +1053,14 @@ export default function OperatorBookingsScreen() {
                 {pendingRefundsCount === 1 ? "Refund" : "Refunds"} Required
               </Text>
               <Text style={styles.urgentRefundAlertSub}>
-                Please return the reservation fee to the renters to maintain
-                your host standing.
+                Tap to review the refunds awaiting payment.
               </Text>
             </View>
-          </View>
+          </TouchableOpacity>
         )}
 
         {/* Tab Filters */}
-        <View style={styles.tabBar}>
+        <ScrollView horizontal style={styles.tabScroller} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabBar}>
           {(
             [
               "all",
@@ -1166,37 +1068,15 @@ export default function OperatorBookingsScreen() {
               "approved",
               "ongoing",
               "history",
+              "cancelled",
             ] as OperatorTabType[]
           ).map((tab) => {
             const isActive = activeTab === tab;
-            const count = bookings.filter((b) =>
-              tab === "all"
-                ? true
-                : tab === "history"
-                  ? b.status === "completed" ||
-                    b.status === "rejected" ||
-                    b.status === "cancelled" ||
-                    b.status === "no_show"
-                  : tab === "pending"
-                    ? b.status === "pending_payment" ||
-                      b.status === "pending_verification" ||
-                      b.refund_status === "pending" ||
-                      b.payment_status === "refund_pending"
-                    : tab === "approved"
-                      ? b.status === "approved" ||
-                        b.status === "awaiting_pickup" ||
-                        b.status === "pickup_in_progress" ||
-                        b.status === "ready_to_start"
-                      : tab === "ongoing"
-                        ? b.status === "trip_in_progress" ||
-                          b.status === "return_pending" ||
-                          b.status === "ongoing"
-                        : b.status === tab,
-            ).length;
-
             return (
               <TouchableOpacity
                 key={tab}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: isActive }}
                 style={[styles.tabItem, isActive && styles.tabItemActive]}
                 onPress={() => {
                   setActiveTab(tab);
@@ -1204,7 +1084,7 @@ export default function OperatorBookingsScreen() {
                 }}
                 activeOpacity={0.7}
               >
-                <Text
+                <Text numberOfLines={1}
                   style={[
                     styles.tabItemText,
                     isActive && styles.tabItemTextActive,
@@ -1212,27 +1092,12 @@ export default function OperatorBookingsScreen() {
                 >
                   {tab === "all"
                     ? "All"
-                    : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                    : tab === "history" ? "Completed" : tab === "approved" ? "Awaiting Pickup" : tab.charAt(0).toUpperCase() + tab.slice(1)}
                 </Text>
-                {((tab === "pending" && count > 0) ||
-                  (tab === "all" &&
-                    bookings.some(
-                      (b) =>
-                        b.status === "pending_payment" ||
-                        b.status === "pending_verification",
-                    ))) && (
-                  <View
-                    style={[
-                      styles.tabIndicatorDot,
-                      styles.tabIndicatorDotPending,
-                      isActive && styles.tabIndicatorDotActive,
-                    ]}
-                  />
-                )}
               </TouchableOpacity>
             );
           })}
-        </View>
+        </ScrollView>
 
         {/* Ongoing Fleet Return Schedule Summary Widget */}
         {activeTab === "ongoing" && ongoingReturnStats.total > 0 && (
@@ -1398,11 +1263,11 @@ export default function OperatorBookingsScreen() {
               />
             }
             ListFooterComponent={
-              isPaginating && totalBookingsCount > 15 ? (
+              isPaginating && totalBookingsCount > 5 ? (
                 <ListPagination
-                  currentPage={currentPage}
+                  currentPage={pagination.page}
                   totalItems={totalBookingsCount}
-                  pageSize={15}
+                  pageSize={5}
                   itemName="bookings"
                   onPageChange={(page) => {
                     setCurrentPage(page);
@@ -1432,10 +1297,6 @@ export default function OperatorBookingsScreen() {
               const returnDateInfo = formatShortDate(effectiveReturnDateStr);
               const returnStatus = getReturnStatus(effectiveReturnDateStr);
               const tripDays = getEffectiveTripDays(item);
-              const tripDatesDisplay = formatPrettyTripDates(
-                item.start_date,
-                effectiveReturnDateStr,
-              );
 
               const isRefundPending =
                 item.refund_status === "pending" ||
@@ -1463,10 +1324,13 @@ export default function OperatorBookingsScreen() {
               const newTotalDays = currentDays + extraDays;
               const newTotalPrice = currentPrice + extraFee;
 
-              const isExpanded = !!expandedCardIds[item.id];
 
               return (
                 <View style={styles.bookingCard}>
+                  <View style={styles.bookingStatusHeader}>
+                    <Text style={styles.bookingReference}>{item.status === "completed" ? "Completed rental" : "Rental booking"}</Text>
+                    <View style={[styles.bookingStatusBadge, { backgroundColor: statusCfg.bg, borderColor: statusCfg.border }]}><Text style={[styles.bookingStatusText, { color: statusCfg.text }]}>{statusCfg.label}</Text></View>
+                  </View>
                   {/* Top Header Row: 68x68 Vehicle Thumb + Renter/Vehicle/Dates Info + Status Pill */}
                   <View style={styles.cardHeaderRow}>
                     <Image
@@ -1510,38 +1374,18 @@ export default function OperatorBookingsScreen() {
                           color="#64748B"
                         />
                         <Text style={styles.datesText} numberOfLines={1}>
-                          {tripDatesDisplay} • {tripDays}{" "}
+                          {tripDays}{" "}
                           {tripDays === 1 ? "day" : "days"}
                         </Text>
                       </View>
                     </View>
 
-                    <View
-                      style={[
-                        styles.statusPill,
-                        {
-                          backgroundColor: statusCfg.bg,
-                          borderColor:
-                            (statusCfg as any).border || statusCfg.bg,
-                          borderWidth: 1,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.statusPillText,
-                          { color: statusCfg.text },
-                        ]}
-                      >
-                        {statusCfg.label}
-                      </Text>
-                    </View>
                   </View>
 
                   {/* Concise 2-Column Metric Strip */}
                   <View style={styles.cardMetaStrip}>
                     <View style={styles.metaCol}>
-                      <Text style={styles.metaLabel}>TOTAL PRICE</Text>
+                      <Text style={styles.metaLabel}>TOTAL AMOUNT</Text>
                       <Text style={styles.metaValue}>
                         ₱{Number(item.total_price).toLocaleString()}
                       </Text>
@@ -1550,13 +1394,13 @@ export default function OperatorBookingsScreen() {
                     <View style={styles.metaCol}>
                       {item.status === "pending_verification" ? (
                         <>
-                          <Text style={styles.metaLabel}>DEPOSIT DUE</Text>
+                          <Text style={styles.metaLabel}>RESERVATION FEE</Text>
                           <Text
                             style={[styles.metaValue, { color: "#D97706" }]}
                           >
                             ₱
                             {Number(
-                              item.reservation_fee || 500,
+                              item.reservation_fee ?? Number(item.total_price) * 0.5,
                             ).toLocaleString()}
                           </Text>
                         </>
@@ -1588,7 +1432,7 @@ export default function OperatorBookingsScreen() {
                         <>
                           <Text style={styles.metaLabel}>RETURN DATE</Text>
                           <Text style={styles.metaValue}>
-                            {cleanDate(effectiveReturnDateStr)}
+                            {formatPrettyDate(effectiveReturnDateStr)}
                           </Text>
                         </>
                       )}
@@ -1597,138 +1441,13 @@ export default function OperatorBookingsScreen() {
 
                   {/* Extension Requests / Notices / Alerts */}
                   {item.extension_status === "pending" ? (
-                    <View style={styles.extensionCardBanner}>
-                      <View style={styles.extensionCardHeader}>
-                        <View style={styles.extensionBadge}>
-                          <Ionicons
-                            name="calendar-outline"
-                            size={12}
-                            color="#D97706"
-                          />
-                          <Text style={styles.extensionBadgeText}>
-                            EXTENSION REQUEST
-                          </Text>
-                        </View>
-                        <Text style={styles.extensionFeeHighlight}>
-                          +₱{extraFee.toLocaleString()}
-                        </Text>
-                      </View>
-
-                      <View style={styles.extensionScheduleRow}>
-                        <View style={styles.extensionScheduleItem}>
-                          <Text style={styles.extensionSubLabel}>
-                            CURRENT RETURN
-                          </Text>
-                          <Text style={styles.extensionMainText}>
-                            {formatPrettyDate(item.end_date)}
-                          </Text>
-                        </View>
-                        <Ionicons
-                          name="arrow-forward"
-                          size={14}
-                          color="#94A3B8"
-                        />
-                        <View style={styles.extensionScheduleItem}>
-                          <Text style={styles.extensionSubLabel}>
-                            REQUESTED (+{extraDays}d)
-                          </Text>
-                          <Text
-                            style={[
-                              styles.extensionMainText,
-                              { color: Colors.primary },
-                            ]}
-                          >
-                            {formatPrettyDate(requestedEndDateStr)}
-                          </Text>
-                        </View>
-                      </View>
-
-                      <View style={styles.extensionSummaryMathRow}>
-                        <Text style={styles.extensionMathSummaryText}>
-                          Updated Total:{" "}
-                          <Text
-                            style={{
-                              fontFamily: FontFamily.bold,
-                              color: Colors.dark,
-                            }}
-                          >
-                            {newTotalDays} days
-                          </Text>{" "}
-                          •{" "}
-                          <Text
-                            style={{
-                              fontFamily: FontFamily.bold,
-                              color: Colors.dark,
-                            }}
-                          >
-                            ₱{newTotalPrice.toLocaleString()}
-                          </Text>
-                        </Text>
-                      </View>
-
-                      <View style={styles.extensionBtnRow}>
-                        <TouchableOpacity
-                          style={styles.extensionDeclineBtn}
-                          onPress={() => handleRejectExtension(item.id)}
-                          activeOpacity={0.8}
-                        >
-                          <Text style={styles.extensionDeclineBtnText}>
-                            Decline
-                          </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={styles.extensionReviewBtn}
-                          onPress={() => setReviewExtensionBooking(item)}
-                          activeOpacity={0.88}
-                        >
-                          <Ionicons
-                            name="eye-outline"
-                            size={13}
-                            color={Colors.dark}
-                          />
-                          <Text style={styles.extensionReviewBtnText}>
-                            Review & Agree
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
+                    <View style={styles.extensionRequestNote}>
+                      <View style={{ flex: 1 }}><Text style={styles.extensionRequestTitle}>Extension requested</Text><Text style={styles.extensionRequestCaption}>+{extraDays} {extraDays === 1 ? "day" : "days"} · ₱{extraFee.toLocaleString()} · {formatPrettyDate(requestedEndDateStr)}</Text></View>
+                      <TouchableOpacity style={[styles.extensionReviewBtn, { flex: 0, minHeight: 44, borderRadius: 12 }]} onPress={() => { setExtensionFlowMode("review"); setReviewExtensionBooking(item); }}><Text style={styles.extensionReviewBtnText}>Review</Text></TouchableOpacity>
                     </View>
                   ) : item.extension_status === "pending_verification" ? (
-                    <TouchableOpacity
-                      style={styles.extensionReviewBtn}
-                      onPress={() =>
-                        showModal(
-                          "Confirm extension payment",
-                          `Verify receipt of ₱${Number(item.extension_price || 0).toLocaleString()} (reference: ${item.extension_payment_reference || "Cash"}) before extending the return date.`,
-                          [
-                            { text: "Cancel", style: "cancel" },
-                            {
-                              text: "Payment received",
-                              onPress: async () => {
-                                try {
-                                  await confirmExtensionPayment(item.id);
-                                  loadOperatorBookings();
-                                  showSuccess(
-                                    "Extension confirmed",
-                                    "The return date has been updated.",
-                                  );
-                                } catch (error: any) {
-                                  showError(
-                                    "Confirmation failed",
-                                    error.response?.data?.message ||
-                                      "Could not confirm extension payment.",
-                                  );
-                                }
-                              },
-                            },
-                          ],
-                          "confirm",
-                        )
-                      }
-                    >
-                      <Text style={styles.extensionReviewBtnText}>
-                        Verify Extension Payment
-                      </Text>
+                    <TouchableOpacity style={styles.extensionReviewBtn} onPress={() => { setExtensionFlowMode("verify"); setReviewExtensionBooking(item); }}>
+                      <Text style={styles.extensionReviewBtnText}>Verify Extension Payment</Text>
                     </TouchableOpacity>
                   ) : item.extension_status === "payment_required" ? (
                     <View style={styles.extensionAwaitingPaymentBanner}>
@@ -1783,6 +1502,7 @@ export default function OperatorBookingsScreen() {
 
                   {/* Clean Dual Action Buttons */}
                   <View style={styles.cardActionRow}>
+                    <TouchableOpacity style={styles.outlineActionBtn} onPress={() => setDetailsBooking(item)}><Ionicons name="document-text-outline" size={14} color={Colors.dark} /><Text style={styles.outlineActionText}>Details</Text></TouchableOpacity>
                     {item.renter?.id ? (
                       <TouchableOpacity
                         style={styles.outlineActionBtn}
@@ -1853,7 +1573,7 @@ export default function OperatorBookingsScreen() {
                         </Text>
                       </TouchableOpacity>
                     ) : item.status === "pending_verification" ? (
-                      <View style={{ flexDirection: "row", gap: 8, flex: 1 }}>
+                      <View style={{ flexDirection: "row", gap: 8, width: "100%" }}>
                         <TouchableOpacity
                           style={styles.dangerActionBtn}
                           onPress={() =>
@@ -1883,7 +1603,7 @@ export default function OperatorBookingsScreen() {
                       item.status === "awaiting_pickup" ||
                       item.status === "pickup_in_progress" ||
                       item.status === "ready_to_start" ? (
-                      <View style={{ flexDirection: "row", gap: 8, flex: 1 }}>
+                      <View style={{ flexDirection: "row", gap: 8, width: "100%" }}>
                         <TouchableOpacity
                           style={styles.subtleActionBtn}
                           onPress={() => handleStatusChange(item.id, "no_show")}
@@ -1913,7 +1633,7 @@ export default function OperatorBookingsScreen() {
                         </TouchableOpacity>
                       </View>
                     ) : isOngoingItem ? (
-                      <View style={{ flexDirection: "row", gap: 8, flex: 1 }}>
+                      <View style={{ flexDirection: "row", gap: 8, width: "100%" }}>
                         <TouchableOpacity
                           style={styles.gpsActionBtn}
                           onPress={() =>
@@ -1959,7 +1679,7 @@ export default function OperatorBookingsScreen() {
                         style={{
                           flexDirection: "row",
                           gap: 8,
-                          flex: 1,
+                          width: "100%",
                           justifyContent: "flex-end",
                         }}
                       >
@@ -1983,11 +1703,27 @@ export default function OperatorBookingsScreen() {
                       </View>
                     ) : null}
                   </View>
+                  <EarlyReturnPanel booking={item} operator onChanged={updated => setBookings(previous => previous.map(booking => booking.id === updated.id ? { ...booking, ...updated } : booking))} />
                 </View>
               );
             }}
           />
         )}
+
+        <AppBottomSheet visible={!!detailsBooking} onClose={() => setDetailsBooking(null)} sheetStyle={rentalSheetStyle}>
+          <RentalSheetHeader title="Rental Details" subtitle={currentDetails?.vehicle?.name} icon="document-text-outline" onClose={() => setDetailsBooking(null)} />
+          <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ gap: 14, paddingBottom: 12 }}>
+            <View style={styles.verifySummaryCard}>
+              {[{ label: "Renter", value: [currentDetails?.renter?.first_name, currentDetails?.renter?.last_name].filter(Boolean).join(" ") || "Renter" }, { label: "Pickup", value: currentDetails ? formatPrettyDate(currentDetails.start_date) : "—" }, { label: "Return", value: currentDetails ? formatPrettyDate(currentDetails.end_date) : "—" }, { label: "Rental days", value: String(currentDetails?.total_days || 1) }, { label: "Status", value: currentDetails ? getStatusConfig(currentDetails).label : "—" }].map(row => <View key={row.label} style={styles.detailRow}><Text style={styles.verifyLabel}>{row.label}</Text><Text style={styles.verifyValue}>{row.value}</Text></View>)}
+            </View>
+            {!!detailsPayment && <View style={styles.verifySummaryCard}>
+              {[{ label: detailsPayment.dailyRate > 0 ? `₱${detailsPayment.dailyRate.toLocaleString("en-PH")} × ${detailsPayment.baseDays} ${detailsPayment.baseDays === 1 ? "day" : "days"}` : "Base rental", amount: detailsPayment.baseRentalTotal }, { label: `${detailsPayment.isReservationPaid ? "Reservation paid" : "Reservation fee"} (${detailsPayment.reservationPercent}%)`, amount: detailsPayment.reservation }, { label: detailsPayment.isRentalPaid ? "Pickup balance · collected" : "Balance before pickup", amount: detailsPayment.pickupBalance }, ...(detailsPayment.extensionPaid > 0 ? [{ label: "Verified extensions", amount: detailsPayment.extensionPaid }] : []), { label: "Rental total", amount: detailsPayment.total }].map(row => <View key={row.label} style={styles.detailRow}><Text style={styles.verifyLabel}>{row.label}</Text><Text style={styles.verifyValue}>₱{row.amount.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text></View>)}
+              <View style={styles.detailRow}><Text style={styles.verifyLabel}>Payment status</Text><Text style={styles.verifyValue}>{detailsPayment.status}</Text></View>
+              {detailsPayment.extensionOpen && <Text style={styles.verifyNoticeText}>Extension: {detailsPayment.extensionStatus}. Unverified extension charges are separate from the rental total.</Text>}
+              <Text style={styles.verifyNoticeText}>The reservation is part of the rental total. Extensions are paid separately in full.</Text>
+            </View>}
+          </ScrollView>
+        </AppBottomSheet>
 
         {/* Start Trip Handover Inspection Modal */}
         <AppBottomSheet
@@ -1997,10 +1733,7 @@ export default function OperatorBookingsScreen() {
           showHandle={true}
           sheetStyle={styles.verifyModalCard}
         >
-          <Text style={styles.verifyModalHeading}>Start Trip Handover</Text>
-          <Text style={styles.verifyModalSubheading}>
-            Record vehicle baseline condition & hand over keys to renter
-          </Text>
+          <RentalSheetHeader title="Start Trip" subtitle="Record the vehicle condition before handover." icon="key-outline" onClose={() => setStartTripModalBooking(null)} />
 
           {/* Renter & Vehicle Summary Card */}
           <View style={styles.verifySummaryCard}>
@@ -2036,7 +1769,7 @@ export default function OperatorBookingsScreen() {
 
           <ScrollView
             showsVerticalScrollIndicator={false}
-            style={{ maxHeight: 280 }}
+            style={{ flexShrink: 1 }}
           >
             {/* Starting Mileage */}
             <Text style={styles.inputLabel}>
@@ -2054,7 +1787,7 @@ export default function OperatorBookingsScreen() {
                 placeholder="e.g. 24580"
                 placeholderTextColor={Colors.secondary}
                 value={startMileageInput}
-                onChangeText={setStartMileageInput}
+                onChangeText={(value) => setStartMileageInput(value.replace(/\D/g, "").slice(0, 9))}
               />
               <Text style={styles.inputUnit}>km</Text>
             </View>
@@ -2219,6 +1952,11 @@ export default function OperatorBookingsScreen() {
             </View>
           </ScrollView>
 
+          <Text style={{ fontFamily: FontFamily.semiBold, color: Colors.dark, marginTop: 10 }}>Collect before handover: ₱{Number(startTripModalBooking?.balance_due || 0).toLocaleString()}</Text>
+          <TouchableOpacity accessibilityRole="checkbox" accessibilityState={{ checked: balanceCollected }} onPress={() => setBalanceCollected(!balanceCollected)} style={{ flexDirection: "row", gap: 10, paddingVertical: 14, alignItems: "center" }}>
+            <Ionicons name={balanceCollected ? "checkbox" : "square-outline"} size={24} color={Colors.dark} />
+            <Text style={{ flex: 1, fontFamily: FontFamily.medium, color: Colors.dark }}>I collected the remaining rental balance before handing over the vehicle.</Text>
+          </TouchableOpacity>
           {/* Dual Action Footer matching verifyActionsRow */}
           <View style={styles.verifyActionsRow}>
             <TouchableOpacity
@@ -2252,29 +1990,16 @@ export default function OperatorBookingsScreen() {
           visible={!!returnTripModalBooking}
           onClose={() => setReturnTripModalBooking(null)}
           position="bottom"
-          showHandle={false}
+          showHandle={true}
           sheetStyle={styles.modalCard}
         >
-          <View style={styles.modalHeader}>
-            <View>
-              <Text style={styles.modalTitle}>Return Inspection</Text>
-              <Text style={styles.modalSub}>
-                {returnTripModalBooking?.vehicle?.name}
-              </Text>
-            </View>
-            <TouchableOpacity onPress={() => setReturnTripModalBooking(null)}>
-              <Ionicons
-                name="close-circle"
-                size={24}
-                color={Colors.secondary}
-              />
-            </TouchableOpacity>
-          </View>
+          <RentalSheetHeader title="Return Inspection" subtitle={returnTripModalBooking?.vehicle?.name} icon="clipboard-outline" onClose={() => setReturnTripModalBooking(null)} />
 
           <ScrollView
             showsVerticalScrollIndicator={false}
-            style={{ maxHeight: 440 }}
+            style={{ flexShrink: 1 }}
           >
+            {returnTripModalBooking?.early_return_status === "approved" && <Text style={{ fontFamily: FontFamily.medium, color: Colors.dark, marginBottom: 12 }}>Early return approved. Complete only after actual handover and inspection. The original rental total remains unchanged.</Text>}
             {/* Return Schedule & Due Status Row */}
             {returnTripModalBooking && (
               <View style={styles.modalReturnInfoBanner}>
@@ -2346,7 +2071,7 @@ export default function OperatorBookingsScreen() {
                 placeholder="e.g. 24720"
                 placeholderTextColor={Colors.secondary}
                 value={endMileageInput}
-                onChangeText={setEndMileageInput}
+                onChangeText={(value) => setEndMileageInput(value.replace(/\D/g, "").slice(0, 9))}
               />
               <Text style={styles.inputUnit}>km</Text>
             </View>
@@ -2397,7 +2122,7 @@ export default function OperatorBookingsScreen() {
                   style={styles.miniInput}
                   keyboardType="numeric"
                   value={fuelChargeInput}
-                  onChangeText={setFuelChargeInput}
+                  onChangeText={(value) => setFuelChargeInput(sanitizeMoney(value))}
                 />
               </View>
               <View style={{ flex: 1 }}>
@@ -2406,7 +2131,7 @@ export default function OperatorBookingsScreen() {
                   style={styles.miniInput}
                   keyboardType="numeric"
                   value={damageChargeInput}
-                  onChangeText={setDamageChargeInput}
+                  onChangeText={(value) => setDamageChargeInput(sanitizeMoney(value))}
                 />
               </View>
             </View>
@@ -2418,7 +2143,7 @@ export default function OperatorBookingsScreen() {
                   style={styles.miniInput}
                   keyboardType="numeric"
                   value={lateFeeInput}
-                  onChangeText={setLateFeeInput}
+                  onChangeText={(value) => setLateFeeInput(sanitizeMoney(value))}
                 />
               </View>
               <View style={{ flex: 1 }}>
@@ -2427,7 +2152,7 @@ export default function OperatorBookingsScreen() {
                   style={styles.miniInput}
                   keyboardType="numeric"
                   value={otherChargesInput}
-                  onChangeText={setOtherChargesInput}
+                  onChangeText={(value) => setOtherChargesInput(sanitizeMoney(value))}
                 />
               </View>
             </View>
@@ -2557,6 +2282,11 @@ export default function OperatorBookingsScreen() {
             </View>
           </ScrollView>
 
+          <Text style={{ fontFamily: FontFamily.semiBold, color: Colors.dark, marginTop: 10 }}>Return settlement: ₱{(Number(returnTripModalBooking?.balance_due || 0) + Number(fuelChargeInput || 0) + Number(damageChargeInput || 0) + Number(lateFeeInput || 0) + Number(otherChargesInput || 0)).toLocaleString()}</Text>
+          <TouchableOpacity accessibilityRole="checkbox" accessibilityState={{ checked: settlementConfirmed }} onPress={() => setSettlementConfirmed(!settlementConfirmed)} style={{ flexDirection: "row", gap: 10, paddingVertical: 14, alignItems: "center" }}>
+            <Ionicons name={settlementConfirmed ? "checkbox" : "square-outline"} size={24} color={Colors.dark} />
+            <Text style={{ flex: 1, fontFamily: FontFamily.medium, color: Colors.dark }}>All outstanding rental payments and return surcharges have been collected.</Text>
+          </TouchableOpacity>
           <View style={styles.modalFooterActions}>
             <TouchableOpacity
               style={styles.cancelModalBtn}
@@ -2583,26 +2313,12 @@ export default function OperatorBookingsScreen() {
           visible={!!refundModalBooking}
           onClose={() => setRefundModalBooking(null)}
           position="bottom"
-          showHandle={false}
+          showHandle={true}
           sheetStyle={styles.modalCard}
         >
-          <View style={styles.modalHeader}>
-            <View>
-              <Text style={styles.modalTitle}>Process Renter Refund</Text>
-              <Text style={styles.modalSub}>
-                Submit transaction receipt ID for verification
-              </Text>
-            </View>
-            <TouchableOpacity onPress={() => setRefundModalBooking(null)}>
-              <Ionicons
-                name="close-circle"
-                size={24}
-                color={Colors.secondary}
-              />
-            </TouchableOpacity>
-          </View>
+          <RentalSheetHeader title="Record Refund" subtitle="Add the payment reference for renter confirmation." icon="wallet-outline" onClose={() => setRefundModalBooking(null)} />
 
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             {/* Refund Summary Banner */}
             <View style={styles.refundAmountBanner}>
               <Text style={styles.refundAmountLabel}>AMOUNT TO REFUND</Text>
@@ -2690,7 +2406,7 @@ export default function OperatorBookingsScreen() {
             <TouchableOpacity
               style={[
                 styles.confirmCompleteBtn,
-                { backgroundColor: "#DC2626" },
+                { backgroundColor: Colors.primary },
               ]}
               onPress={handleExecuteProcessRefund}
               disabled={submittingRefund}
@@ -2698,10 +2414,10 @@ export default function OperatorBookingsScreen() {
               <Ionicons
                 name="checkmark-circle"
                 size={16}
-                color={Colors.white}
+                color={Colors.dark}
               />
               <Text
-                style={[styles.confirmCompleteBtnText, { color: Colors.white }]}
+                style={styles.confirmCompleteBtnText}
               >
                 {submittingRefund ? "Submitting..." : "Confirm Refund"}
               </Text>
@@ -2717,232 +2433,10 @@ export default function OperatorBookingsScreen() {
           showHandle={true}
           sheetStyle={[styles.modalCard, { maxHeight: "88%" }]}
         >
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Renter Profile</Text>
-            <TouchableOpacity onPress={() => setSelectedRenter(null)}>
-              <Ionicons
-                name="close-circle"
-                size={24}
-                color={Colors.secondary}
-              />
-            </TouchableOpacity>
-          </View>
+          <RentalSheetHeader title="Renter Profile" subtitle="Contact and license information" icon="person-outline" onClose={() => setSelectedRenter(null)} />
 
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            style={{ width: "100%" }}
-            contentContainerStyle={styles.renterModalBody}
-          >
-            {selectedRenter?.profile_photo ? (
-              <Image
-                source={{
-                  uri:
-                    resolveStorageUrl(selectedRenter.profile_photo) ||
-                    selectedRenter.profile_photo,
-                }}
-                style={styles.renterAvatarLg}
-              />
-            ) : (
-              <View style={styles.renterAvatarLg}>
-                <Ionicons name="person" size={32} color={Colors.dark} />
-              </View>
-            )}
-
-            <Text style={styles.renterNameLg}>
-              {selectedRenter?.first_name} {selectedRenter?.last_name}
-            </Text>
-            <Text style={styles.renterEmailLg}>{selectedRenter?.email}</Text>
-            <Text style={styles.renterPhoneLg}>
-              {selectedRenter?.mobile_number || "No contact number"}
-            </Text>
-
-            <View
-              style={[
-                styles.verifiedPill,
-                !selectedRenter?.is_drivers_license_verified && {
-                  backgroundColor: "#FEF3C7",
-                },
-              ]}
-            >
-              <Ionicons
-                name={
-                  selectedRenter?.is_drivers_license_verified
-                    ? "checkmark-circle"
-                    : "time-outline"
-                }
-                size={14}
-                color={
-                  selectedRenter?.is_drivers_license_verified
-                    ? "#10B981"
-                    : "#D97706"
-                }
-              />
-              <Text
-                style={[
-                  styles.verifiedText,
-                  !selectedRenter?.is_drivers_license_verified && {
-                    color: "#92400E",
-                  },
-                ]}
-              >
-                {selectedRenter?.is_drivers_license_verified
-                  ? "Verified Driver"
-                  : "License Pending Host Verification"}
-              </Text>
-            </View>
-
-            {/* Renter Driver's License Photos */}
-            {(selectedRenter?.drivers_license_front ||
-              selectedRenter?.drivers_license_front_url ||
-              selectedRenter?.drivers_license_back ||
-              selectedRenter?.drivers_license_back_url) && (
-              <View
-                style={[
-                  styles.verifyLicenseSection,
-                  { marginTop: 14, marginBottom: 0 },
-                ]}
-              >
-                <View style={styles.verifyLicenseSectionHeader}>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 6,
-                    }}
-                  >
-                    <Ionicons
-                      name="card-outline"
-                      size={15}
-                      color={Colors.dark}
-                    />
-                    <Text style={styles.verifyLicenseSectionTitle}>
-                      Driver&apos;s License Photos
-                    </Text>
-                  </View>
-                  <Text
-                    style={{
-                      fontSize: 11,
-                      color: Colors.secondary,
-                      fontFamily: FontFamily.medium,
-                    }}
-                  >
-                    Tap to inspect
-                  </Text>
-                </View>
-
-                <View style={styles.licensePhotosRow}>
-                  {(() => {
-                    const fUri = resolveStorageUrl(
-                      selectedRenter?.drivers_license_front_url ||
-                        selectedRenter?.drivers_license_front,
-                    );
-                    return (
-                      <TouchableOpacity
-                        style={styles.licenseCardItem}
-                        activeOpacity={fUri ? 0.8 : 1}
-                        onPress={() => fUri && setLicensePreviewUri(fUri)}
-                      >
-                        <View style={styles.licenseCardItemHeader}>
-                          <Text style={styles.licenseCardItemLabel}>FRONT</Text>
-                          {fUri && (
-                            <Ionicons
-                              name="scan-outline"
-                              size={13}
-                              color={Colors.primary}
-                            />
-                          )}
-                        </View>
-                        {fUri ? (
-                          <View style={styles.licenseThumbContainer}>
-                            <Image
-                              source={{ uri: fUri }}
-                              style={styles.licenseThumbImage}
-                              contentFit="cover"
-                            />
-                            <View style={styles.licenseThumbOverlay}>
-                              <Ionicons
-                                name="expand-outline"
-                                size={13}
-                                color={Colors.white}
-                              />
-                              <Text style={styles.licenseThumbOverlayText}>
-                                Zoom
-                              </Text>
-                            </View>
-                          </View>
-                        ) : (
-                          <View style={styles.licenseThumbEmpty}>
-                            <Ionicons
-                              name="image-outline"
-                              size={22}
-                              color={Colors.secondary}
-                            />
-                            <Text style={styles.licenseThumbEmptyText}>
-                              None
-                            </Text>
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })()}
-
-                  {(() => {
-                    const bUri = resolveStorageUrl(
-                      selectedRenter?.drivers_license_back_url ||
-                        selectedRenter?.drivers_license_back,
-                    );
-                    return (
-                      <TouchableOpacity
-                        style={styles.licenseCardItem}
-                        activeOpacity={bUri ? 0.8 : 1}
-                        onPress={() => bUri && setLicensePreviewUri(bUri)}
-                      >
-                        <View style={styles.licenseCardItemHeader}>
-                          <Text style={styles.licenseCardItemLabel}>BACK</Text>
-                          {bUri && (
-                            <Ionicons
-                              name="scan-outline"
-                              size={13}
-                              color={Colors.primary}
-                            />
-                          )}
-                        </View>
-                        {bUri ? (
-                          <View style={styles.licenseThumbContainer}>
-                            <Image
-                              source={{ uri: bUri }}
-                              style={styles.licenseThumbImage}
-                              contentFit="cover"
-                            />
-                            <View style={styles.licenseThumbOverlay}>
-                              <Ionicons
-                                name="expand-outline"
-                                size={13}
-                                color={Colors.white}
-                              />
-                              <Text style={styles.licenseThumbOverlayText}>
-                                Zoom
-                              </Text>
-                            </View>
-                          </View>
-                        ) : (
-                          <View style={styles.licenseThumbEmpty}>
-                            <Ionicons
-                              name="image-outline"
-                              size={22}
-                              color={Colors.secondary}
-                            />
-                            <Text style={styles.licenseThumbEmptyText}>
-                              None
-                            </Text>
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })()}
-                </View>
-              </View>
-            )}
+          <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ paddingBottom: 12 }}>
+            {!!selectedRenter && <RenterProfileContent key={selectedRenter.id} renter={selectedRenter} onInspect={setLicensePreviewUri} onMessage={() => { const renter = selectedRenter; setSelectedRenter(null); router.push({ pathname: "/chat/[id]", params: { id: String(renter.id), name: `${renter.first_name} ${renter.last_name}` } } as any); }} onCall={() => { const renter = selectedRenter; setSelectedRenter(null); void startCall({ id: renter.id, name: `${renter.first_name} ${renter.last_name}`, role: "customer", profile_photo: renter.profile_photo }); }} />}
           </ScrollView>
         </AppBottomSheet>
 
@@ -2954,24 +2448,12 @@ export default function OperatorBookingsScreen() {
           showHandle={true}
           sheetStyle={[styles.verifyModalCard, { maxHeight: "90%" }]}
         >
+          <RentalSheetHeader title="Review Reservation" subtitle="Check the renter’s license before approval." icon="shield-checkmark-outline" onClose={() => setVerifyModalBooking(null)} />
           <ScrollView
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ alignItems: "center", paddingBottom: 12 }}
-            style={{ width: "100%" }}
+            style={{ width: "100%", flexShrink: 1 }}
           >
-            {/* Top Drama Glow Icon */}
-            <View style={styles.verifyGlowCircle}>
-              <Ionicons name="shield-checkmark" size={32} color={Colors.dark} />
-            </View>
-
-            <Text style={styles.verifyModalHeading}>
-              Verify & Approve Reservation
-            </Text>
-            <Text style={styles.verifyModalSubheading}>
-              Inspect the renter&apos;s driver&apos;s license credentials before
-              approving pickup schedule
-            </Text>
-
             {/* Renter & Vehicle Summary Card */}
             <View style={styles.verifySummaryCard}>
               <View style={styles.verifyRow}>
@@ -3024,7 +2506,7 @@ export default function OperatorBookingsScreen() {
                 <Text style={styles.verifyPriceHighlight}>
                   ₱
                   {Number(
-                    verifyModalBooking?.reservation_fee || 500,
+                    verifyModalBooking?.reservation_fee ?? Number(verifyModalBooking?.total_price || 0) * 0.5,
                   ).toLocaleString()}
                 </Text>
               </View>
@@ -3086,7 +2568,7 @@ export default function OperatorBookingsScreen() {
                     ]}
                   >
                     {verifyModalBooking?.renter?.is_drivers_license_verified
-                      ? "Already Verified"
+                      ? "Review Latest Photos"
                       : verifyModalBooking?.renter?.drivers_license_front ||
                           verifyModalBooking?.renter?.drivers_license_front_url
                         ? "Inspect & Verify"
@@ -3129,7 +2611,7 @@ export default function OperatorBookingsScreen() {
                           <Image
                             source={{ uri: frontUri }}
                             style={styles.licenseThumbImage}
-                            contentFit="cover"
+                            contentFit="contain"
                           />
                           <View style={styles.licenseThumbOverlay}>
                             <Ionicons
@@ -3185,7 +2667,7 @@ export default function OperatorBookingsScreen() {
                           <Image
                             source={{ uri: backUri }}
                             style={styles.licenseThumbImage}
-                            contentFit="cover"
+                            contentFit="contain"
                           />
                           <View style={styles.licenseThumbOverlay}>
                             <Ionicons
@@ -3357,6 +2839,30 @@ export default function OperatorBookingsScreen() {
               </Text>
             </View>
 
+            <TouchableOpacity
+              style={[styles.verifyDeclineBtn, { marginBottom: 12, padding: 12 }]}
+              onPress={() => {
+                const booking = verifyModalBooking;
+                if (!booking) return;
+                showModal("Request New License Photos", "Decline this booking and ask the renter to upload clear, valid front and back license photos? Any paid reservation follows the existing refund process.", [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Request New Photos", style: "destructive", onPress: async () => {
+                    try {
+                      await updateBookingStatus(booking.id, "rejected", { license_rejected: true, rejection_reason: "The operator could not accept your license photos." });
+                      setVerifyModalBooking(null);
+                      showSuccess("New Photos Requested", "The renter has been notified to update their license.");
+                      void loadOperatorBookings();
+                    } catch {
+                      showError("Request Failed", "Could not request new license photos. Please try again.");
+                    }
+                  } },
+                ], "confirm");
+              }}
+            >
+              <Text style={styles.verifyDeclineBtnText}>Reject License & Request New Photos</Text>
+            </TouchableOpacity>
+
+          </ScrollView>
             {/* Actions: Decline, Chat Renter, Verify & Approve */}
             <View style={styles.verifyActionsRow}>
               <TouchableOpacity
@@ -3429,314 +2935,16 @@ export default function OperatorBookingsScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
-          </ScrollView>
+
         </AppBottomSheet>
 
-        {/* Dedicated Modern Trip Extension Review Bottom Sheet */}
-        <AppBottomSheet
-          visible={!!reviewExtensionBooking}
+        <ExtensionFlowSheet
+          key={`extension-${reviewExtensionBooking?.id || "none"}-${extensionFlowMode}`}
+          booking={reviewExtensionBooking ? bookings.find(item => item.id === reviewExtensionBooking.id) || reviewExtensionBooking : null}
+          mode={extensionFlowMode}
           onClose={() => setReviewExtensionBooking(null)}
-          position="bottom"
-          showHandle={true}
-          sheetStyle={[styles.verifyModalCard, { maxHeight: "90%" }]}
-        >
-          {reviewExtensionBooking &&
-            (() => {
-              const extExtraDays = Number(
-                reviewExtensionBooking.extension_days || 1,
-              );
-              const extCurrentPrice = Number(
-                reviewExtensionBooking.total_price || 0,
-              );
-              const extCurrentDays = Number(
-                reviewExtensionBooking.total_days || 1,
-              );
-              const extDailyRate = Number(
-                reviewExtensionBooking.daily_rate ||
-                  reviewExtensionBooking.vehicle?.daily_rate ||
-                  (extCurrentDays > 0 ? extCurrentPrice / extCurrentDays : 0),
-              );
-              const extFee = Number(
-                reviewExtensionBooking.extension_price ||
-                  reviewExtensionBooking.extension_fee ||
-                  extDailyRate * extExtraDays,
-              );
-              const extNewTotalDays = extCurrentDays + extExtraDays;
-              const extNewTotalPrice = extCurrentPrice + extFee;
-              const extRenterName = reviewExtensionBooking.renter
-                ? `${reviewExtensionBooking.renter.first_name || ""} ${reviewExtensionBooking.renter.last_name || ""}`.trim()
-                : "Renter";
-
-              return (
-                <ScrollView
-                  showsVerticalScrollIndicator={false}
-                  contentContainerStyle={{
-                    alignItems: "center",
-                    paddingBottom: 16,
-                  }}
-                  style={{ width: "100%" }}
-                >
-                  {/* Glowing Top Circle */}
-                  <View
-                    style={[
-                      styles.verifyGlowCircle,
-                      { backgroundColor: "#FEF3C7" },
-                    ]}
-                  >
-                    <Ionicons name="calendar" size={30} color="#D97706" />
-                  </View>
-
-                  <Text style={styles.verifyModalHeading}>
-                    Review Trip Extension
-                  </Text>
-                  <Text style={styles.verifyModalSubheading}>
-                    Renter requested to extend this active rental schedule
-                  </Text>
-
-                  {/* Summary Card */}
-                  <View style={styles.verifySummaryCard}>
-                    <View style={styles.verifyRow}>
-                      <Text style={styles.verifyLabel}>Renter</Text>
-                      <Text style={styles.verifyValue} numberOfLines={1}>
-                        {extRenterName}
-                      </Text>
-                    </View>
-
-                    <View style={styles.verifyDivider} />
-
-                    <View style={styles.verifyRow}>
-                      <Text style={styles.verifyLabel}>Vehicle</Text>
-                      <Text style={styles.verifyValue} numberOfLines={1}>
-                        {reviewExtensionBooking.vehicle?.name || "Vehicle"}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Schedule Comparison Box */}
-                  <View style={styles.extComparisonCard}>
-                    <View style={styles.extComparisonHeader}>
-                      <Text style={styles.extComparisonSectionTitle}>
-                        SCHEDULE CHANGE
-                      </Text>
-                      <View style={styles.extDaysAddedPill}>
-                        <Text style={styles.extDaysAddedPillText}>
-                          +{extExtraDays} {extExtraDays === 1 ? "day" : "days"}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.extComparisonRow}>
-                      <View style={styles.extComparisonCol}>
-                        <Text style={styles.extComparisonColLabel}>
-                          CURRENT RETURN
-                        </Text>
-                        <Text style={styles.extComparisonColValue}>
-                          {formatFullDate(reviewExtensionBooking.end_date)}
-                        </Text>
-                        <Text style={styles.extComparisonColSub}>
-                          {extCurrentDays}{" "}
-                          {extCurrentDays === 1 ? "day" : "days"} duration
-                        </Text>
-                      </View>
-
-                      <View style={styles.extComparisonArrow}>
-                        <Ionicons
-                          name="arrow-forward"
-                          size={16}
-                          color={Colors.primary}
-                        />
-                      </View>
-
-                      <View style={styles.extComparisonCol}>
-                        <Text
-                          style={[
-                            styles.extComparisonColLabel,
-                            { color: Colors.primary },
-                          ]}
-                        >
-                          PROPOSED RETURN
-                        </Text>
-                        <Text
-                          style={[
-                            styles.extComparisonColValue,
-                            { color: Colors.dark },
-                          ]}
-                        >
-                          {formatFullDate(
-                            reviewExtensionBooking.extension_end_date ||
-                              reviewExtensionBooking.extended_end_date,
-                          )}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.extComparisonColSub,
-                            {
-                              color: Colors.primary,
-                              fontFamily: FontFamily.semiBold,
-                            },
-                          ]}
-                        >
-                          {extNewTotalDays} days total
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-
-                  {/* Financial Calculation Breakdown */}
-                  <View style={styles.extFinancialCard}>
-                    <Text style={styles.extComparisonSectionTitle}>
-                      FINANCIAL SUMMARY
-                    </Text>
-
-                    <View style={styles.extFeeRow}>
-                      <Text style={styles.extFeeLabel}>
-                        Current Total Price
-                      </Text>
-                      <Text style={styles.extFeeValue}>
-                        ₱{extCurrentPrice.toLocaleString()}
-                      </Text>
-                    </View>
-
-                    <View style={styles.extFeeRow}>
-                      <View>
-                        <Text style={styles.extFeeLabel}>Extension Fee</Text>
-                        <Text style={styles.extFeeSub}>
-                          {extExtraDays} {extExtraDays === 1 ? "day" : "days"} ×
-                          ₱{extDailyRate.toLocaleString()}/day
-                        </Text>
-                      </View>
-                      <Text
-                        style={[
-                          styles.extFeeValue,
-                          { color: "#D97706", fontFamily: FontFamily.bold },
-                        ]}
-                      >
-                        +₱{extFee.toLocaleString()}
-                      </Text>
-                    </View>
-
-                    <View style={styles.extDivider} />
-
-                    <View style={styles.extFeeRow}>
-                      <Text style={styles.extTotalLabel}>
-                        New Total Rental Amount
-                      </Text>
-                      <Text style={styles.extTotalValue}>
-                        ₱{extNewTotalPrice.toLocaleString()}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Optional Renter Notes */}
-                  {reviewExtensionBooking.extension_notes ? (
-                    <View style={styles.extNotesCard}>
-                      <Ionicons
-                        name="chatbubble-ellipses-outline"
-                        size={15}
-                        color={Colors.secondary}
-                      />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.extNotesLabel}>
-                          Renter&apos;s Note:
-                        </Text>
-                        <Text style={styles.extNotesText}>
-                          {reviewExtensionBooking.extension_notes}
-                        </Text>
-                      </View>
-                    </View>
-                  ) : null}
-
-                  {/* Helpful Instruction Note */}
-                  <View style={styles.extNoticeBox}>
-                    <Ionicons
-                      name="information-circle-outline"
-                      size={15}
-                      color="#1D4ED8"
-                    />
-                    <Text style={styles.extNoticeText}>
-                      Once agreed, the renter will be prompted to settle the ₱
-                      {extFee.toLocaleString()} extension fee via GCash. The
-                      booking schedule will update automatically upon payment.
-                    </Text>
-                  </View>
-
-                  {/* Action Buttons */}
-                  <View style={styles.verifyActionsRow}>
-                    <TouchableOpacity
-                      style={styles.verifyDeclineBtn}
-                      onPress={handleConfirmRejectExtensionModal}
-                      disabled={submittingExtensionAction}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons
-                        name="close-circle-outline"
-                        size={16}
-                        color="#DC2626"
-                      />
-                      <Text style={styles.verifyDeclineBtnText}>Decline</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.verifyCancelBtn,
-                        {
-                          flexDirection: "row",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: 4,
-                        },
-                      ]}
-                      onPress={() => {
-                        const rId = reviewExtensionBooking?.renter_id;
-                        const rName = extRenterName;
-                        setReviewExtensionBooking(null);
-                        if (rId) {
-                          router.push({
-                            pathname: `/chat/${rId}`,
-                            params: { name: rName },
-                          } as any);
-                        }
-                      }}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons
-                        name="chatbubble-ellipses-outline"
-                        size={15}
-                        color={Colors.dark}
-                      />
-                      <Text style={styles.verifyCancelBtnText}>Chat</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.verifyConfirmBtn,
-                        { backgroundColor: Colors.dark },
-                      ]}
-                      onPress={handleConfirmApproveExtensionModal}
-                      disabled={submittingExtensionAction}
-                      activeOpacity={0.88}
-                    >
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={17}
-                        color={Colors.white}
-                      />
-                      <Text
-                        style={[
-                          styles.verifyConfirmBtnText,
-                          { color: Colors.white },
-                        ]}
-                      >
-                        {submittingExtensionAction
-                          ? "Agreeing..."
-                          : "Agree & Request Pay"}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </ScrollView>
-              );
-            })()}
-        </AppBottomSheet>
+          onChanged={updated => { setBookings(previous => previous.map(item => item.id === updated.id ? { ...item, ...updated } : item)); showSuccess("Extension updated", "The renter has been notified. Payment receipts are recorded in your conversation."); }}
+        />
 
         {/* Full-Screen Driver's License Image Inspection Modal */}
         <Modal
@@ -3809,51 +3017,12 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
     marginTop: 2,
   },
-  tabBar: {
-    flexDirection: "row",
-    backgroundColor: Colors.inputBackground,
-    borderRadius: 14,
-    padding: 3,
-    marginBottom: Spacing.md,
-  },
-  tabItem: {
-    flex: 1,
-    paddingVertical: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 11,
-    gap: 4,
-  },
-  tabItemActive: {
-    backgroundColor: Colors.white,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  tabItemText: {
-    fontFamily: FontFamily.medium,
-    fontSize: 11.5,
-    color: Colors.secondary,
-  },
-  tabItemTextActive: {
-    fontFamily: FontFamily.bold,
-    color: Colors.dark,
-  },
-  tabIndicatorDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.primary,
-  },
-  tabIndicatorDotPending: {
-    backgroundColor: "#F59E0B",
-  },
-  tabIndicatorDotActive: {
-    backgroundColor: Colors.primary,
-  },
+  tabScroller: { flexGrow: 0, flexShrink: 0, height: 62, marginBottom: 4 },
+  tabBar: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8, paddingRight: 2 },
+  tabItem: { height: 44, flexShrink: 0, alignSelf: "center", alignItems: "center", justifyContent: "center", paddingHorizontal: 16, borderRadius: 14, backgroundColor: "#F1F5F9", borderWidth: 1, borderColor: "#F1F5F9" },
+  tabItemActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  tabItemText: { fontFamily: FontFamily.semiBold, fontSize: 12, lineHeight: 18, includeFontPadding: false, color: Colors.secondary },
+  tabItemTextActive: { color: Colors.dark },
   refundableBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -3910,10 +3079,13 @@ const styles = StyleSheet.create({
   },
   ongoingStatsRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 6,
   },
   ongoingStatBox: {
-    flex: 1,
+    flexBasis: "46%",
+    flexGrow: 1,
+    minWidth: 110,
     backgroundColor: "#F8FAFC",
     borderWidth: 1,
     borderColor: "#E2E8F0",
@@ -3955,22 +3127,19 @@ const styles = StyleSheet.create({
     paddingBottom: 80,
     gap: 12,
   },
-  bookingCard: {
-    backgroundColor: Colors.white,
-    borderRadius: 18,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
-  },
+  extensionRequestNote: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#F8FAFC", padding: 12, borderRadius: 12, marginTop: 10 },
+  extensionRequestTitle: { fontFamily: FontFamily.semiBold, fontSize: 12, color: Colors.dark },
+  extensionRequestCaption: { fontFamily: FontFamily.regular, fontSize: 11, lineHeight: 18, color: Colors.secondary, marginTop: 3 },
+  bookingStatusHeader: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 12 },
+  bookingReference: { fontFamily: FontFamily.medium, fontSize: 11, color: Colors.secondary },
+  bookingStatusBadge: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6, maxWidth: "100%" },
+  bookingStatusText: { fontFamily: FontFamily.semiBold, fontSize: 11, lineHeight: 17, flexShrink: 1 },
+  detailRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 14, paddingVertical: 8 },
+  bookingCard: rentalCardStyle,
   cardHeaderRow: {
     flexDirection: "row",
-    gap: 12,
     alignItems: "center",
+    gap: 12,
   },
   cardImageThumb: {
     width: 68,
@@ -4456,6 +3625,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cardActionRow: {
+    flexWrap: "wrap",
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -4566,6 +3736,9 @@ const styles = StyleSheet.create({
     borderTopColor: "#F1F5F9",
   },
   outlineActionBtn: {
+    flexGrow: 1,
+    flexBasis: 70,
+    minHeight: 44,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -4583,7 +3756,9 @@ const styles = StyleSheet.create({
     color: Colors.dark,
   },
   primaryActionBtn: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 140,
+    minHeight: 44,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -4781,30 +3956,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(15, 23, 42, 0.65)",
     justifyContent: "flex-end",
   },
-  modalCard: {
-    width: "100%",
-    backgroundColor: Colors.white,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 22,
-    paddingTop: 18,
-    paddingBottom: Platform.OS === "ios" ? 38 : 24,
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.16,
-    shadowRadius: 20,
-    elevation: 24,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  modalTitle: {
-    fontFamily: FontFamily.bold,
-    fontSize: 18,
-    color: Colors.dark,
-  },
+  modalCard: rentalSheetStyle,
   renterModalBody: {
     alignItems: "center",
     paddingVertical: Spacing.lg,
@@ -5020,12 +4172,6 @@ const styles = StyleSheet.create({
     color: "#92400E",
     flex: 1,
   },
-  modalSub: {
-    fontFamily: FontFamily.regular,
-    fontSize: 12,
-    color: Colors.secondary,
-    marginTop: 2,
-  },
   modalInfoBanner: {
     flexDirection: "row",
     alignItems: "center",
@@ -5083,16 +4229,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 6,
   },
-  inputBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.inputBackground,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 44,
-  },
+  inputBox: { flexDirection: "row", alignItems: "center", backgroundColor: Colors.white, borderWidth: 1, borderColor: "#E2E8F0", borderRadius: 12, paddingHorizontal: 12, minHeight: 48 },
   textInputField: {
     flex: 1,
     marginLeft: 8,
@@ -5167,22 +4304,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.dark,
   },
-  modalFooterActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 10,
-    marginTop: 14,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: Colors.divider,
-  },
-  cancelModalBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  modalFooterActions: { flexDirection: "row", gap: 10, marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: "#E2E8F0" },
+  cancelModalBtn: { flex: 1, minHeight: 50, padding: 12, borderRadius: 14, borderWidth: 1, borderColor: "#E2E8F0", backgroundColor: Colors.white, justifyContent: "center", alignItems: "center" },
   cancelModalBtnText: {
     fontFamily: FontFamily.semiBold,
     fontSize: 13,
@@ -5202,15 +4325,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.dark,
   },
-  confirmCompleteBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
+  confirmCompleteBtn: { flex: 2, minHeight: 50, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 6, backgroundColor: Colors.primary, padding: 12, borderRadius: 14 },
   confirmCompleteBtnText: {
     fontFamily: FontFamily.bold,
     fontSize: 13,
@@ -5373,38 +4488,15 @@ const styles = StyleSheet.create({
     color: "#065F46",
     flex: 1,
   },
-  refundAmountBanner: {
-    backgroundColor: "#FEF2F2",
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#FECACA",
-    marginBottom: Spacing.md,
-    alignItems: "center",
-  },
-  refundAmountLabel: {
-    fontFamily: FontFamily.bold,
-    fontSize: 10,
-    color: "#991B1B",
-    letterSpacing: 0.5,
-  },
-  refundAmountVal: {
-    fontFamily: FontFamily.bold,
-    fontSize: 22,
-    color: "#DC2626",
-    marginVertical: 4,
-  },
+  refundAmountBanner: { backgroundColor: "#F8FAFC", borderWidth: 1, borderColor: "#E2E8F0", borderRadius: 16, padding: 14, marginBottom: 14 },
+  refundAmountLabel: { fontFamily: FontFamily.medium, fontSize: 12, color: Colors.secondary },
+  refundAmountVal: { fontFamily: FontFamily.bold, fontSize: 22, color: Colors.dark, marginVertical: 4 },
   refundAmountSub: {
     fontFamily: FontFamily.medium,
     fontSize: 12,
     color: Colors.dark,
   },
-  refundAccountHighlight: {
-    fontFamily: FontFamily.bold,
-    fontSize: 13,
-    color: "#B91C1C",
-    marginTop: 2,
-  },
+  refundAccountHighlight: { fontFamily: FontFamily.semiBold, fontSize: 13, color: Colors.dark, marginTop: 2 },
   inputBoxError: {
     borderColor: "#DC2626",
     backgroundColor: "#FEF2F2",
@@ -5507,23 +4599,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(15, 23, 42, 0.72)",
     justifyContent: "flex-end",
   },
-  verifyModalCard: {
-    width: "100%",
-    backgroundColor: Colors.white,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 22,
-    paddingTop: 12,
-    paddingBottom: Platform.OS === "ios" ? 38 : 26,
-    alignItems: "center",
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: -10 },
-    shadowOpacity: 0.18,
-    shadowRadius: 24,
-    elevation: 24,
-    borderWidth: 1,
-    borderColor: "rgba(0, 0, 0, 0.05)",
-  },
+  verifyModalCard: rentalSheetStyle,
   verifySheetHandle: {
     width: 44,
     height: 4.5,
@@ -5531,43 +4607,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#CBD5E1",
     marginBottom: 16,
   },
-  verifyGlowCircle: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    backgroundColor: Colors.logoBackground,
-    borderWidth: 1.5,
-    borderColor: "#FDE68A",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
-  },
-  verifyModalHeading: {
-    fontFamily: FontFamily.bold,
-    fontSize: 18,
-    color: Colors.dark,
-    textAlign: "center",
-    letterSpacing: -0.3,
-    marginBottom: 4,
-  },
-  verifyModalSubheading: {
-    fontFamily: FontFamily.regular,
-    fontSize: 12,
-    color: Colors.secondary,
-    textAlign: "center",
-    lineHeight: 17,
-    marginBottom: 18,
-    paddingHorizontal: 6,
-  },
-  verifySummaryCard: {
-    width: "100%",
-    backgroundColor: Colors.white,
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: 14,
-  },
+  verifySummaryCard: { width: "100%", backgroundColor: "#F8FAFC", borderRadius: 16, padding: 14, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: 14 },
   verifyRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -5620,11 +4660,7 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: 15,
   },
-  verifyActionsRow: {
-    flexDirection: "row",
-    gap: 10,
-    width: "100%",
-  },
+  verifyActionsRow: { width: "100%", flexDirection: "row", flexWrap: "wrap", gap: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: "#E2E8F0" },
   verifyCancelBtn: {
     flex: 1,
     height: 48,
@@ -5640,21 +4676,7 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     color: Colors.dark,
   },
-  verifyConfirmBtn: {
-    flex: 1.8,
-    height: 48,
-    borderRadius: 13,
-    backgroundColor: Colors.primary,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation: 3,
-  },
+  verifyConfirmBtn: { width: "100%", minHeight: 50, borderRadius: 14, backgroundColor: Colors.primary, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, padding: 12 },
   verifyConfirmBtnText: {
     fontFamily: FontFamily.bold,
     fontSize: 14,

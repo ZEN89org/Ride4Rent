@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { router, usePathname } from "expo-router";
+import { router, usePathname, useIsFocused } from "expo-router";
+import { useAppToast } from "@/context/ToastContext";
 import {
   createContext,
   useCallback,
@@ -17,6 +18,8 @@ export const OperatorShellContext = createContext<{ openMenu: () => void }>({
 export const useOperatorShell = () => useContext(OperatorShellContext);
 import {
   Animated,
+  KeyboardAvoidingView,
+  Platform,
   BackHandler,
   Dimensions,
   Easing,
@@ -64,6 +67,9 @@ export default function OperatorShell({
   const [menuSettled, setMenuSettled] = useState(false);
   const [drawerAnimation] = useState(() => new Animated.Value(0));
   const pathname = usePathname();
+  const isFocused = useIsFocused();
+  const { showModal } = useAppToast();
+  const [signingOut, setSigningOut] = useState(false);
   const openedPathnameRef = useRef<string | null>(null);
   const navigatingRef = useRef(false);
   const { user, logout, loading, isOperatorActive, isOperatorPending } =
@@ -75,9 +81,14 @@ export default function OperatorShell({
   const isOperatorAllowed = isOperatorActive || isOperatorPending;
 
   const signOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
     closeMenu(true);
-    await logout();
-    router.replace("/auth");
+    try {
+      await logout();
+      if (router.canDismiss()) router.dismissAll();
+      router.replace("/auth");
+    } finally { setSigningOut(false); }
   };
 
   const openMenu = () => {
@@ -164,14 +175,16 @@ export default function OperatorShell({
   }, [menuVisible, closeMenu]);
 
   useEffect(() => {
-    if (!loading && !isOperatorAllowed) {
+    if (isFocused && !signingOut && !loading && !isOperatorAllowed) {
       if (user?.account_status === "rejected") {
         router.replace("/operator-rejected");
+      } else if (user?.role === "customer") {
+        router.replace("/(tabs)/home");
       } else {
         router.replace("/login");
       }
     }
-  }, [loading, isOperatorAllowed, user?.account_status]);
+  }, [isFocused, signingOut, loading, isOperatorAllowed, user?.account_status, user?.role]);
 
   const appTranslateX = drawerAnimation.interpolate({
     inputRange: [0, 1],
@@ -206,7 +219,7 @@ export default function OperatorShell({
           {/* Content Area with context for drawer actions */}
           <OperatorShellContext.Provider value={{ openMenu }}>
             <View style={styles.content}>
-              <OperatorShellContent>{children}</OperatorShellContent>
+              <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}><OperatorShellContent>{children}</OperatorShellContent></KeyboardAvoidingView>
             </View>
           </OperatorShellContext.Provider>
 
@@ -392,7 +405,7 @@ export default function OperatorShell({
                   >
                     <View style={styles.menuIcon}>
                       <Ionicons
-                        name="business-outline"
+                        name="person-outline"
                         size={21}
                         color={Colors.dark}
                       />
@@ -405,25 +418,13 @@ export default function OperatorShell({
                     />
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={styles.menuItem}
-                    activeOpacity={0.55}
-                    delayPressIn={0}
-                    onPress={() => navigateFromMenu("/settings")}
-                  >
-                    <View style={styles.menuIcon}>
-                      <Ionicons
-                        name="settings-outline"
-                        size={21}
-                        color={Colors.dark}
-                      />
-                    </View>
-                    <Text style={styles.menuLabel}>Settings</Text>
-                    <Ionicons
-                      name="chevron-forward"
-                      size={17}
-                      color={Colors.secondary}
-                    />
+                  <TouchableOpacity style={styles.menuItem} onPress={() => navigateFromMenu("/operator-maintenance")}>
+                    <View style={styles.menuIcon}><Ionicons name="build-outline" size={21} color={Colors.dark} /></View>
+                    <Text style={styles.menuLabel}>Maintenance</Text><Ionicons name="chevron-forward" size={17} color={Colors.secondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.menuItem} onPress={() => navigateFromMenu("/operator-payment")}>
+                    <View style={styles.menuIcon}><Ionicons name="wallet-outline" size={21} color={Colors.dark} /></View>
+                    <Text style={styles.menuLabel}>Payment Method</Text><Ionicons name="chevron-forward" size={17} color={Colors.secondary} />
                   </TouchableOpacity>
                 </View>
 
@@ -516,19 +517,45 @@ export default function OperatorShell({
                   </TouchableOpacity>
                 </View>
 
+                <View style={styles.menuSection}><Text style={styles.sectionTitle}>App</Text>
+                  <TouchableOpacity
+                    style={styles.menuItem}
+                    activeOpacity={0.55}
+                    delayPressIn={0}
+                    onPress={() => navigateFromMenu("/settings")}
+                  >
+                    <View style={styles.menuIcon}>
+                      <Ionicons
+                        name="settings-outline"
+                        size={21}
+                        color={Colors.dark}
+                      />
+                    </View>
+                    <Text style={styles.menuLabel}>Settings</Text>
+                    <Ionicons
+                      name="chevron-forward"
+                      size={17}
+                      color={Colors.secondary}
+                    />
+                  </TouchableOpacity>
+                </View>
                 {/* Logout Button */}
                 <TouchableOpacity
                   style={styles.logoutButton}
                   activeOpacity={0.75}
                   delayPressIn={0}
-                  onPress={signOut}
+                  disabled={signingOut}
+                  onPress={() => showModal("Log out?", "You can sign in again at any time.", [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "Log Out", style: "destructive", onPress: signOut },
+                  ], "confirm")}
                 >
                   <Ionicons
                     name="log-out-outline"
                     size={21}
                     color={Colors.dark}
                   />
-                  <Text style={styles.logoutText}>Logout</Text>
+                  <Text style={styles.logoutText}>{signingOut ? "Logging out..." : "Log Out"}</Text>
                 </TouchableOpacity>
 
                 {/* Footer with social icons & copyright */}

@@ -1,3 +1,5 @@
+import { rentalSheetStyle } from "@/constants/rentalDesign";
+import RentalSheetHeader from "@/components/common/RentalSheetHeader";
 import { AppBottomSheet } from "@/components/common/AppBottomSheet";
 
 import ScreenContainer from "@/components/common/ScreenContainer";
@@ -11,15 +13,8 @@ import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import React, { useState } from "react";
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { KeyboardAwareScrollView as ScrollView } from "@/components/common/KeyboardAwareScrollView";
+import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 export default function OperatorRejected() {
   const { user, logout, refreshUser } = useAuth();
@@ -160,19 +155,14 @@ export default function OperatorRejected() {
           onClose={() => setShowResubmitModal(false)}
           position="bottom"
           showHandle={true}
-          sheetStyle={styles.sheetContent}
+          sheetStyle={rentalSheetStyle}
         >
-          <Text style={styles.sheetTitle}>
-            Re-upload Verification Documents
-          </Text>
-          <Text style={styles.sheetSubtitle}>
-            Update expired or unclear permits and IDs so our team can approve
-            your host account.
-          </Text>
+          <RentalSheetHeader title="Update Documents" subtitle="Upload clear permits and identification." icon="document-text-outline" onClose={() => setShowResubmitModal(false)} />
 
           <ScrollView
             showsVerticalScrollIndicator={false}
-            style={{ maxHeight: 420 }}
+            style={{ flexShrink: 1 }}
+            keyboardShouldPersistTaps="handled"
           >
             {/* 1. Business Permit Section */}
             <Text style={styles.sectionHeader}>

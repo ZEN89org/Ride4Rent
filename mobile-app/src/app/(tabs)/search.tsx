@@ -2,7 +2,6 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   StyleSheet,
   Text,
@@ -13,6 +12,7 @@ import {
 
 import ListPagination from "@/components/common/ListPagination";
 import ScreenContainer from "@/components/common/ScreenContainer";
+import { VehicleCardSkeleton } from "@/components/common/Skeleton";
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";
 import { useFavorites } from "@/context/FavoritesContext";
@@ -200,7 +200,7 @@ export default function Search() {
         <View style={styles.resultsHeader}>
           <Text style={styles.resultsCount}>
             {filteredVehicles.length}{" "}
-            {filteredVehicles.length === 1 ? "Vehicle" : "Vehicles"} Available
+            {filteredVehicles.length === 1 ? "Vehicle" : "Vehicles"} Found
           </Text>
 
           <TouchableOpacity
@@ -220,8 +220,8 @@ export default function Search() {
 
         {/* Vehicle Results in Full-Width NearVehicleCard Stack */}
         {loading ? (
-          <View style={styles.centerContainer}>
-            <ActivityIndicator size="large" color={Colors.primary} />
+          <View style={{ padding: Spacing.lg, gap: Spacing.sm }}>
+            {[0, 1, 2].map((key) => <VehicleCardSkeleton key={key} width="100%" height={180} />)}
           </View>
         ) : filteredVehicles.length === 0 ? (
           <View style={styles.emptyContainer}>
@@ -274,6 +274,7 @@ export default function Search() {
                 seats: item.seats ?? undefined,
                 transmission: item.transmission ?? undefined,
                 available_units: item.available_units,
+            availability_status: item.availability_status,
               };
 
               return (

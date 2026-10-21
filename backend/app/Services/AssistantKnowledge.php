@@ -6,7 +6,7 @@ use App\Models\PlatformSetting;
 
 class AssistantKnowledge
 {
-    public const VERSION = '2026-10-20-fifty-percent';
+    public const VERSION = '2026-10-21-maintenance-paging';
 
     public function topics(): array
     {
@@ -16,6 +16,21 @@ class AssistantKnowledge
         $advance = (int) PlatformSetting::get('max_advance_days', '30');
 
         return [
+            'maintenance' => [
+                'match' => '/\b(maintenance|maintain|service interval|odometer|oil|brakes?|tires?|tyres?|preventive|mileage|pagpapanatili)\b/i',
+                'en' => 'Operators can open Maintenance from the dashboard or side menu. Mileage & Service Schedule records the current odometer, last routine-service mileage and manufacturer-based service interval. Recommendations use these readings and service history: setup needed, on schedule, due soon or service due. Due soon means within the smaller of 500 km or 10% of the interval. Record completed work with Log Service Record. Only routine preventive maintenance or oil-and-filter service resets the routine countdown; brake, tire, battery and general-repair entries keep their own history without resetting it. Unknown history needs an inspection/baseline, not a claim of good condition. These are rule-based reminders, not mechanical diagnoses or GPS mileage estimates. Returned vehicles are put Under Maintenance for inspection before the operator makes them Available again. Maintenance listings remain visible to renters but cannot be booked. Change vehicle availability to Maintenance when it should not be rented. I cannot inspect a vehicle or read a private fleet record in this chat.',
+                'fil' => 'Buksan ng operator ang Maintenance sa dashboard o side menu. Sa Mileage & Service Schedule, ilagay ang current odometer, mileage ng huling routine service at interval ayon sa manufacturer. Batay sa readings at service history ang setup needed, on schedule, due soon at service due. Due soon kapag nasa loob na ng mas maliit sa 500 km o 10% ng interval. I-record ang natapos na trabaho sa Log Service Record. Routine preventive maintenance o oil-and-filter service lang ang nagre-reset ng countdown; hindi ang brake, tire, battery o general repair. Kung hindi alam ang history, kailangan ng inspection at baseline. Rule-based reminders ito, hindi mechanical diagnosis o GPS mileage estimate. Pagkatapos ng return inspection, Under Maintenance ang sasakyan hanggang gawin ulit ng operator na Available. Nakikita pa rin ng renter ang maintenance listing pero hindi ito puwedeng i-book. Itakda ang availability sa Maintenance kung hindi dapat iparenta.',
+            ],
+            'demand_pricing' => [
+                'match' => '/demand|dynamic pric|pricing algorithm|price change|presyo.*(taas|baba)/i',
+                'en' => 'Demand-based pricing uses area booking occupancy, the vehicle’s recent booking count and Friday–Sunday demand. When dynamic pricing is enabled for a vehicle, its calculated rate is shown; otherwise its listed daily rate applies. Check the rate and full rental total shown before submitting a booking. New reservations pay 50% of that rental total, with the other 50% before handover. A price recommendation is not a guarantee of future demand or earnings, and existing bookings keep their recorded charges.',
+                'fil' => 'Gumagamit ang demand-based pricing ng booking occupancy sa lugar, recent bookings ng sasakyan at Friday–Sunday demand. Kapag enabled ang dynamic pricing, calculated rate ang ginagamit; kung hindi, listed daily rate. Tingnan ang presyo at kabuuang rental bago magsumite. Sa bagong reservation, 50% muna at ang natitirang 50% bago handover. Hindi garantisado ang future demand o kita at hindi binabago ang naka-record na charges ng existing bookings.',
+            ],
+            'receipts' => [
+                'match' => '/receipt|resibo|payment confirmed|return settlement|transaction record/i',
+                'en' => 'Payment submissions and confirmations create protected receipts automatically in the renter–operator conversation, including reservation, handover, extension, return charges and refunds. A submitted receipt is awaiting verification; it is not proof the operator confirmed the transfer. Face-to-face payments show the amount, transaction status and date without an online reference number or IN PERSON label. Dates use Philippine local time. The pinned request clears when the payment receipt is submitted. Refunds recorded by the operator may still need the renter’s confirmation of actual receipt.',
+                'fil' => 'Automatic ang protected receipts sa renter–operator chat para sa payment submission at confirmation: reservation, handover, extension, return charges at refunds. Ang submitted ay naghihintay pa ng verification. Sa face-to-face payment, halaga, status at petsa lang ang kailangan; walang online reference o IN PERSON label. Philippine local time ang petsa. Nawawala ang pinned payment request kapag naisumite ang resibo. Maaaring kailangan pa ng renter confirmation kapag na-record na ng operator ang refund.',
+            ],
             'payments' => [
                 'match' => '/\b(reservation|fee|payment|pay|gcash|deposit|balance|bayad|babayaran|porsyento|percent|magkano)\b/i',
                 'en' => "For new bookings, the reservation fee is {$fee}% of the selected rental total, credited toward that total. Pay it through the operator’s GCash details and submit the reference/receipt for verification. Pay the remaining {$balance}% in person before handover. Ride4Rent records manual payment confirmation; the assistant cannot collect money or verify a transfer. Existing bookings retain their recorded amounts. Extensions are paid separately in full.",
@@ -28,8 +43,8 @@ class AssistantKnowledge
             ],
             'extensions' => [
                 'match' => '/\b(extend|extension|extensions|palawig|dagdag.*araw)\b/i',
-                'en' => 'Request an extension from an ongoing trip in Bookings. The operator reviews it. Pay 100% of the extension amount through GCash and submit the payment reference/receipt. There is no second reservation fee. The return date changes after operator payment confirmation. Settle outstanding extension charges and applicable surcharges before completion.',
-                'fil' => 'Humiling ng extension sa ongoing trip sa Bookings. Ire-review ito ng operator. Bayaran nang 100% ang extension sa GCash at isumite ang reference/resibo; walang panibagong reservation fee. Magbabago ang return date pagkatapos i-confirm ng operator ang bayad. Bayaran ang outstanding extension at applicable surcharges bago makumpleto ang trip.',
+                'en' => 'Request an extension from an ongoing trip in Bookings. The operator must approve the request before payment becomes available. A pending request is not approved or paid. Pay 100% of the extension amount through GCash and submit the payment reference/receipt. There is no second reservation fee. Submitting a reference leaves payment pending verification; the operator may request a correction. The return date and rental totals change only after operator payment confirmation. Automatic submission and confirmation receipts appear in chat. Settle outstanding extension charges and applicable surcharges before completion.',
+                'fil' => 'Humiling ng extension sa ongoing trip sa Bookings. Kailangan munang i-approve ng operator bago magbayad; hindi pa approved o paid ang pending request. Bayaran nang 100% ang extension sa GCash at isumite ang reference/resibo; walang panibagong reservation fee. Pending verification pa ang submitted reference; puwedeng humingi ng correction ang operator. Magbabago lang ang return date at totals kapag confirmed na ang bayad. Automatic ang submission at confirmation receipts sa chat. Bayaran ang outstanding extension at applicable surcharges bago makumpleto ang trip.',
             ],
             'early_return' => [
                 'match' => '/\b(early return|return early|unused days|maagang balik|maagang ibalik)\b/i',
@@ -48,13 +63,13 @@ class AssistantKnowledge
             ],
             'maps' => [
                 'match' => '/\b(map|route|pickup|location|gps|tracking|mindoro|lokasyon|saan)\b/i',
-                'en' => 'Pickup directions run inside the app from the renter’s current/set location to the operator’s pickup place. Pickup selections are restricted to Oriental Mindoro. During an ongoing trip, tracking shows reported vehicle telemetry, with live/last-known indicators; a garage marker is not proof of current vehicle location. GPS permission and an available device signal are needed.',
-                'fil' => 'Nasa app ang pickup directions mula sa current/set location ng renter papunta sa pickup place ng operator. Sa Oriental Mindoro lang ang pickup selections. Sa ongoing trip, reported vehicle GPS ang ginagamit kasama ang live/last-known indicator; hindi live location ang garage marker. Kailangan ang GPS permission at signal.',
+                'en' => 'Pickup directions run inside the app from the renter’s current/set location to the operator’s pickup place. Pickup selections are restricted to Oriental Mindoro. During an ongoing trip, tracking follows the renter’s phone location automatically, with live/last-known indicators and rounded speed. This is not a separate hardware tracker. Reliable reports outside Oriental Mindoro notify the operator; tracking does not physically stop a vehicle at the boundary. Turning off location sharing notifies both participants. Permission, location services, connectivity and supported background execution are needed; stale readings are not live positions.',
+                'fil' => 'Nasa app ang pickup directions mula sa current/set location ng renter papunta sa pickup place ng operator. Sa Oriental Mindoro lang ang pickup selections. Sa ongoing trip, renter phone GPS ang sinusundan nang automatic, may live/last-known indicator at rounded speed. Nino-notify ang operator sa reliable report na labas ng Oriental Mindoro; hindi nito pisikal na pinipigil ang sasakyan. Parehong may abiso kapag off ang location sharing. Kailangan ng permission, location services at connectivity; hindi live ang stale reading.',
             ],
             'chat' => [
                 'match' => '/\b(chat|message|messages|call|audio|tawag|mensahe)\b/i',
-                'en' => 'Use Message Host to chat and Call in App for voice calls. Conversations are ordered by their latest sent or received message, not unread status. Voice calls need microphone permission, a compatible native app and a configured voice server. The assistant cannot place a call or read your private messages.',
-                'fil' => 'Gamitin ang Message Host para sa chat at Call in App para tumawag. Pinakabagong sent o received message ang basehan ng chat order, hindi unread status. Kailangan ng microphone permission, compatible native app at configured voice server. Hindi ako makakatawag o makakabasa ng private messages mo.',
+                'en' => 'Use Message Host to chat and Call in App for voice calls. Conversations are ordered by their latest sent or received message, not unread status. Voice calls need microphone permission, a compatible Ride4Rent development/preview/production build, both users online and a configured LiveKit server. Expo Go cannot transmit call audio. The assistant cannot place a call or read your private messages.',
+                'fil' => 'Gamitin ang Message Host para sa chat at Call in App para tumawag. Pinakabagong sent o received message ang basehan ng chat order, hindi unread status. Kailangan ng microphone permission, Ride4Rent development/preview/production build, parehong online na user at configured LiveKit server. Hindi gumagana ang call audio sa Expo Go. Hindi ako makakatawag o makakabasa ng private messages mo.',
             ],
             'refunds' => [
                 'match' => '/\b(refund|cancel|cancellation|dispute|reimburse|balik.*bayad)\b/i',
@@ -63,8 +78,8 @@ class AssistantKnowledge
             ],
             'updates' => [
                 'match' => '/what.*(changed|new|updated)|latest.*(changes|features|updates)|ano.*(bago|update)/i',
-                'en' => "Current rules include {$fee}% reservation and {$balance}% before handover, full-payment ongoing-trip extensions, operator review of replaceable license photos, {$hours}-hour no-shows, Oriental Mindoro pickup maps, grouped notifications and latest-message chat ordering. This knowledge describes this backend version; another installed app or deployment may be older.",
-                'fil' => "Kasama sa kasalukuyang rules ang {$fee}% reservation at {$balance}% bago handover, full-payment extensions sa ongoing trips, operator review ng napapalitang license photos, {$hours}-hour no-show, Oriental Mindoro pickup map, grouped notifications at latest-message chat order. Para ito sa backend version na ito; maaaring mas luma ang ibang installed app o deployment.",
+                'en' => "Current rules include {$fee}% reservation and {$balance}% before handover, full-payment ongoing-trip extensions, operator review of replaceable license photos, {$hours}-hour no-shows, Oriental Mindoro pickup maps and renter-phone GPS alerts, maintenance recommendations, demand-based pricing, automatic chat receipts, grouped notifications and latest-message chat ordering. This knowledge describes this backend version; another installed app or deployment may be older.",
+                'fil' => "Kasama sa kasalukuyang rules ang {$fee}% reservation at {$balance}% bago handover, full-payment extensions sa ongoing trips, operator review ng napapalitang license photos, {$hours}-hour no-show, Oriental Mindoro pickup map at renter-phone GPS alerts, maintenance recommendations, demand-based pricing, automatic chat receipts, grouped notifications at latest-message chat order. Para ito sa backend version na ito; maaaring mas luma ang ibang installed app o deployment.",
             ],
             'notifications' => [
                 'match' => '/\b(notification|notifications|reminder|reminders|abiso|paalala)\b/i',
@@ -78,7 +93,10 @@ class AssistantKnowledge
     {
         $language = preg_match('/\b(paano|ano|magkano|ako|ko|ba|po|pwede|puwede|kailangan|bayad|bakit|saan|hindi|ng|ang|lisensya)\b/i', $question) ? 'fil' : 'en';
         $answers = [];
-        foreach ($this->topics() as $topic) {
+        $topics = $this->topics();
+        $priority = ['updates', 'maintenance', 'demand_pricing', 'receipts', 'early_return', 'extensions', 'no_show', 'refunds', 'license', 'maps', 'chat', 'notifications', 'payments', 'booking'];
+        foreach ($priority as $key) {
+            $topic = $topics[$key];
             if (preg_match($topic['match'], $question)) $answers[] = $topic[$language];
         }
         return $answers ? implode("\n\n", array_slice($answers, 0, 3)) : null;

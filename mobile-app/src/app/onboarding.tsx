@@ -30,6 +30,8 @@ export default function Onboarding() {
   const [scrollX] = useState(() => new Animated.Value(0));
 
   const [currentIndex, setCurrentIndex] = useState(0);
+  const permissionPending = useRef(false);
+  const [requestingPermission, setRequestingPermission] = useState(false);
 
   const isLastSlide =
     currentIndex === onboardingData.length - 1;
@@ -73,15 +75,17 @@ export default function Onboarding() {
   };
 
   const handleAllow = async () => {
-    if (currentSlide.permission === "notification") {
-      await requestNotificationPermission();
+    if (permissionPending.current) return;
+    permissionPending.current = true;
+    setRequestingPermission(true);
+    try {
+      if (currentSlide.permission === "notification") await requestNotificationPermission();
+      if (currentSlide.permission === "location") await requestLocationPermission();
+      goToNextSlide();
+    } finally {
+      permissionPending.current = false;
+      setRequestingPermission(false);
     }
-
-    if (currentSlide.permission === "location") {
-      await requestLocationPermission();
-    }
-
-    goToNextSlide();
   };
 
   const handleDeny = () => {
@@ -176,6 +180,7 @@ export default function Onboarding() {
               <>
                 <SecondaryButton
                   title="Deny"
+                  disabled={requestingPermission}
                   onPress={handleDeny}
                   style={{
                     flex: 1,
@@ -185,6 +190,7 @@ export default function Onboarding() {
 
                 <PrimaryButton
                   title="Allow"
+                  loading={requestingPermission}
                   onPress={handleAllow}
                   style={{
                     flex: 1,

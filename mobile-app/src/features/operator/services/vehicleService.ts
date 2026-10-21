@@ -23,7 +23,6 @@ export const getMyVehicles = async (): Promise<Vehicle[]> => {
 export const createVehicle = async (data: VehicleFormData): Promise<Vehicle> => {
   const formData = new FormData();
 
-  formData.append("name", data.name.trim());
   Object.entries(data).forEach(([key, value]) => {
     if (key !== "imageUri" && key !== "imageUris" && key !== "features" && typeof value === "string" && value.trim()) {
       formData.append(key, value.trim());
@@ -92,6 +91,8 @@ export const updateVehicle = async (
   id: number | string,
   data: Partial<{
     name: string;
+    model: string;
+    seating_capacity: number;
     daily_rate: number;
     reservation_fee: number;
     availability_status: "available" | "unavailable" | "maintenance";

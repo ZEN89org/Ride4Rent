@@ -21,6 +21,7 @@ export interface TopRatedVehicle {
   rating?: number | null;
   image: ImageSourcePropType;
   ratingCount?: number;
+  availability_status?: string;
 }
 
 interface Props {
@@ -72,6 +73,7 @@ export default function TopRatedVehicleCard({
           {vehicle.name}
         </Text>
 
+        {vehicle.availability_status === "maintenance" && <Text style={{ fontFamily: FontFamily.semiBold, fontSize: 10, color: "#92400E" }}>Under Maintenance</Text>}
         <View style={styles.bottomRow}>
           <View style={styles.ratingRow}>
             {hasRating ? (

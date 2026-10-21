@@ -7,11 +7,11 @@ import {
 import { Colors } from "@/constants/colors";
 import { FontFamily } from "@/constants/theme";
 
-export default function Divider() {
+export default function Divider({ compact = false }: { compact?: boolean }) {
 
   return (
 
-    <View style={styles.container}>
+    <View style={[styles.container, compact && { marginVertical: 12 }]}>
 
       <View style={styles.line} />
 

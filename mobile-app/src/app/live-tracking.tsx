@@ -1,16 +1,8 @@
+import { displayTripSpeed } from "@/utils/tripTelemetry";
+import { useMapSheetGesture } from "@/hooks/useMapSheetGesture";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  LayoutAnimation,
-  Linking,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  UIManager,
-  View,
-} from "react-native";
+import { KeyboardAwareScrollView as ScrollView } from "@/components/common/KeyboardAwareScrollView";
+import { ActivityIndicator, AppState, Platform, StyleSheet, Text, TouchableOpacity, UIManager, View } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -20,6 +12,8 @@ import { Colors } from "@/constants/colors";
 import { resolveCoordinatesFromAddress } from "@/constants/orientalMindoroLocations";
 import { FontFamily, FontSize, Radius, Spacing } from "@/constants/theme";
 import { getBookingLocation } from "@/services/bookingService";
+import { publishCurrentTripLocation, watchCurrentTripLocation } from "@/services/tripLocationService";
+import { useAuth } from "@/features/auth/hooks/useAuth";
 import { usePickupRoute } from "@/hooks/usePickupRoute";
 import {
   isInServiceArea,
@@ -36,6 +30,11 @@ if (
 
 export default function LiveTrackingScreen() {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const [automaticRetryVersion, setAutomaticRetryVersion] = useState(0);
+  const retryNeeded = useRef(false);
+  const [updatingGps, setUpdatingGps] = useState(false);
+  const [gpsIssue, setGpsIssue] = useState<string | null>(null);
   const params = useLocalSearchParams<{
     bookingId?: string;
     vehicleName?: string;
@@ -53,20 +52,17 @@ export default function LiveTrackingScreen() {
   const isPickupView = params.type === "pickup" || params.mode === "pickup";
   const bookingId = params.bookingId;
   const screenTitle =
-    params.title || (isPickupView ? "Pickup Location" : "Live GPS Telemetry");
+    params.title || (isPickupView ? "Pickup Location" : "Vehicle Location");
   const vehicleName = params.vehicleName || "Vehicle";
 
   const webViewRef = useRef<WebView>(null);
   const outsideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [activeLayer, setActiveLayer] = useState<"streets" | "satellite">("streets");
-  const [outsideError, setOutsideError] = useState<string | null>(null);
+  const [attemptError, setOutsideError] = useState<string | null>(null);
   const [isSheetExpanded, setIsSheetExpanded] = useState(true);
+  const sheetPanHandlers = useMapSheetGesture(setIsSheetExpanded);
 
-  const toggleSheet = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setIsSheetExpanded((prev) => !prev);
-  };
 
   const rawLat = params.latitude || params.lat;
   const rawLng = params.longitude || params.lng;
@@ -90,6 +86,9 @@ export default function LiveTrackingScreen() {
     current_city?: string;
     current_location_address?: string;
     current_speed?: number;
+    location_sharing_status?: "on" | "off" | "unavailable" | null;
+    location_sharing_reason?: string | null;
+    outside_service_area?: boolean | null;
     operator_latitude?: number;
     operator_longitude?: number;
     operator_address?: string;
@@ -120,17 +119,17 @@ export default function LiveTrackingScreen() {
     "Oriental Mindoro Hub";
 
   // Renter Live Telemetry Origin (if available from backend)
-  const telemetryRenterLat = trackingData?.current_latitude
+  const telemetryRenterLat = trackingData?.current_latitude != null
     ? Number(trackingData.current_latitude)
     : null;
-  const telemetryRenterLng = trackingData?.current_longitude
+  const telemetryRenterLng = trackingData?.current_longitude != null
     ? Number(trackingData.current_longitude)
     : null;
 
   const explicitOrigin = useMemo(() => {
     if (
-      telemetryRenterLat &&
-      telemetryRenterLng &&
+      telemetryRenterLat !== null &&
+      telemetryRenterLng !== null &&
       Number.isFinite(telemetryRenterLat) &&
       Number.isFinite(telemetryRenterLng)
     ) {
@@ -139,37 +138,25 @@ export default function LiveTrackingScreen() {
     return null;
   }, [telemetryRenterLat, telemetryRenterLng]);
 
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 15000);
+    return () => clearInterval(timer);
+  }, []);
+  const locationIsFresh = ["trip_in_progress", "ongoing", "return_pending"].includes(trackingData?.status || "") && trackingData?.location_sharing_status !== "off" && trackingData?.location_sharing_status !== "unavailable" && !!trackingData?.last_location_updated_at && now - Date.parse(trackingData.last_location_updated_at) < 45000;
+
   // Route trace between renter and operator (primary #FEC103)
-  const routeHook = usePickupRoute(true, opLat, opLng, explicitOrigin);
+  const routeHook = usePickupRoute(isPickupView, opLat, opLng, explicitOrigin);
 
   const renterName =
     trackingData?.renter_name ||
     params.renterName ||
     "Renter Location";
 
-  const renterAddress = useMemo(() => {
-    if (trackingData?.current_location_address) {
-      return trackingData.current_location_address;
-    }
-    const parts = [];
-    if (trackingData?.current_street) parts.push(trackingData.current_street);
-    if (trackingData?.current_barangay) parts.push(trackingData.current_barangay);
-    if (trackingData?.current_city) parts.push(trackingData.current_city);
-    if (parts.length > 0) return parts.join(", ");
-    return "Current Set Location";
-  }, [
-    trackingData?.current_location_address,
-    trackingData?.current_street,
-    trackingData?.current_barangay,
-    trackingData?.current_city,
-  ]);
-
-  // Check if destination is outside Oriental Mindoro
-  useEffect(() => {
-    if (opLat && opLng && !isInServiceArea(opLat, opLng)) {
-      setOutsideError(SERVICE_AREA_ERROR);
-    }
-  }, [opLat, opLng]);
+  const renterAddress = trackingData?.current_location_address || [trackingData?.current_street, trackingData?.current_barangay, trackingData?.current_city].filter(Boolean).join(", ") || (explicitOrigin ? `${explicitOrigin.latitude.toFixed(5)}, ${explicitOrigin.longitude.toFixed(5)}` : "Waiting for the renter’s GPS location");
+  const outsideError = !isPickupView && trackingData?.outside_service_area
+    ? "The renter’s GPS location is outside Oriental Mindoro. The operator has been notified."
+    : isPickupView && !isInServiceArea(opLat, opLng) ? SERVICE_AREA_ERROR : attemptError;
 
   // Sync route and markers to Leaflet WebView
   const syncMapData = () => {
@@ -177,16 +164,16 @@ export default function LiveTrackingScreen() {
     webViewRef.current.postMessage(
       JSON.stringify({
         type: "SYNC_MAP_DATA",
-        operator: {
+        operator: isPickupView ? {
           latitude: opLat,
           longitude: opLng,
           name: opBusinessName,
           address: opAddress,
-        },
-        renter: routeHook.origin
+        } : null,
+        renter: (isPickupView ? routeHook.origin : explicitOrigin)
           ? {
-              latitude: routeHook.origin.latitude,
-              longitude: routeHook.origin.longitude,
+              latitude: (isPickupView ? routeHook.origin : explicitOrigin)!.latitude,
+              longitude: (isPickupView ? routeHook.origin : explicitOrigin)!.longitude,
               name: renterName,
               address: renterAddress,
             }
@@ -210,6 +197,8 @@ export default function LiveTrackingScreen() {
     routeHook.error,
     renterName,
     renterAddress,
+    isPickupView,
+    explicitOrigin,
   ]);
 
   // Poll for live GPS telemetry if active booking
@@ -217,21 +206,47 @@ export default function LiveTrackingScreen() {
     if (isPickupView || !bookingId) return;
 
     let isMounted = true;
+    let fetching = false;
 
     const fetchLocation = async (isFirst = false) => {
+      if (fetching) return;
+      fetching = true;
+      if (isFirst && isMounted) setUpdatingGps(true);
       try {
+        if (isFirst && user?.role === "customer") {
+          const initial = await getBookingLocation(bookingId);
+          if (!isMounted) return;
+          if (initial.success && initial.data) {
+            setTrackingData(initial.data);
+            setLoadedBookingId(String(bookingId));
+          }
+          try {
+            await publishCurrentTripLocation(Number(bookingId));
+            retryNeeded.current = false;
+            if (isMounted) setGpsIssue(null);
+          } catch (error: any) {
+            retryNeeded.current = true;
+            if (isMounted) setGpsIssue(error?.response
+              ? "Could not upload your GPS location. Check your connection and trip status. Tracking retries automatically."
+              : error?.message || "Finding GPS. Tracking retries automatically.");
+          }
+        }
+        if (!isMounted) return;
         const res = await getBookingLocation(bookingId);
         if (res.success && res.data && isMounted) {
           setTrackingData(res.data);
+          if (res.data.current_latitude != null && res.data.current_longitude != null && res.data.last_location_updated_at && Date.now() - Date.parse(res.data.last_location_updated_at) < 120000) {
+            setGpsIssue((current) => current?.startsWith("Finding your GPS location") ? null : current);
+          }
 
-          const lat = res.data.current_latitude
+          const lat = res.data.current_latitude != null
             ? Number(res.data.current_latitude)
             : null;
-          const lng = res.data.current_longitude
+          const lng = res.data.current_longitude != null
             ? Number(res.data.current_longitude)
             : null;
 
-          if (lat && lng && Number.isFinite(lat) && Number.isFinite(lng)) {
+          if (lat !== null && lng !== null && Number.isFinite(lat) && Number.isFinite(lng)) {
             webViewRef.current?.postMessage(
               JSON.stringify({
                 type: "UPDATE_LOCATION",
@@ -243,7 +258,10 @@ export default function LiveTrackingScreen() {
         }
       } catch (err) {
         console.error("Live tracking fetch error:", err);
+        if (isMounted) setGpsIssue("Could not load the trip location. Check your connection and try again.");
       } finally {
+        fetching = false;
+        if (isFirst && isMounted) setUpdatingGps(false);
         if (isFirst && isMounted) {
           setLoadedBookingId(String(bookingId));
         }
@@ -260,6 +278,37 @@ export default function LiveTrackingScreen() {
       isMounted = false;
       clearInterval(poller);
     };
+  }, [isPickupView, bookingId, user?.id, user?.role, automaticRetryVersion]);
+
+  useEffect(() => {
+    if (isPickupView || !bookingId || user?.role !== "customer" || !["trip_in_progress", "ongoing", "return_pending"].includes(trackingData?.status || "")) return;
+    let active = true;
+    let subscription: { remove: () => void } | undefined;
+    void watchCurrentTripLocation(Number(bookingId), () => {
+      retryNeeded.current = false;
+      if (active) setGpsIssue(null);
+    }, (message) => {
+      retryNeeded.current = true;
+      if (active) setGpsIssue(message);
+    }).then((watcher) => {
+      if (active) subscription = watcher;
+      else watcher.remove();
+    }).catch(() => {
+      retryNeeded.current = true;
+      // The one-shot upload above reports permissions/settings errors to the user.
+    });
+    return () => { active = false; subscription?.remove(); };
+  }, [isPickupView, bookingId, user?.id, user?.role, trackingData?.status, automaticRetryVersion]);
+
+  useEffect(() => {
+    if (isPickupView || !bookingId) return;
+    const timer = setInterval(() => {
+      if (retryNeeded.current) setAutomaticRetryVersion((current) => current + 1);
+    }, 15000);
+    const listener = AppState.addEventListener("change", (state) => {
+      if (state === "active") setAutomaticRetryVersion((current) => current + 1);
+    });
+    return () => { clearInterval(timer); listener.remove(); };
   }, [isPickupView, bookingId]);
 
   const handleRecenterRoute = () => {
@@ -276,62 +325,6 @@ export default function LiveTrackingScreen() {
         type: "FIT_MINDORO",
       }),
     );
-  };
-
-  const handleOpenDirections = () => {
-    if (routeHook.origin && opLat && opLng) {
-      const originLat = routeHook.origin.latitude;
-      const originLng = routeHook.origin.longitude;
-      const destLat = opLat;
-      const destLng = opLng;
-      const url = Platform.select({
-        ios: `maps:0,0?saddr=${originLat},${originLng}&daddr=${destLat},${destLng}`,
-        android: `google.navigation:q=${destLat},${destLng}`,
-        default: `https://www.google.com/maps/dir/?api=1&origin=${originLat},${originLng}&destination=${destLat},${destLng}&travelmode=driving`,
-      });
-
-      Linking.canOpenURL(url!)
-        .then((supported) => {
-          if (supported) {
-            Linking.openURL(url!);
-          } else {
-            Linking.openURL(
-              `https://www.google.com/maps/dir/?api=1&origin=${originLat},${originLng}&destination=${destLat},${destLng}&travelmode=driving`,
-            );
-          }
-        })
-        .catch(() => {
-          Linking.openURL(
-            `https://www.google.com/maps/dir/?api=1&origin=${originLat},${originLng}&destination=${destLat},${destLng}&travelmode=driving`,
-          );
-        });
-      return;
-    }
-
-    const lat = opLat;
-    const lng = opLng;
-    const label = encodeURIComponent(opAddress || opBusinessName || "Operator Hub");
-    const url = Platform.select({
-      ios: `maps:0,0?q=${label}@${lat},${lng}`,
-      android: `geo:0,0?q=${lat},${lng}(${label})`,
-      default: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
-    });
-
-    Linking.canOpenURL(url!)
-      .then((supported) => {
-        if (supported) {
-          Linking.openURL(url!);
-        } else {
-          Linking.openURL(
-            `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
-          );
-        }
-      })
-      .catch(() => {
-        Linking.openURL(
-          `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
-        );
-      });
   };
 
   const handleLayerSwitch = (mode: "streets" | "satellite") => {
@@ -503,7 +496,7 @@ export default function LiveTrackingScreen() {
     }).setView(mindoroCenter, 10);
 
     // Inject service area locking (focus backdrop + primary yellow border)
-    ${serviceAreaLockScript("window.map")}
+    ${serviceAreaLockScript("window.map", isPickupView)}
 
     // Directly fit Oriental Mindoro province bounds immediately upon load
     if (window.r4rMindoroBounds) {
@@ -616,10 +609,11 @@ export default function LiveTrackingScreen() {
             } else {
               renterMarker.setLatLng([data.renter.latitude, data.renter.longitude]);
             }
+            if (!data.operator && !boundsFitted) { window.map.setView([data.renter.latitude, data.renter.longitude], 16); boundsFitted = true; }
             renterMarker.bindPopup(\`
               <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 2px; min-width: 175px;">
                 <div style="display: inline-block; font-size: 9px; font-weight: 800; color: #78350F; background: #FEF3C7; padding: 3px 8px; border-radius: 4px; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px;">
-                  Renter Set Location
+                  Renter GPS Location
                 </div>
                 <div style="font-size: 13.5px; font-weight: 800; color: #0F172A; margin-bottom: 3px;">\${escapeHtml(data.renter.name)}</div>
                 <div style="font-size: 11px; color: #64748B; line-height: 1.35;">\${escapeHtml(data.renter.address)}</div>
@@ -658,9 +652,12 @@ export default function LiveTrackingScreen() {
           const mLat = Number(data.latitude);
           const mLng = Number(data.longitude);
           if (Number.isFinite(mLat) && Number.isFinite(mLng)) {
-            if (renterMarker) {
+            if (!renterMarker) {
+              renterMarker = L.marker([mLat, mLng], { icon: renterMarkerIcon, interactive: true }).addTo(window.map);
+            } else {
               renterMarker.setLatLng([mLat, mLng]);
             }
+            if (!boundsFitted) { window.map.setView([mLat, mLng], 16); boundsFitted = true; }
           }
         } else if (data.type === "RECENTER_TO_LOCATION") {
           const layers = [opMarker, renterMarker, routeLine].filter(Boolean);
@@ -684,6 +681,7 @@ export default function LiveTrackingScreen() {
 
     document.addEventListener("message", handleReactNativeMessage);
     window.addEventListener("message", handleReactNativeMessage);
+    window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ type: "MAP_READY" }));
 
     setTimeout(function() {
       if (window.map) {
@@ -694,7 +692,7 @@ export default function LiveTrackingScreen() {
 </body>
 </html>
 `;
-  }, []);
+  }, [isPickupView]);
 
   return (
     <View style={styles.container}>
@@ -707,7 +705,7 @@ export default function LiveTrackingScreen() {
           </View>
         ) : (
           <WebView
-            key={`${opLat}_${opLng}_${isPickupView}`}
+            key={`${bookingId || "pickup"}_${isPickupView}`}
             ref={webViewRef}
             source={{ html: mapHtml }}
             style={StyleSheet.absoluteFill}
@@ -728,6 +726,7 @@ export default function LiveTrackingScreen() {
             onMessage={(event) => {
               try {
                 const data = JSON.parse(event.nativeEvent.data);
+                if (data.type === "MAP_READY") syncMapData();
                 if (data.type === "OUTSIDE_SERVICE_AREA") {
                   setOutsideError(
                     "This location is outside Oriental Mindoro. Ride4Rent operates exclusively within Oriental Mindoro.",
@@ -772,7 +771,7 @@ export default function LiveTrackingScreen() {
               <Text style={styles.topCardSubtitle} numberOfLines={1}>
                 {isPickupView
                   ? "Operator business and garage location in Oriental Mindoro."
-                  : "Live vehicle & route tracking in Oriental Mindoro."}
+                  : "Renter’s shared GPS location"}
               </Text>
             </View>
           </View>
@@ -835,8 +834,7 @@ export default function LiveTrackingScreen() {
             <View style={styles.layerPillDistance}>
               <Ionicons name="navigate" size={13} color={Colors.dark} />
               <Text style={styles.layerPillDistanceText}>
-                {(routeHook.route.distance / 1000).toFixed(1)} km ·{" "}
-                {Math.ceil(routeHook.route.duration / 60)} min
+                {(routeHook.route.distance / 1000).toFixed(1)} km
               </Text>
             </View>
           ) : null}
@@ -857,7 +855,7 @@ export default function LiveTrackingScreen() {
       ) : null}
 
       {/* 4. FLOATING TELEMETRY SPEED BADGE (Active GPS tracking) */}
-      {!isPickupView && (
+      {!isPickupView && explicitOrigin && (
         <View
           style={[
             styles.floatingSpeedBadge,
@@ -870,14 +868,11 @@ export default function LiveTrackingScreen() {
             color={Colors.dark}
           />
           <Text style={styles.floatingSpeedText}>
-            {trackingData?.current_speed !== undefined &&
-            trackingData?.current_speed !== null
-              ? `${trackingData.current_speed} km/h`
-              : "0 km/h"}
+            {displayTripSpeed(trackingData?.current_speed, locationIsFresh)}
           </Text>
-          <View style={styles.activePill}>
-            <View style={styles.activeDot} />
-            <Text style={styles.activePillText}>LIVE</Text>
+          <View style={[styles.activePill, !locationIsFresh && { backgroundColor: "#FEF3C7" }]}>
+            <View style={[styles.activeDot, !locationIsFresh && { backgroundColor: "#D97706" }]} />
+            <Text style={[styles.activePillText, !locationIsFresh && { color: "#92400E" }]}>{locationIsFresh ? "LIVE GPS" : "GPS OFFLINE"}</Text>
           </View>
         </View>
       )}
@@ -910,70 +905,33 @@ export default function LiveTrackingScreen() {
         ]}
       >
         {/* Handle for drag/toggle */}
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={toggleSheet}
-          style={styles.sheetHandleTouch}
-        >
+        <View {...sheetPanHandlers} style={styles.sheetHandleTouch} accessible accessibilityLabel="Swipe up to expand location details or down to collapse">
           <View style={styles.sheetHandle} />
-        </TouchableOpacity>
+        </View>
 
-        <TouchableOpacity activeOpacity={0.9} onPress={toggleSheet}>
+        <View>
           <Text style={styles.sheetStreetText} numberOfLines={1}>
-            {opBusinessName || (isPickupView ? "Operator Hub" : "Vehicle Location")}
+            {isPickupView ? (opBusinessName || "Pickup Location") : vehicleName}
           </Text>
-          <Text style={styles.sheetCityText} numberOfLines={1}>
-            {opAddress}
+          <Text style={styles.sheetCityText} numberOfLines={gpsIssue ? undefined : 2}>
+            {isPickupView ? opAddress : gpsIssue || (trackingData?.location_sharing_status === "off" ? "Renter location sharing is off" : trackingData?.location_sharing_status === "unavailable" ? "Renter GPS updates are unavailable" : updatingGps ? "Getting and sharing the renter’s GPS location…" : renterAddress)}
           </Text>
-        </TouchableOpacity>
+        </View>
 
         {isSheetExpanded && (
           <View style={styles.sheetExpandedContent}>
             <Text style={styles.sheetNoteText}>
-              Only location inside Oriental Mindoro can be serviced
+              {isPickupView ? "Pickup service is available within Oriental Mindoro." : explicitOrigin ? (locationIsFresh ? "Receiving the renter’s GPS updates" : "Last shared location · waiting for a new GPS update") : "The renter must allow location access and keep the app open to share GPS."}
             </Text>
-
-            {/* Route Summary Metrics */}
-            {routeHook.route ? (
-              <View style={styles.routeSummaryCard}>
-                <View style={styles.routeMetricItem}>
-                  <Ionicons name="car-outline" size={16} color={Colors.dark} />
-                  <Text style={styles.routeMetricValue}>
-                    {(routeHook.route.distance / 1000).toFixed(1)} km
-                  </Text>
-                  <Text style={styles.routeMetricLabel}>Road Distance</Text>
-                </View>
-
-                <View style={styles.metricDivider} />
-
-                <View style={styles.routeMetricItem}>
-                  <Ionicons name="time-outline" size={16} color={Colors.dark} />
-                  <Text style={styles.routeMetricValue}>
-                    ~{Math.ceil(routeHook.route.duration / 60)} min
-                  </Text>
-                  <Text style={styles.routeMetricLabel}>Travel Time</Text>
-                </View>
-
-                <View style={styles.metricDivider} />
-
-                <View style={styles.routeMetricItem}>
-                  <Ionicons name="shield-checkmark" size={16} color="#16A34A" />
-                  <Text style={[styles.routeMetricValue, { color: "#16A34A" }]}>
-                    Verified
-                  </Text>
-                  <Text style={styles.routeMetricLabel}>Within Mindoro</Text>
-                </View>
-              </View>
-            ) : null}
 
             {/* Directions Action Button */}
             <TouchableOpacity
               style={styles.confirmButton}
-              onPress={handleOpenDirections}
+              onPress={handleRecenterRoute}
               disabled={!opLat || !opLng}
               activeOpacity={0.85}
             >
-              <Text style={styles.confirmText}>Get Driving Directions</Text>
+              <Text style={styles.confirmText}>Show on Map</Text>
             </TouchableOpacity>
           </View>
         )}

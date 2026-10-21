@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback } from "react";
 import { AppToast } from "@/components/common/AppToast";
 import { AppModal, ModalButton } from "@/components/common/AppModal";
+import { ToastOverlayContext } from "./ToastOverlayContext";
 
 interface ModalConfig {
   visible: boolean;
@@ -53,6 +54,10 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const cleanMessage = (text?: string): string => {
     if (!text) return "";
+    if (/SQLSTATE|node_modules|expo\.modules|ExpoTaskManager|Cannot find native module|Call to function|stack trace|TypeError:|ReferenceError:/i.test(text)) {
+      console.warn("Suppressed technical UI error:", text);
+      return "Something went wrong. Please try again.";
+    }
     return text
       .replace(/\s*\([^)]*\)/g, "")
       .replace(/\s{2,}/g, " ")
@@ -110,6 +115,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({
         hideModal,
       }}
     >
+      <ToastOverlayContext.Provider value={{ visible, type, title, message, onDismiss: dismissToast }}>
       {children}
       <AppToast
         visible={visible}
@@ -126,6 +132,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({
         buttons={modalConfig.buttons}
         onClose={hideModal}
       />
+      </ToastOverlayContext.Provider>
     </ToastContext.Provider>
   );
 };

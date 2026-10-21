@@ -1,210 +1,30 @@
-import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-
+import { StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from "react-native";
 import { Colors } from "@/constants/colors";
-import { FontFamily, FontSize, Spacing } from "@/constants/theme";
+import { FontFamily } from "@/constants/theme";
 
-interface ListPaginationProps {
-  currentPage: number;
-  totalItems: number;
-  pageSize?: number;
-  onPageChange: (page: number) => void;
-  itemName?: string;
-  containerStyle?: any;
-}
+interface Props { currentPage: number; totalItems: number; pageSize?: number; onPageChange: (page: number) => void; itemName?: string; containerStyle?: StyleProp<ViewStyle> }
+export default function ListPagination({ currentPage, totalItems, pageSize = 15, onPageChange, containerStyle }: Props) {
+  const size = Math.max(1, Math.floor(pageSize));
+  const pages = Math.max(1, Math.ceil(totalItems / size));
+  const page = Math.min(pages, Math.max(1, Math.floor(currentPage) || 1));
+  if (pages <= 1) return null;
+  return <View style={[styles.container, containerStyle]}>
 
-export default function ListPagination({
-  currentPage,
-  totalItems,
-  pageSize = 15,
-  onPageChange,
-  itemName = "items",
-  containerStyle,
-}: ListPaginationProps) {
-  const totalPages = Math.ceil(totalItems / pageSize);
-
-  if (totalPages <= 1) return null;
-
-  const startItem = (currentPage - 1) * pageSize + 1;
-  const endItem = Math.min(currentPage * pageSize, totalItems);
-
-  const getPageNumbers = () => {
-    const pages: (number | string)[] = [];
-    if (totalPages <= 5) {
-      for (let i = 1; i <= totalPages; i++) pages.push(i);
-    } else {
-      if (currentPage <= 3) {
-        pages.push(1, 2, 3, 4, "...", totalPages);
-      } else if (currentPage >= totalPages - 2) {
-        pages.push(1, "...", totalPages - 3, totalPages - 2, totalPages - 1, totalPages);
-      } else {
-        pages.push(1, "...", currentPage - 1, currentPage, currentPage + 1, "...", totalPages);
-      }
-    }
-    return pages;
-  };
-
-  return (
-    <View style={[styles.container, containerStyle]}>
-      <Text style={styles.infoText}>
-        Showing <Text style={styles.infoHighlight}>{startItem}–{endItem}</Text> of{" "}
-        <Text style={styles.infoHighlight}>{totalItems}</Text> {itemName}
-      </Text>
-
-      <View style={styles.controlsRow}>
-        {/* Previous Button */}
-        <TouchableOpacity
-          style={[styles.navBtn, currentPage === 1 && styles.navBtnDisabled]}
-          disabled={currentPage === 1}
-          onPress={() => onPageChange(currentPage - 1)}
-          activeOpacity={0.75}
-        >
-          <Ionicons
-            name="chevron-back"
-            size={16}
-            color={currentPage === 1 ? Colors.secondary : Colors.dark}
-          />
-          <Text style={[styles.navBtnText, currentPage === 1 && styles.navBtnTextDisabled]}>
-            Prev
-          </Text>
-        </TouchableOpacity>
-
-        {/* Page Number Pills */}
-        <View style={styles.pagesRow}>
-          {getPageNumbers().map((p, index) => {
-            if (p === "...") {
-              return (
-                <View key={`ellipsis-${index}`} style={styles.ellipsisWrap}>
-                  <Text style={styles.ellipsisText}>…</Text>
-                </View>
-              );
-            }
-            const isCurrent = p === currentPage;
-            return (
-              <TouchableOpacity
-                key={`page-${p}`}
-                style={[styles.pagePill, isCurrent && styles.pagePillActive]}
-                onPress={() => onPageChange(p as number)}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.pagePillText, isCurrent && styles.pagePillTextActive]}>
-                  {p}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Next Button */}
-        <TouchableOpacity
-          style={[styles.navBtn, currentPage === totalPages && styles.navBtnDisabled]}
-          disabled={currentPage === totalPages}
-          onPress={() => onPageChange(currentPage + 1)}
-          activeOpacity={0.75}
-        >
-          <Text style={[styles.navBtnText, currentPage === totalPages && styles.navBtnTextDisabled]}>
-            Next
-          </Text>
-          <Ionicons
-            name="chevron-forward"
-            size={16}
-            color={currentPage === totalPages ? Colors.secondary : Colors.dark}
-          />
-        </TouchableOpacity>
-      </View>
+    <View style={styles.row}>
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Previous page" accessibilityState={{ disabled: page === 1 }} disabled={page === 1} onPress={() => onPageChange(page - 1)} style={[styles.button, page === 1 && styles.disabled]}><Ionicons name="chevron-back" size={20} color={Colors.dark} /></TouchableOpacity>
+      <View style={styles.page}><Text accessibilityLiveRegion="polite" style={styles.pageText}>{page} / {pages}</Text></View>
+      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Next page" accessibilityState={{ disabled: page === pages }} disabled={page === pages} onPress={() => onPageChange(page + 1)} style={[styles.button, page < pages && styles.next, page === pages && styles.disabled]}><Ionicons name="chevron-forward" size={20} color={Colors.dark} /></TouchableOpacity>
     </View>
-  );
+  </View>;
 }
-
 const styles = StyleSheet.create({
-  container: {
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.sm,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.white,
-    marginTop: 8,
-    marginBottom: 16,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  infoText: {
-    fontFamily: FontFamily.regular,
-    fontSize: FontSize.small || 12,
-    color: Colors.secondary,
-    marginBottom: Spacing.xs,
-  },
-  infoHighlight: {
-    fontFamily: FontFamily.bold,
-    color: Colors.dark,
-  },
-  controlsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  navBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: Colors.inputBackground,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  navBtnDisabled: {
-    opacity: 0.45,
-    backgroundColor: "#F9FAFB",
-  },
-  navBtnText: {
-    fontFamily: FontFamily.semiBold,
-    fontSize: 12,
-    color: Colors.dark,
-  },
-  navBtnTextDisabled: {
-    color: Colors.secondary,
-  },
-  pagesRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  pagePill: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.inputBackground,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  pagePillActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  pagePillText: {
-    fontFamily: FontFamily.medium,
-    fontSize: 12.5,
-    color: Colors.dark,
-  },
-  pagePillTextActive: {
-    fontFamily: FontFamily.bold,
-    color: Colors.dark,
-  },
-  ellipsisWrap: {
-    width: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  ellipsisText: {
-    fontFamily: FontFamily.bold,
-    fontSize: 12,
-    color: Colors.secondary,
-  },
+  container: { width: "100%", maxWidth: "100%", alignSelf: "center", paddingVertical: 4, marginTop: 8, marginBottom: 8 },
+  caption: { fontFamily: FontFamily.regular, fontSize: 11, lineHeight: 18, color: Colors.secondary, textAlign: "center" },
+  row: { flexDirection: "row", alignItems: "center", gap: 10 },
+  button: { width: 44, height: 44, borderRadius: 12, backgroundColor: "#F1F5F9", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  next: { backgroundColor: Colors.primary },
+  disabled: { opacity: 0.35 },
+  page: { flex: 1, minWidth: 0, alignItems: "center", justifyContent: "center" },
+  pageText: { fontFamily: FontFamily.semiBold, fontSize: 12, lineHeight: 18, color: Colors.dark, textAlign: "center" },
 });

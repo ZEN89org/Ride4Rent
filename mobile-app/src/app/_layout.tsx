@@ -18,19 +18,19 @@ import { SideNavProvider } from "../context/SideNavContext";
 import { CallProvider } from "../context/CallContext";
 import { Colors } from "../constants/colors";
 
-SplashScreen.preventAutoHideAsync().catch(() => {});
+// Let Expo dismiss Android's launch window automatically on the first render.
+// The two intentional splash animations are owned by index.tsx.
+SplashScreen.setOptions({ fade: false, duration: 0 });
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
+  // Load fonts in parallel; the image-only startup animation must not wait for them.
+  useFonts({
     Poppins_400Regular,
     Poppins_500Medium,
     Poppins_600SemiBold,
     Poppins_700Bold,
   });
 
-  if (!fontsLoaded) {
-    return null;
-  }
 
   return (
     <ToastProvider>

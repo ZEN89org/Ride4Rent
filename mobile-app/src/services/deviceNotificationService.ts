@@ -121,18 +121,18 @@ export const setupNotificationChannel = async (): Promise<void> => {
 };
 
 /**
- * Request OS device notification permission explicitly (Android 13+ POST_NOTIFICATIONS & iOS)
+ * Passive permission check by default. Pass true only from an explicit user action.
  */
-export const requestDeviceNotificationPermission = async (): Promise<boolean> => {
+export const requestDeviceNotificationPermission = async (prompt = false): Promise<boolean> => {
   if (!Notifications || typeof Notifications.getPermissionsAsync !== "function") {
-    return true;
+    return false;
   }
 
   try {
     const existingStatus = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus?.status;
 
-    if (finalStatus !== "granted" && typeof Notifications.requestPermissionsAsync === "function") {
+    if (prompt && finalStatus !== "granted" && existingStatus?.canAskAgain !== false && typeof Notifications.requestPermissionsAsync === "function") {
       const requested = await Notifications.requestPermissionsAsync({
         ios: {
           allowAlert: true,
@@ -177,7 +177,8 @@ export const triggerDeviceNotification = async (
     recentAlertTimestamps.set(titleKey, nowMs);
     recentAlertTimestamps.set(signature, nowMs);
 
-    await requestDeviceNotificationPermission();
+    if (!await requestDeviceNotificationPermission()) return;
+    await setupNotificationChannel();
 
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -199,6 +200,7 @@ export const triggerDeviceNotification = async (
 interface StoredReminderMap {
   [bookingKey: string]: {
     status: string;
+    fingerprint?: string;
     notificationIds: string[];
   };
 }
@@ -292,7 +294,8 @@ export const cancelAllBookingReminders = async (): Promise<void> => {
  */
 export const scheduleBookingReminders = async (
   booking: any,
-  isNewlyCreated = false
+  isNewlyCreated = false,
+  role = "customer"
 ): Promise<void> => {
   if (!booking || !booking.id) return;
   if (!Notifications || typeof Notifications.scheduleNotificationAsync !== "function") {
@@ -305,10 +308,14 @@ export const scheduleBookingReminders = async (
       return;
     }
 
+    if (!await requestDeviceNotificationPermission()) return;
+    await setupNotificationChannel();
+
     const key = String(booking.id);
     const map = await getStoredReminderMap();
+    const fingerprint = JSON.stringify([booking.status, booking.return_at, booking.end_date, booking.refund_status, role]);
     const wasPreviouslyScheduled = Boolean(
-      map[key] && map[key].status === booking.status && map[key].notificationIds.length > 0
+      map[key] && map[key].fingerprint === fingerprint && map[key].notificationIds.length > 0
     );
 
     // If reminders are already scheduled for this exact booking state, skip re-scheduling
@@ -343,7 +350,7 @@ export const scheduleBookingReminders = async (
       brandName && !rawVehicleName.toLowerCase().includes(brandName.toLowerCase())
         ? `${brandName} ${rawVehicleName}`.trim()
         : rawVehicleName || brandName || "your selected vehicle";
-    const resFee = Math.round(Number(booking.reservation_fee) || 500).toLocaleString();
+    const resFee = Math.round(Number(booking.reservation_fee ?? Number(booking.total_price) * 0.5)).toLocaleString();
     const tripDates = formatShortTripRange(booking.start_date, booking.end_date);
     const createdMs =
       !isNewlyCreated && booking.created_at ? new Date(booking.created_at).getTime() : Date.now();
@@ -356,7 +363,7 @@ export const scheduleBookingReminders = async (
       (Notifications as any).SchedulableTriggerInputTypes?.TIME_INTERVAL ?? "timeInterval";
 
     // Case A: Unpaid Pending Booking -> 1m, 15m, 2h, 18h reminders
-    if (booking.status === "pending_payment" && booking.payment_status === "unpaid") {
+    if (role !== "operator" && booking.status === "pending_payment" && booking.payment_status === "unpaid") {
       const stages = [
         {
           targetSeconds: 60, // 1 minute (First nudge & live demo friendly)
@@ -448,7 +455,7 @@ export const scheduleBookingReminders = async (
 
     // Case B: Approved Booking -> 1 Day Before Pickup Reminder (at 9:00 AM the day before start_date)
     if (
-      (booking.status === "approved" || booking.status === "awaiting_pickup") &&
+      role !== "operator" && (booking.status === "approved" || booking.status === "awaiting_pickup") &&
       booking.start_date
     ) {
       const rawStart = String(booking.start_date).split("T")[0];
@@ -496,10 +503,32 @@ export const scheduleBookingReminders = async (
       }
     }
 
+    const ongoing = ["trip_in_progress", "ongoing", "return_pending"].includes(booking.status);
+    const returnTime = booking.return_at ? new Date(booking.return_at).getTime() : new Date(String(booking.end_date).slice(0, 10) + "T10:00:00+08:00").getTime();
+    if (ongoing && Number.isFinite(returnTime)) {
+      for (const minutes of [1, 60]) {
+        if (minutes === 60 && returnTime + 3600000 <= Date.now()) continue;
+        const seconds = Math.max(30, Math.ceil((returnTime + minutes * 60000 - Date.now()) / 1000));
+        const id = await Notifications.scheduleNotificationAsync({
+          content: { title: "Vehicle Return Overdue", body: role === "operator" ? `Booking #${booking.id}: Check the overdue vehicle return and contact the renter.` : `Booking #${booking.id}: Your return time has passed. Return the vehicle or contact your operator.`, sound: true, data: { action_url: role === "operator" ? "/operator-bookings" : "/(tabs)/bookings" } },
+          trigger: { type: timeIntervalType, seconds, repeats: false, ...(Platform.OS === "android" ? { channelId: "ride4rent_alerts" } : {}) },
+        });
+        scheduledIds.push(id);
+      }
+    }
+    if (role === "operator" && booking.refund_status === "pending") {
+      const id = await Notifications.scheduleNotificationAsync({
+        content: { title: "Refund Reminder", body: `Booking #${booking.id}: A reservation refund is still pending.`, sound: true, data: { action_url: "/operator-bookings" } },
+        trigger: { type: timeIntervalType, seconds: 86400, repeats: false, ...(Platform.OS === "android" ? { channelId: "ride4rent_alerts" } : {}) },
+      });
+      scheduledIds.push(id);
+    }
+
     if (scheduledIds.length > 0) {
       const updatedMap = await getStoredReminderMap();
       updatedMap[key] = {
         status: booking.status,
+        fingerprint,
         notificationIds: scheduledIds,
       };
       await saveStoredReminderMap(updatedMap);
@@ -512,7 +541,7 @@ export const scheduleBookingReminders = async (
 /**
  * Synchronize OS-scheduled reminders with the renter's current bookings list
  */
-export const syncBookingsReminders = async (bookings: any[]): Promise<void> => {
+export const syncBookingsReminders = async (bookings: any[], role = "customer"): Promise<void> => {
   if (!Array.isArray(bookings)) return;
   try {
     const map = await getStoredReminderMap();
@@ -531,7 +560,7 @@ export const syncBookingsReminders = async (bookings: any[]): Promise<void> => {
         current &&
         ((current.status === "pending_payment" && current.payment_status === "unpaid") ||
           current.status === "approved" ||
-          current.status === "awaiting_pickup");
+          current.status === "awaiting_pickup" || ["trip_in_progress", "ongoing", "return_pending"].includes(current.status) || current.refund_status === "pending");
 
       if (!isStillRemindable || map[storedBookingId]?.status !== current.status) {
         await cancelBookingReminders(storedBookingId);
@@ -543,9 +572,9 @@ export const syncBookingsReminders = async (bookings: any[]): Promise<void> => {
       if (
         (b.status === "pending_payment" && b.payment_status === "unpaid") ||
         b.status === "approved" ||
-        b.status === "awaiting_pickup"
+        b.status === "awaiting_pickup" || ["trip_in_progress", "ongoing", "return_pending"].includes(b.status) || b.refund_status === "pending"
       ) {
-        await scheduleBookingReminders(b);
+        await scheduleBookingReminders(b, false, role);
       }
     }
   } catch {
@@ -562,7 +591,7 @@ export const testPushNotification = async (): Promise<boolean> => {
   }
 
   try {
-    const granted = await requestDeviceNotificationPermission();
+    const granted = await requestDeviceNotificationPermission(true);
     await triggerDeviceNotification(
       "Ride4Rent Test Alert",
       "Push notification is active! You will receive live booking and trip updates here.",

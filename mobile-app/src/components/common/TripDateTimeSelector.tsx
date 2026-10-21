@@ -1,16 +1,12 @@
+import TripTimePickerContent from "./TripTimePickerContent";
 import { AppBottomSheet } from "@/components/common/AppBottomSheet";
 import { Colors } from "@/constants/colors";
 import { FontFamily } from "@/constants/theme";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useState } from "react";
-import {
-  Modal,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { KeyboardAwareScrollView as ScrollView } from "@/components/common/KeyboardAwareScrollView";
+import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 interface TripDateTimeSelectorProps {
   startDate: Date;
@@ -67,6 +63,7 @@ export default function TripDateTimeSelector({
   minDate = new Date(),
   isExtensionOnly = false,
 }: TripDateTimeSelectorProps) {
+  const insets = useSafeAreaInsets();
   const [modalVisible, setModalVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<"pickup" | "return">(
     isExtensionOnly ? "return" : "pickup",
@@ -82,10 +79,6 @@ export default function TripDateTimeSelector({
   const [timePickerTarget, setTimePickerTarget] = useState<
     "pickup" | "return" | null
   >(null);
-  const [timeInputHour, setTimeInputHour] = useState("10");
-  const [timeInputMinute, setTimeInputMinute] = useState("00");
-  const [timeInputAmPm, setTimeInputAmPm] = useState<"AM" | "PM">("AM");
-
   const today = normalizeDate(minDate);
 
   const openCalendarModal = (tab: "pickup" | "return") => {
@@ -155,50 +148,15 @@ export default function TripDateTimeSelector({
 
   // Open the manual time selector.
   const openTimePicker = (target: "pickup" | "return") => {
-    const currentTimeStr =
-      target === "pickup"
-        ? modalVisible
-          ? draftStartTime
-          : startTime
-        : modalVisible
-          ? draftEndTime
-          : endTime;
-    const parts = (currentTimeStr || "10:00 AM").split(" ");
-    const timeParts = (parts[0] || "10:00").split(":");
-    const h = timeParts[0] || "10";
-    const m = timeParts[1] || "00";
-    const ampm = (parts[1] || "AM").toUpperCase() === "PM" ? "PM" : "AM";
-
-    setTimeInputHour(h);
-    setTimeInputMinute(m);
-    setTimeInputAmPm(ampm as "AM" | "PM");
     setTimePickerTarget(target);
   };
 
-  const saveTimePicker = () => {
-    let hNum = parseInt(timeInputHour, 10);
-    if (isNaN(hNum) || hNum < 1) hNum = 1;
-    if (hNum > 12) hNum = 12;
-
-    let mNum = parseInt(timeInputMinute, 10);
-    if (isNaN(mNum) || mNum < 0) mNum = 0;
-    if (mNum > 59) mNum = 59;
-
-    const formatted = `${String(hNum).padStart(2, "0")}:${String(mNum).padStart(2, "0")} ${timeInputAmPm}`;
-
+  const saveTimePicker = (formatted: string) => {
     if (modalVisible) {
-      if (timePickerTarget === "pickup") {
-        setDraftStartTime(formatted);
-      } else {
-        setDraftEndTime(formatted);
-      }
-    } else {
-      if (timePickerTarget === "pickup") {
-        onDateTimeChange(startDate, endDate, formatted, endTime);
-      } else {
-        onDateTimeChange(startDate, endDate, startTime, formatted);
-      }
-    }
+      if (timePickerTarget === "pickup") setDraftStartTime(formatted);
+      else setDraftEndTime(formatted);
+    } else if (timePickerTarget === "pickup") onDateTimeChange(startDate, endDate, formatted, endTime);
+    else onDateTimeChange(startDate, endDate, startTime, formatted);
     setTimePickerTarget(null);
   };
 
@@ -213,271 +171,16 @@ export default function TripDateTimeSelector({
     };
   });
 
-  const handleIncrementHour = () => {
-    let h = parseInt(timeInputHour, 10) || 10;
-    h = h >= 12 ? 1 : h + 1;
-    setTimeInputHour(String(h).padStart(2, "0"));
-  };
-
-  const handleDecrementHour = () => {
-    let h = parseInt(timeInputHour, 10) || 10;
-    h = h <= 1 ? 12 : h - 1;
-    setTimeInputHour(String(h).padStart(2, "0"));
-  };
-
-  const handleIncrementMinute = () => {
-    let m = parseInt(timeInputMinute, 10) || 0;
-    m = (m + 1) % 60;
-    setTimeInputMinute(String(m).padStart(2, "0"));
-  };
-
-  const handleDecrementMinute = () => {
-    let m = parseInt(timeInputMinute, 10) || 0;
-    m = (m - 1 + 60) % 60;
-    setTimeInputMinute(String(m).padStart(2, "0"));
-  };
-
-  const renderExtensionTimePickerContent = () => {
-    const currentTime = `${timeInputHour.padStart(2, "0")}:${timeInputMinute.padStart(2, "0")} ${timeInputAmPm}`;
-
-    return (
-      <View style={styles.extensionTimeContent}>
-        <View style={styles.extensionTimeHeader}>
-          <View>
-            <Text style={styles.extensionTimeTitle}>Return time</Text>
-            <Text style={styles.extensionTimeDate}>
-              For {formatDateDisplay(endDate)}
-            </Text>
-          </View>
-          <Text style={styles.extensionTimeValue}>{currentTime}</Text>
-        </View>
-
-        <View style={styles.extensionTimeControls}>
-          <View style={styles.extensionTimeControlRow}>
-            <Text style={styles.extensionTimeControlLabel}>Hour</Text>
-            <View style={styles.extensionStepper}>
-              <TouchableOpacity
-                style={styles.extensionStepperButton}
-                onPress={handleDecrementHour}
-                accessibilityLabel="Decrease return hour"
-                activeOpacity={0.7}
-              >
-                <Ionicons name="remove" size={18} color={Colors.dark} />
-              </TouchableOpacity>
-              <Text style={styles.extensionStepperValue}>
-                {timeInputHour.padStart(2, "0")}
-              </Text>
-              <TouchableOpacity
-                style={styles.extensionStepperButton}
-                onPress={handleIncrementHour}
-                accessibilityLabel="Increase return hour"
-                activeOpacity={0.7}
-              >
-                <Ionicons name="add" size={18} color={Colors.dark} />
-              </TouchableOpacity>
-            </View>
-          </View>
-          <View style={styles.extensionTimeDivider} />
-          <View style={styles.extensionTimeControlRow}>
-            <Text style={styles.extensionTimeControlLabel}>Minute</Text>
-            <View style={styles.extensionStepper}>
-              <TouchableOpacity
-                style={styles.extensionStepperButton}
-                onPress={handleDecrementMinute}
-                accessibilityLabel="Decrease return minute"
-                activeOpacity={0.7}
-              >
-                <Ionicons name="remove" size={18} color={Colors.dark} />
-              </TouchableOpacity>
-              <Text style={styles.extensionStepperValue}>
-                {timeInputMinute.padStart(2, "0")}
-              </Text>
-              <TouchableOpacity
-                style={styles.extensionStepperButton}
-                onPress={handleIncrementMinute}
-                accessibilityLabel="Increase return minute"
-                activeOpacity={0.7}
-              >
-                <Ionicons name="add" size={18} color={Colors.dark} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.extensionAmPm}>
-          {(["AM", "PM"] as const).map((period) => (
-            <TouchableOpacity
-              key={period}
-              style={[
-                styles.extensionAmPmOption,
-                timeInputAmPm === period && styles.extensionAmPmOptionActive,
-              ]}
-              onPress={() => setTimeInputAmPm(period)}
-              activeOpacity={0.8}
-              accessibilityRole="button"
-              accessibilityState={{ selected: timeInputAmPm === period }}
-            >
-              <Text
-                style={[
-                  styles.extensionAmPmText,
-                  timeInputAmPm === period && styles.extensionAmPmTextActive,
-                ]}
-              >
-                {period}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <TouchableOpacity
-          style={styles.extensionSaveButton}
-          onPress={saveTimePicker}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.extensionSaveButtonText}>Save Time</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  };
-
-  const renderTimePickerContent = () =>
-    isExtensionOnly ? (
-      renderExtensionTimePickerContent()
-    ) : (
-      <View style={styles.timeSheetContent}>
-        <View style={styles.timeSheetHeader}>
-          <View style={styles.timeSheetIcon}>
-            <Ionicons name="time-outline" size={22} color={Colors.dark} />
-          </View>
-          <View style={styles.timeSheetHeading}>
-            <Text style={styles.timeSheetEyebrow}>
-              {timePickerTarget === "pickup" ? "PICK-UP" : "RETURN"}
-            </Text>
-            <Text style={styles.timeSheetTitle}>Choose a time</Text>
-          </View>
-        </View>
-        <Text style={styles.timeSheetSubtitle}>
-          Adjust the hour, minute, and AM/PM
-        </Text>
-
-        <View style={styles.timePickerPanel}>
-          {/* Manual controls keep time selection keyboard-free inside the sheet. */}
-          <View style={styles.timeInputsRow}>
-            <View style={styles.timeInputCol}>
-              <Text style={styles.timeInputLabel}>HOUR</Text>
-              <TouchableOpacity
-                style={styles.timeStepperBtn}
-                onPress={handleIncrementHour}
-                activeOpacity={0.7}
-                accessibilityLabel="Increase hour"
-              >
-                <Ionicons name="chevron-up" size={18} color={Colors.dark} />
-              </TouchableOpacity>
-              <View style={styles.timeValueBox}>
-                <Text style={styles.timeValueText}>
-                  {timeInputHour.padStart(2, "0")}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={styles.timeStepperBtn}
-                onPress={handleDecrementHour}
-                activeOpacity={0.7}
-                accessibilityLabel="Decrease hour"
-              >
-                <Ionicons name="chevron-down" size={18} color={Colors.dark} />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.timeSeparator}>:</Text>
-
-            <View style={styles.timeInputCol}>
-              <Text style={styles.timeInputLabel}>MINUTE</Text>
-              <TouchableOpacity
-                style={styles.timeStepperBtn}
-                onPress={handleIncrementMinute}
-                activeOpacity={0.7}
-                accessibilityLabel="Increase minute"
-              >
-                <Ionicons name="chevron-up" size={18} color={Colors.dark} />
-              </TouchableOpacity>
-              <View style={styles.timeValueBox}>
-                <Text style={styles.timeValueText}>
-                  {timeInputMinute.padStart(2, "0")}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={styles.timeStepperBtn}
-                onPress={handleDecrementMinute}
-                activeOpacity={0.7}
-                accessibilityLabel="Decrease minute"
-              >
-                <Ionicons name="chevron-down" size={18} color={Colors.dark} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.ampmToggleWrap}>
-              <TouchableOpacity
-                style={[
-                  styles.ampmBtn,
-                  timeInputAmPm === "AM" && styles.ampmBtnActive,
-                ]}
-                onPress={() => setTimeInputAmPm("AM")}
-                activeOpacity={0.8}
-                accessibilityRole="button"
-                accessibilityState={{ selected: timeInputAmPm === "AM" }}
-              >
-                <Text
-                  style={[
-                    styles.ampmText,
-                    timeInputAmPm === "AM" && styles.ampmTextActive,
-                  ]}
-                >
-                  AM
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.ampmBtn,
-                  timeInputAmPm === "PM" && styles.ampmBtnActive,
-                ]}
-                onPress={() => setTimeInputAmPm("PM")}
-                activeOpacity={0.8}
-                accessibilityRole="button"
-                accessibilityState={{ selected: timeInputAmPm === "PM" }}
-              >
-                <Text
-                  style={[
-                    styles.ampmText,
-                    timeInputAmPm === "PM" && styles.ampmTextActive,
-                  ]}
-                >
-                  PM
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.timeModalButtonsRow}>
-          <TouchableOpacity
-            style={styles.timeCancelBtn}
-            onPress={() => setTimePickerTarget(null)}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.timeCancelBtnText}>Cancel</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.timeConfirmBtn}
-            onPress={saveTimePicker}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.timeConfirmBtnText}>Save Time</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
+  const renderTimePickerContent = () => timePickerTarget && (
+    <TripTimePickerContent
+      key={`${timePickerTarget}:${modalVisible}`}
+      target={timePickerTarget}
+      value={timePickerTarget === "pickup" ? (modalVisible ? draftStartTime : startTime) : (modalVisible ? draftEndTime : endTime)}
+      date={timePickerTarget === "pickup" ? (modalVisible ? draftStart : startDate) : (modalVisible ? draftEnd || endDate : endDate)}
+      onClose={() => setTimePickerTarget(null)}
+      onSave={saveTimePicker}
+    />
+  );
 
   return (
     <View style={styles.container}>
@@ -486,12 +189,13 @@ export default function TripDateTimeSelector({
         {/* Left Column: Pickup */}
         <View style={styles.columnBox}>
           <Text style={styles.columnHeaderLabel}>
-            {isExtensionOnly ? "Current Pickup" : "Pickup"}
+            {isExtensionOnly ? "Current Return" : "Pickup"}
           </Text>
           <View style={styles.cardContainer}>
             {/* Top Half: Calendar Icon + Date */}
             <TouchableOpacity
               style={styles.cardHalfTop}
+              accessibilityRole="button"
               onPress={() => !isExtensionOnly && openCalendarModal("pickup")}
               activeOpacity={0.75}
               disabled={isExtensionOnly}
@@ -507,6 +211,7 @@ export default function TripDateTimeSelector({
             {/* Bottom Half: Clock Icon + Time */}
             <TouchableOpacity
               style={styles.cardHalfBottom}
+              accessibilityRole="button"
               onPress={() => !isExtensionOnly && openTimePicker("pickup")}
               activeOpacity={0.75}
               disabled={isExtensionOnly}
@@ -521,11 +226,12 @@ export default function TripDateTimeSelector({
 
         {/* Right Column: Return */}
         <View style={styles.columnBox}>
-          <Text style={styles.columnHeaderLabel}>Return</Text>
+          <Text style={styles.columnHeaderLabel}>RETURN</Text>
           <View style={styles.cardContainer}>
             {/* Top Half: Calendar Icon + Date */}
             <TouchableOpacity
               style={styles.cardHalfTop}
+              accessibilityRole="button"
               onPress={() => openCalendarModal("return")}
               activeOpacity={0.75}
             >
@@ -540,6 +246,7 @@ export default function TripDateTimeSelector({
             {/* Bottom Half: Clock Icon + Time */}
             <TouchableOpacity
               style={styles.cardHalfBottom}
+              accessibilityRole="button"
               onPress={() => openTimePicker("return")}
               activeOpacity={0.75}
             >
@@ -562,7 +269,7 @@ export default function TripDateTimeSelector({
       >
         <View style={styles.modalScreen}>
           {/* Back Arrow & Large Title */}
-          <View style={styles.modalHeader}>
+          <View style={[styles.modalHeader, { paddingTop: insets.top + 16 }]}>
             <TouchableOpacity
               style={styles.backBtn}
               onPress={() => setModalVisible(false)}
@@ -779,7 +486,7 @@ export default function TripDateTimeSelector({
           </ScrollView>
 
           {/* Bottom Fixed Button: "Select dates" (Dark button matching Image 2) */}
-          <View style={styles.modalBottomBar}>
+          <View style={[styles.modalBottomBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
             <TouchableOpacity
               style={styles.selectDatesBtn}
               onPress={handleApply}
@@ -837,19 +544,22 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   columnHeaderLabel: {
-    fontFamily: FontFamily.bold,
-    fontSize: 14,
+    fontFamily: FontFamily.semiBold,
+    letterSpacing: 0.7,
+    fontSize: 11,
     color: "#0F172A",
     marginBottom: 8,
   },
   cardContainer: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 14,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: "#E2E8F0",
     overflow: "hidden",
   },
   cardHalfTop: {
+    minHeight: 52,
+    backgroundColor: "#FFFCED",
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
@@ -861,6 +571,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#E2E8F0",
   },
   cardHalfBottom: {
+    minHeight: 50,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
@@ -868,7 +579,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   cardDateText: {
-    fontFamily: FontFamily.medium,
+    fontFamily: FontFamily.semiBold,
     fontSize: 13.5,
     color: "#0F172A",
     flex: 1,

@@ -35,12 +35,13 @@ export default function TopRatedVehicles({
         if (!mounted) return;
         const apiVehicles = res.data.data || [];
         setVehicles(
-          apiVehicles.slice(0, 10).map((v: any) => ({
+          apiVehicles.filter((v: any) => Number(v.rating_count) > 0).slice(0, 10).map((v: any) => ({
             id: String(v.id),
             name: v.name,
             price: Number(v.price_per_day),
             rating: v.rating !== null && v.rating !== undefined ? Number(v.rating) : 0,
             ratingCount: Number(v.rating_count || 0),
+            availability_status: v.availability_status,
             image: v.image_url
               ? { uri: v.image_url }
               : { uri: "https://images.unsplash.com/photo-1552519507-da3b142c6e3d?w=800&auto=format&fit=crop&q=60" },

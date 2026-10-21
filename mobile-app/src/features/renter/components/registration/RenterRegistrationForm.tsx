@@ -1,16 +1,9 @@
+import { normalizePhilippinePhone } from "@/utils/inputValidation";
+import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
-import {
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
-} from "react-native";
+import { KeyboardAwareScrollView as ScrollView } from "@/components/common/KeyboardAwareScrollView";
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppBottomSheet from "@/components/common/AppBottomSheet";
@@ -364,6 +357,8 @@ export default function RenterRegistrationForm({
           />
 
         <ScrollView
+          bounces={false}
+          overScrollMode="never"
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
@@ -582,11 +577,11 @@ export default function RenterRegistrationForm({
             <Text style={styles.agreementText}>
               I certify that the information I provided is
               accurate. By clicking Continue, I agree to the{" "}
-              <Text style={styles.link}>
+              <Text style={styles.link} onPress={() => router.push("/terms")}>
                 Terms of Service
               </Text>{" "}
               &{" "}
-              <Text style={styles.link}>
+              <Text style={styles.link} onPress={() => router.push("/privacy" as any)}>
                 Privacy Policy
               </Text>
               .

@@ -1,11 +1,14 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
+import { KeyboardAwareScrollView as ScrollView } from "@/components/common/KeyboardAwareScrollView";
 import { Animated, FlatList, PanResponder, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppBottomSheet } from "@/components/common/AppBottomSheet";
 import { Skeleton } from "@/components/common/Skeleton";
+import { groupNotifications } from "@/utils/groupNotifications";
 import { Colors } from "@/constants/colors";
 import { FontFamily, Spacing } from "@/constants/theme";
 import { useAuth } from "@/features/auth/hooks/useAuth";
@@ -465,6 +468,8 @@ function SwipeableNotificationItem({
           <View style={styles.textContainer}>
             <View style={styles.titleRow}>
               <Text
+                numberOfLines={1}
+                ellipsizeMode="tail"
                 style={[
                   styles.itemTitle,
                   !item.is_read && styles.itemTitleUnread,
@@ -472,21 +477,15 @@ function SwipeableNotificationItem({
               >
                 {cleanTitle}
               </Text>
+              {(item.group_count || 0) > 1 && <Text style={{ fontFamily: FontFamily.semiBold, marginRight: 8 }}>({item.group_count})</Text>}
               <Text style={styles.timeText}>{item.time}</Text>
             </View>
 
             {/* Full Subtitle / Status Text */}
-            <Text style={styles.itemMessage}>{cleanMessage}</Text>
+            <Text style={styles.itemMessage} numberOfLines={2}>{cleanMessage}</Text>
           </View>
 
-          {/* Right Indicator for Unread */}
-          {!item.is_read && (
-            <View style={styles.unreadIndicator}>
-              <View style={styles.unreadPill}>
-                <Text style={styles.unreadPillText}>1</Text>
-              </View>
-            </View>
-          )}
+          {!item.is_read && <View style={styles.unreadIndicator}><View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.primary }} /></View>}
         </TouchableOpacity>
       </Animated.View>
     </View>
@@ -510,6 +509,7 @@ const EXCLUDED_NOTIFICATION_TITLES = new Set([
 
 function isPriorityNotification(notif: AppNotification): boolean {
   if (!notif || !notif.title) return false;
+  if (/expo\.modules|TaskManager|Call to function|SQLSTATE|Stack trace|node_modules/i.test(notif.message || "")) return false;
   const lower = notif.title.trim().toLowerCase();
   if (EXCLUDED_NOTIFICATION_TITLES.has(lower)) return false;
   if (
@@ -530,6 +530,7 @@ export default function NotificationsScreen() {
   const { refreshUnreadCount, resetUnreadCount, decrementUnreadCount } =
     useNotificationCount();
   const { showModal, showSuccess, showInfo } = useAppToast();
+  const archiveKey = `@ride4rent_archived_notifications:${user?.id || "guest"}`;
   const [notificationTab, setNotificationTab] = useState<"inbox" | "archived">(
     "inbox",
   );
@@ -539,6 +540,8 @@ export default function NotificationsScreen() {
   >([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [unreadOnly, setUnreadOnly] = useState(false);
+  const [selectedNotificationGroup, setSelectedNotificationGroup] = useState<AppNotification[] | null>(null);
   const [optionsMenuVisible, setOptionsMenuVisible] = useState(false);
 
   const loadNotifications = async () => {
@@ -551,7 +554,9 @@ export default function NotificationsScreen() {
       const validList = Array.isArray(data)
         ? data.filter(isPriorityNotification)
         : [];
-      setNotifications(validList);
+      const archivedIds = new Set<string>(JSON.parse(await AsyncStorage.getItem(archiveKey) || "[]"));
+      setNotifications(validList.filter((n) => !archivedIds.has(n.id)));
+      setArchivedNotifications(validList.filter((n) => archivedIds.has(n.id)));
       refreshUnreadCount();
     } catch (e) {
       console.log("Error loading notifications:", e);
@@ -565,11 +570,12 @@ export default function NotificationsScreen() {
     if (isGuest) return;
     let active = true;
     getNotifications()
-      .then((data) => {
-        if (active)
-          setNotifications(
-            Array.isArray(data) ? data.filter(isPriorityNotification) : [],
-          );
+      .then(async (data) => {
+        const archivedIds = new Set<string>(JSON.parse(await AsyncStorage.getItem(archiveKey) || "[]"));
+        if (!active) return;
+        const valid = Array.isArray(data) ? data.filter(isPriorityNotification) : [];
+        setNotifications(valid.filter((n) => !archivedIds.has(n.id)));
+        setArchivedNotifications(valid.filter((n) => archivedIds.has(n.id)));
       })
       .catch((error) => console.log("Error loading notifications:", error))
       .finally(() => {
@@ -578,7 +584,7 @@ export default function NotificationsScreen() {
     return () => {
       active = false;
     };
-  }, [isGuest]);
+  }, [isGuest, archiveKey]);
 
   const handleMarkAllRead = async () => {
     setOptionsMenuVisible(false);
@@ -605,6 +611,8 @@ export default function NotificationsScreen() {
           onPress: async () => {
             try {
               await clearAllNotifications();
+              await AsyncStorage.removeItem(archiveKey);
+              setArchivedNotifications([]);
               setNotifications([]);
               resetUnreadCount();
               showSuccess("Notifications", "All notifications cleared.");
@@ -623,15 +631,15 @@ export default function NotificationsScreen() {
       const target = (
         notificationTab === "inbox" ? notifications : archivedNotifications
       ).find((n) => n.id === id);
-      await deleteNotification(id);
+      const grouped = activeList.find((item) => item.id === id);
+      const ids = grouped?.group_ids || [id];
+      await Promise.all(ids.map(deleteNotification));
       if (notificationTab === "inbox") {
-        setNotifications((prev) => prev.filter((n) => n.id !== id));
+        setNotifications((prev) => prev.filter((n) => !ids.includes(n.id)));
       } else {
-        setArchivedNotifications((prev) => prev.filter((n) => n.id !== id));
+        setArchivedNotifications((prev) => prev.filter((n) => !ids.includes(n.id)));
       }
-      if (target && !target.is_read) {
-        decrementUnreadCount(1);
-      }
+      decrementUnreadCount((notificationTab === "inbox" ? notifications : archivedNotifications).filter((n) => ids.includes(n.id) && !n.is_read).length);
       showInfo("Deleted", "Notification removed.");
     } catch (e) {
       console.log("Error deleting notification:", e);
@@ -639,35 +647,39 @@ export default function NotificationsScreen() {
   };
 
   const handleArchiveOne = async (item: AppNotification) => {
+    const ids = item.group_ids || [item.id];
+    const members = notifications.filter((n) => ids.includes(n.id));
     try {
-      if (!item.is_read) {
-        markNotificationAsRead(item.id).catch(() => {});
-        decrementUnreadCount(1);
-      }
-      setNotifications((prev) => prev.filter((n) => n.id !== item.id));
-      setArchivedNotifications((prev) => [
-        item,
-        ...prev.filter((n) => n.id !== item.id),
-      ]);
-      showSuccess("Archived", "Notification moved to archive.");
-    } catch (e) {
-      console.log("Error archiving notification:", e);
-    }
+      await Promise.all(members.filter((n) => !n.is_read).map((n) => markNotificationAsRead(n.id)));
+      decrementUnreadCount(members.filter((n) => !n.is_read).length);
+      const storedIds: string[] = JSON.parse(await AsyncStorage.getItem(archiveKey) || "[]");
+      await AsyncStorage.setItem(archiveKey, JSON.stringify([...new Set([...storedIds, ...ids])]));
+      setNotifications((prev) => prev.filter((n) => !ids.includes(n.id)));
+      setArchivedNotifications((prev) => [...members.map((n) => ({ ...n, is_read: true })), ...prev.filter((n) => !ids.includes(n.id))]);
+      showSuccess("Archived", "Notifications moved to archive.");
+    } catch (error) { console.error("Could not archive notifications:", error); }
   };
-
-  const handleUnarchiveOne = (item: AppNotification) => {
-    setArchivedNotifications((prev) => prev.filter((n) => n.id !== item.id));
-    setNotifications((prev) => [item, ...prev]);
-    showSuccess("Restored", "Notification restored to Inbox.");
+  const handleUnarchiveOne = async (item: AppNotification) => {
+    const ids = item.group_ids || [item.id];
+    const members = archivedNotifications.filter((n) => ids.includes(n.id));
+    const storedIds: string[] = JSON.parse(await AsyncStorage.getItem(archiveKey) || "[]");
+    await AsyncStorage.setItem(archiveKey, JSON.stringify(storedIds.filter((id) => !ids.includes(id))));
+    setArchivedNotifications((prev) => prev.filter((n) => !ids.includes(n.id)));
+    setNotifications((prev) => [...members, ...prev.filter((n) => !ids.includes(n.id))]);
   };
 
   const handleNotificationPress = async (item: AppNotification) => {
+    const members = (notificationTab === "inbox" ? notifications : archivedNotifications).filter((entry) => (item.group_ids || [item.id]).includes(entry.id));
+    if (new Set(members.map((entry) => entry.action_url)).size > 1) {
+      setSelectedNotificationGroup(members);
+      return;
+    }
     if (!item.is_read) {
-      markNotificationAsRead(item.id).catch(() => {});
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === item.id ? { ...n, is_read: true } : n)),
-      );
-      decrementUnreadCount(1);
+      const ids = item.group_ids || [item.id];
+      try { await Promise.all(ids.map(markNotificationAsRead)); } catch (error) { console.warn("Could not mark notifications read:", error); void refreshUnreadCount(); return; }
+      const unread = notifications.filter((n) => ids.includes(n.id) && !n.is_read).length;
+      setNotifications((prev) => prev.map((n) => ids.includes(n.id) ? { ...n, is_read: true } : n));
+      decrementUnreadCount(unread);
     }
 
     // Refresh user profile before navigation so account standing is updated in real time
@@ -734,8 +746,7 @@ export default function NotificationsScreen() {
   }, [notifications]);
 
   // Current active list depending on selected tab
-  const activeList =
-    notificationTab === "inbox" ? notifications : archivedNotifications;
+  const activeList = groupNotifications((notificationTab === "inbox" ? notifications : archivedNotifications).filter((n) => !unreadOnly || !n.is_read));
 
   // Group notifications by date (Today, Yesterday, Earlier)
   const groupedNotifications = useMemo<GroupedNotifications[]>(() => {
@@ -775,7 +786,32 @@ export default function NotificationsScreen() {
     return groups;
   }, [activeList]);
 
-  const getIconConfig = (type: string, isRead: boolean) => {
+  const getIconConfig = (type: string, isRead: boolean, title = "") => {
+    const lower = title.toLowerCase().replace(/[’‘]/g, "'");
+    const eventStyle: {
+      icon: React.ComponentProps<typeof Ionicons>["name"];
+      color: string;
+      bgColor: string;
+      borderColor: string;
+    } | null = /don'?t miss your ride/.test(lower)
+      ? { icon: "alarm-outline", color: "#B45309", bgColor: "#FFFBEB", borderColor: "#FDE68A" }
+      : lower.includes("trip started")
+        ? { icon: "navigate-outline", color: "#0369A1", bgColor: "#F0F9FF", borderColor: "#BAE6FD" }
+        : lower.includes("booking approved")
+          ? { icon: "checkmark-done-circle-outline", color: "#047857", bgColor: "#ECFDF5", borderColor: "#A7F3D0" }
+          : /upcom+ing trip|upcoming trip|don't miss your trip/.test(lower)
+            ? { icon: "calendar-outline", color: "#6D28D9", bgColor: "#F5F3FF", borderColor: "#DDD6FE" }
+            : lower.includes("still interested")
+              ? { icon: "heart-outline", color: "#BE185D", bgColor: "#FDF2F8", borderColor: "#FBCFE8" }
+              : null;
+    if (eventStyle) return {
+      icon: <Ionicons name={eventStyle.icon} size={22} color={eventStyle.color} />,
+      bgColor: eventStyle.bgColor,
+      borderColor: eventStyle.borderColor,
+    };
+    const icon = lower.includes("call") ? "call-outline" : lower.includes("refund") ? "return-down-back-outline" : lower.includes("payment") || lower.includes("commission") ? "receipt-outline" : lower.includes("location") || lower.includes("gps") ? "location-outline" : lower.includes("pickup") || lower.includes("return") ? "time-outline" : null;
+    if (icon) return { icon: <Ionicons name={icon} size={22} color={Colors.dark} />, bgColor: Colors.logoBackground, borderColor: "#FDE68A" };
+
     switch (type) {
       case "booking":
         return {
@@ -959,7 +995,7 @@ export default function NotificationsScreen() {
               {/* Clean Row Items with Swipe Actions */}
               <View style={styles.itemsWrapper}>
                 {group.data.map((item, index) => {
-                  const iconCfg = getIconConfig(item.type, item.is_read);
+                  const iconCfg = getIconConfig(item.type, item.is_read, item.title);
                   const isLast = index === group.data.length - 1;
 
                   return (
@@ -986,6 +1022,15 @@ export default function NotificationsScreen() {
       )}
 
       {/* Options Menu Bottom Sheet */}
+      <AppBottomSheet visible={!!selectedNotificationGroup} onClose={() => setSelectedNotificationGroup(null)} title="Grouped Notifications">
+        <ScrollView style={{ maxHeight: 380, flexShrink: 1 }}>
+        {selectedNotificationGroup?.map((entry) => <TouchableOpacity key={entry.id} style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: Colors.border }} onPress={() => { setSelectedNotificationGroup(null); void handleNotificationPress(entry); }}>
+          <Text style={{ fontFamily: FontFamily.semiBold }} numberOfLines={1}>{entry.title}</Text>
+          <Text style={{ color: Colors.secondary, marginTop: 5 }} numberOfLines={2}>{entry.message}</Text>
+          <Text style={{ color: Colors.secondary, marginTop: 4, fontSize: 11 }}>{entry.time}</Text>
+        </TouchableOpacity>)}
+        </ScrollView>
+      </AppBottomSheet>
       <AppBottomSheet
         visible={optionsMenuVisible}
         onClose={() => setOptionsMenuVisible(false)}
@@ -1035,6 +1080,8 @@ export default function NotificationsScreen() {
             </View>
           </TouchableOpacity>
 
+          <TouchableOpacity style={styles.menuOptionItem} onPress={async () => { setOptionsMenuVisible(false); for (const entry of groupNotifications(notifications.filter((n) => n.is_read))) await handleArchiveOne(entry); }}><View style={styles.menuOptionTextBox}><Text style={styles.menuOptionTitle}>Archive Read Notifications</Text><Text style={styles.menuOptionSubtitle}>Keep unread updates in your inbox</Text></View></TouchableOpacity>
+          <TouchableOpacity style={styles.menuOptionItem} onPress={() => { setUnreadOnly(!unreadOnly); setOptionsMenuVisible(false); }}><View style={styles.menuOptionTextBox}><Text style={styles.menuOptionTitle}>{unreadOnly ? "Show All Notifications" : "Show Unread Only"}</Text></View></TouchableOpacity>
           <TouchableOpacity
             style={styles.cancelButton}
             onPress={() => setOptionsMenuVisible(false)}

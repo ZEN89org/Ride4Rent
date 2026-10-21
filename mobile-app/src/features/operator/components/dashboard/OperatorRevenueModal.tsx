@@ -1,16 +1,28 @@
+import { AppBottomSheet } from "@/components/common/AppBottomSheet";
+import RentalSheetHeader from "@/components/common/RentalSheetHeader";
+import { rentalSheetStyle } from "@/constants/rentalDesign";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { copyToClipboard } from "@/utils/clipboard";
+import { Image } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Modal, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { KeyboardAwareScrollView as ScrollView } from "@/components/common/KeyboardAwareScrollView";
+import { ActivityIndicator, Modal, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
+import { Skeleton } from "@/components/common/Skeleton";
 import { Colors } from "@/constants/colors";
 import { FontFamily, FontSize, Radius, Spacing } from "@/constants/theme";
-import { getOperatorRevenue } from "@/features/operator/services/operatorService";
+import { useAppToast } from "@/context/ToastContext";
+import {
+  getOperatorRevenue,
+  submitRemittanceProof,
+} from "@/features/operator/services/operatorService";
 import {
   AvailableMonth,
   OperatorRevenueData,
   RevenueBookingItem,
 } from "@/features/operator/types/operatorService";
+import { resolveImageUrl } from "@/services/api";
 
 interface OperatorRevenueModalProps {
   visible: boolean;
@@ -21,13 +33,27 @@ export default function OperatorRevenueModal({
   visible,
   onClose,
 }: OperatorRevenueModalProps) {
+  const { showModal, showError } = useAppToast();
   const [data, setData] = useState<OperatorRevenueData | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string | undefined>(
     undefined,
   );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showRevenueTrips, setShowRevenueTrips] = useState(false);
   const [showRemittanceInfo, setShowRemittanceInfo] = useState(false);
+
+  // Remittance submission state
+  const [paymentMethod, setPaymentMethod] = useState<string>("GCash");
+  const [paymentReference, setPaymentReference] = useState<string>("");
+  const [receiptUri, setReceiptUri] = useState<string | null>(null);
+  const [operatorNotes, setOperatorNotes] = useState<string>("");
+  const [submittingRemittance, setSubmittingRemittance] =
+    useState<boolean>(false);
+  const [copiedGcash, setCopiedGcash] = useState<boolean>(false);
+  const [previewReceiptModal, setPreviewReceiptModal] = useState<string | null>(
+    null,
+  );
 
   const fetchRevenue = async (month?: string, silent = false) => {
     try {
@@ -66,52 +92,119 @@ export default function OperatorRevenueModal({
 
   const handleSelectMonth = (m: string) => {
     setLoading(true);
+    setPaymentReference("");
+    setReceiptUri(null);
     setSelectedMonth(m);
   };
 
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
-    >
-      <SafeAreaView edges={["top", "bottom"]} style={styles.safeContainer}>
-        {/* Top Header Bar */}
-        <View style={styles.topBar}>
-          <View style={{ flex: 1 }}>
-            <View
-              style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-            >
-              <MaterialCommunityIcons
-                name="finance"
-                size={20}
-                color={Colors.primary}
-              />
-              <Text style={styles.topBarTitle}>Track Revenue</Text>
-            </View>
-            <Text style={styles.topBarSub}>
-              Monthly Gross Revenue & Ride4Rent Platform Commission
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={styles.closeBtn}
-            onPress={onClose}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="close" size={22} color={Colors.dark} />
-          </TouchableOpacity>
-        </View>
+  const handleCopyAccount = async (num: string) => {
+    try {
+      const copied = await copyToClipboard(num);
+      if (!copied) {
+        showError("Copy unavailable", "Please copy the account number manually. Update your development build to enable the Copy button.");
+        return;
+      }
+      setCopiedGcash(true);
+      setTimeout(() => setCopiedGcash(false), 2000);
+    } catch {}
+  };
 
+  const handlePickReceipt = async () => {
+    try {
+      const permission =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        showModal?.(
+          "Permission Required",
+          "Please grant photo library access to upload your remittance receipt.",
+          [{ text: "OK" }],
+          "warning",
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        quality: 0.85,
+      });
+
+      if (!result.canceled && result.assets[0]?.uri) {
+        setReceiptUri(result.assets[0].uri);
+      }
+    } catch {
+      showError?.("Unable to select image.");
+    }
+  };
+
+  const handleSubmitProof = async () => {
+    if (!data?.month) return;
+    if (!/^\d{13}$/.test(paymentReference.trim())) {
+      showError?.("Enter the 13-digit GCash reference number.");
+      return;
+    }
+    if (!receiptUri) {
+      showError?.("Please upload a photo of your payment receipt.");
+      return;
+    }
+
+    try {
+      setSubmittingRemittance(true);
+      await submitRemittanceProof({
+        billing_month: data.month,
+        payment_method: paymentMethod,
+        payment_reference: paymentReference.trim(),
+        receipt_image: receiptUri,
+        operator_notes: operatorNotes.trim() || undefined,
+      });
+
+      showModal?.(
+        "Remittance Submitted",
+        "Your payment proof has been submitted to Admin for review. Once verified, your status will update immediately.",
+        [{ text: "OK" }],
+        "success",
+      );
+
+      // Reset form
+      setPaymentReference("");
+      setReceiptUri(null);
+      setOperatorNotes("");
+
+      // Refresh data
+      await fetchRevenue(selectedMonth, true);
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message ||
+        "Failed to submit remittance. Please try again.";
+      showError?.(msg);
+    } finally {
+      setSubmittingRemittance(false);
+    }
+  };
+
+  const remittance = data?.remittance;
+  const commissionDue = Number(data?.commission_due || 0);
+  const canSubmitProof =
+    !data?.is_current_cycle && !!data?.admin_payment_info?.account_name && !!data?.admin_payment_info?.account_number && commissionDue > 0 &&
+    (!remittance ||
+      remittance.status === "pending" ||
+      remittance.status === "overdue" ||
+      remittance.status === "frozen" ||
+      remittance.status === "rejected");
+
+  return (
+    <AppBottomSheet visible={visible} onClose={onClose} sheetStyle={rentalSheetStyle}>
+        <RentalSheetHeader title="Revenue" subtitle="Monthly earnings and commission" icon="wallet-outline" onClose={onClose} />
         {loading && !refreshing ? (
           <View style={styles.centerLoading}>
-            <ActivityIndicator size="large" color={Colors.primary} />
+            <View style={{ width: "100%", gap: 16, padding: 20 }}><Skeleton height={150} /><Skeleton height={100} /><Skeleton height={100} /></View>
             <Text style={styles.loadingText}>
               Calculating monthly billing cycle...
             </Text>
           </View>
         ) : (
           <ScrollView
+            style={{ flexShrink: 1 }} keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             refreshControl={
@@ -261,7 +354,8 @@ export default function OperatorRevenueModal({
               </View>
             </View>
 
-            {/* Admin Commission Remittance Accordion */}
+            {data?.is_current_cycle && <Text style={{ color: Colors.secondary, marginBottom: 12 }}>This month’s totals are provisional. Commission payment opens after the billing month closes.</Text>}
+            {/* Admin Commission Remittance Card & Submission */}
             <View style={styles.remittanceCard}>
               <TouchableOpacity
                 style={styles.remittanceHeader}
@@ -271,17 +365,26 @@ export default function OperatorRevenueModal({
                 <View style={styles.remittanceHeaderLeft}>
                   <View style={styles.remittanceIconCircle}>
                     <Ionicons
-                      name="information-circle"
+                      name="wallet-outline"
                       size={18}
                       color="#D97706"
                     />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.remittanceTitle}>
-                      Admin Commission Remittance
+                      10% Platform Commission Remittance
                     </Text>
                     <Text style={styles.remittanceSub}>
-                      How the monthly 10% platform fee is settled
+                      {remittance?.status === "verified" ||
+                      remittance?.status === "settled"
+                        ? "Settled & verified by Admin"
+                        : remittance?.status === "submitted"
+                        ? "Payment proof submitted (Under Review)"
+                        : remittance?.is_account_frozen
+                        ? "Listings Frozen — Immediate Remittance Required"
+                        : remittance?.is_grace_expired
+                        ? "Overdue — Immediate Remittance Required"
+                        : "Due at the end of monthly billing cycle"}
                     </Text>
                   </View>
                 </View>
@@ -292,41 +395,289 @@ export default function OperatorRevenueModal({
                 />
               </TouchableOpacity>
 
+              {/* Status Banner */}
+              {remittance && (
+                <View style={styles.remittanceStatusBox}>
+                  {remittance.status === "verified" ||
+                  remittance.status === "settled" ? (
+                    <View style={styles.statusVerifiedRow}>
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={20}
+                        color="#16A34A"
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.statusVerifiedTitle}>
+                          Commission Settled
+                        </Text>
+                        <Text style={styles.statusVerifiedSub}>
+                          Payment verified by Admin. Listings active & eligible
+                          for new bookings.
+                        </Text>
+                      </View>
+                    </View>
+                  ) : remittance.status === "submitted" ? (
+                    <View style={styles.statusSubmittedRow}>
+                      <Ionicons name="time" size={20} color="#0284C7" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.statusSubmittedTitle}>
+                          Proof Submitted — Under Admin Review
+                        </Text>
+                        <Text style={styles.statusSubmittedSub}>
+                          Method: {remittance.payment_method} • Ref:{" "}
+                          {remittance.payment_reference}
+                        </Text>
+                        {remittance.submitted_at && (
+                          <Text style={styles.statusSubmittedDate}>
+                            Submitted on {remittance.submitted_at}
+                          </Text>
+                        )}
+                      </View>
+                      {remittance.receipt_image_url && (
+                        <TouchableOpacity
+                          onPress={() =>
+                            setPreviewReceiptModal(
+                              resolveImageUrl(remittance.receipt_image_url),
+                            )
+                          }
+                          style={styles.viewReceiptPill}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons
+                            name="image-outline"
+                            size={14}
+                            color="#0284C7"
+                          />
+                          <Text style={styles.viewReceiptText}>Receipt</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ) : remittance.is_account_frozen ? (
+                    <View style={styles.statusFrozenRow}>
+                      <Ionicons name="snow" size={20} color="#DC2626" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.statusFrozenTitle}>
+                          Listings Frozen (No New Bookings)
+                        </Text>
+                        <Text style={styles.statusFrozenSub}>
+                          48-hour grace period expired. Listed vehicles are hidden
+                          from search. Remit ₱
+                          {commissionDue.toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}{" "}
+                          below to restore bookings.
+                        </Text>
+                      </View>
+                    </View>
+                  ) : remittance.grace_hours_remaining &&
+                    remittance.grace_hours_remaining > 0 &&
+                    !data?.is_current_cycle ? (
+                    <View style={styles.statusGraceRow}>
+                      <Ionicons
+                        name="alert-circle"
+                        size={20}
+                        color="#D97706"
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.statusGraceTitle}>
+                          48-Hour Grace Period Active (
+                          {remittance.grace_hours_remaining}h left)
+                        </Text>
+                        <Text style={styles.statusGraceSub}>
+                          Remit 10% commission before grace expires to prevent
+                          automatic listing freeze.
+                        </Text>
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
+              )}
+
+              {/* Explainer / Admin Account Info Accordion */}
               {showRemittanceInfo && (
                 <View style={styles.remittanceBody}>
                   <Text style={styles.remittanceExplainer}>
                     Ride4Rent automatically tallies your completed rental
                     transactions each calendar month. At the end of every
                     monthly billing cycle, operators remit the{" "}
-                    {data?.commission_percent}% platform commission to the
-                    Ride4Rent admin via GCash or Bank Transfer.
+                    {data?.commission_percent}% platform commission to
+                    Ride4Rent via GCash within the 48-hour grace period.
                   </Text>
                   <View style={styles.remittanceAccountBox}>
                     <View style={styles.remittanceInfoRow}>
                       <Text style={styles.remittanceKey}>
-                        Admin GCash / Maya:
+                        Admin GCash:
                       </Text>
-                      <Text style={styles.remittanceVal}>0917-889-4321</Text>
+                      <TouchableOpacity
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 6,
+                        }}
+                        onPress={() => handleCopyAccount(data?.admin_payment_info?.account_number || "")}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.remittanceVal}>{data?.admin_payment_info?.account_number || "Not configured — contact support"}</Text>
+                        <Ionicons
+                          name={copiedGcash ? "checkmark" : "copy-outline"}
+                          size={14}
+                          color={copiedGcash ? "#16A34A" : Colors.secondary}
+                        />
+                      </TouchableOpacity>
                     </View>
                     <View style={styles.remittanceInfoRow}>
                       <Text style={styles.remittanceKey}>Account Name:</Text>
                       <Text style={styles.remittanceVal}>
-                        Ride4Rent Admin Operations
+                        {data?.admin_payment_info?.account_name || "Not configured"}
                       </Text>
                     </View>
                     <View style={styles.remittanceInfoRow}>
-                      <Text style={styles.remittanceKey}>
-                        Settlement Period:
-                      </Text>
+                      <Text style={styles.remittanceKey}>Grace Window:</Text>
                       <Text style={styles.remittanceVal}>
-                        End of Month (1st–5th)
+                        48 Hours after month-end
                       </Text>
                     </View>
                   </View>
                 </View>
               )}
+
+              {/* Remittance Submission Form */}
+              {canSubmitProof && (
+                <View style={styles.remittanceFormContainer}>
+                  <View style={styles.formHeaderRow}>
+                    <Ionicons
+                      name="card-outline"
+                      size={16}
+                      color={Colors.dark}
+                    />
+                    <Text style={styles.formHeaderText}>
+                      Submit Proof of Remittance
+                    </Text>
+                  </View>
+
+                  {/* Payment Method Selector */}
+                  <Text style={styles.formLabel}>Payment Method</Text>
+                  <View style={styles.methodSelectorRow}>
+                    {["GCash"].map((m) => (
+                      <TouchableOpacity
+                        key={m}
+                        style={[
+                          styles.methodPill,
+                          paymentMethod === m && styles.methodPillActive,
+                        ]}
+                        onPress={() => setPaymentMethod(m)}
+                        activeOpacity={0.8}
+                      >
+                        <Text
+                          style={[
+                            styles.methodPillText,
+                            paymentMethod === m && styles.methodPillTextActive,
+                          ]}
+                        >
+                          {m}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  {/* Payment Reference Number */}
+                  <Text style={styles.formLabel}>
+                    Reference / Transaction No.
+                  </Text>
+                  <TextInput
+                    style={styles.formInput}
+                    placeholder="e.g. 100982347182"
+                    placeholderTextColor="#94A3B8"
+                    value={paymentReference}
+                    onChangeText={(value) => setPaymentReference(value.replace(/\D/g, "").slice(0, 13))}
+                    autoCapitalize="characters"
+                  />
+
+                  {/* Receipt Photo */}
+                  <Text style={styles.formLabel}>
+                    Receipt / Proof Screenshot
+                  </Text>
+                  {receiptUri ? (
+                    <View style={styles.receiptPreviewBox}>
+                      <Image
+                        source={{ uri: receiptUri }}
+                        style={styles.receiptPreviewImg}
+                        contentFit="cover"
+                      />
+                      <TouchableOpacity
+                        style={styles.receiptRemoveBtn}
+                        onPress={() => setReceiptUri(null)}
+                      >
+                        <Ionicons name="trash" size={14} color={Colors.white} />
+                        <Text style={styles.receiptRemoveText}>Change</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.uploadReceiptBtn}
+                      onPress={handlePickReceipt}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons
+                        name="camera-outline"
+                        size={20}
+                        color={Colors.secondary}
+                      />
+                      <Text style={styles.uploadReceiptText}>
+                        Upload Receipt Photo
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Optional Notes */}
+                  <Text style={styles.formLabel}>
+                    Notes for Admin (Optional)
+                  </Text>
+                  <TextInput
+                    style={styles.formInput}
+                    placeholder="Any notes or remarks..."
+                    placeholderTextColor="#94A3B8"
+                    value={operatorNotes}
+                    onChangeText={setOperatorNotes}
+                  />
+
+                  {/* Submit Button */}
+                  <TouchableOpacity
+                    style={[
+                      styles.submitRemittanceBtn,
+                      submittingRemittance && styles.submitBtnDisabled,
+                    ]}
+                    onPress={handleSubmitProof}
+                    disabled={submittingRemittance}
+                    activeOpacity={0.85}
+                  >
+                    {submittingRemittance ? (
+                      <ActivityIndicator size="small" color={Colors.dark} />
+                    ) : (
+                      <>
+                        <Ionicons
+                          name="cloud-upload"
+                          size={16}
+                          color={Colors.dark}
+                        />
+                        <Text style={styles.submitRemittanceBtnText}>
+                          Submit Proof (₱
+                          {commissionDue.toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                          )
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
 
+            <TouchableOpacity onPress={() => setShowRevenueTrips(!showRevenueTrips)} style={{ paddingVertical: 14 }}><Text style={{ fontFamily: FontFamily.semiBold, color: Colors.dark }}>{showRevenueTrips ? "Hide" : "View"} completed trips ({data?.completed_bookings_count || 0})</Text></TouchableOpacity>
+            {showRevenueTrips && <>
             {/* Itemized Bookings Breakdown Section */}
             <View style={styles.breakdownHeaderRow}>
               <Text style={styles.breakdownSectionTitle}>
@@ -408,10 +759,34 @@ export default function OperatorRevenueModal({
                 </View>
               ))
             )}
+            </>}
           </ScrollView>
         )}
-      </SafeAreaView>
-    </Modal>
+
+        {/* Receipt Image Preview Modal */}
+        <Modal
+          visible={Boolean(previewReceiptModal)}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setPreviewReceiptModal(null)}
+        >
+          <View style={styles.previewModalOverlay}>
+            <TouchableOpacity
+              style={styles.previewModalCloseBtn}
+              onPress={() => setPreviewReceiptModal(null)}
+            >
+              <Ionicons name="close" size={22} color={Colors.white} />
+            </TouchableOpacity>
+            {previewReceiptModal && (
+              <Image
+                source={{ uri: previewReceiptModal }}
+                style={styles.previewModalImg}
+                contentFit="contain"
+              />
+            )}
+          </View>
+        </Modal>
+    </AppBottomSheet>
   );
 }
 
@@ -451,7 +826,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   centerLoading: {
-    flex: 1,
+    minHeight: 280,
     justifyContent: "center",
     alignItems: "center",
     gap: 12,
@@ -462,8 +837,8 @@ const styles = StyleSheet.create({
     color: Colors.secondary,
   },
   scrollContent: {
-    padding: Spacing.md,
-    paddingBottom: Spacing.xxl,
+    paddingTop: 2,
+    paddingBottom: 18,
     gap: 14,
   },
   monthsPillRow: {
@@ -829,5 +1204,265 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.bold,
     fontSize: 13,
     color: Colors.secondary,
+  },
+  remittanceStatusBox: {
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+  },
+  statusVerifiedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#F0FDF4",
+    padding: 10,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+  },
+  statusVerifiedTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 12,
+    color: "#166534",
+  },
+  statusVerifiedSub: {
+    fontFamily: FontFamily.regular,
+    fontSize: 10.5,
+    color: "#15803D",
+    marginTop: 1,
+  },
+  statusSubmittedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#F0F9FF",
+    padding: 10,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    borderColor: "#BAE6FD",
+  },
+  statusSubmittedTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 12,
+    color: "#0369A1",
+  },
+  statusSubmittedSub: {
+    fontFamily: FontFamily.medium,
+    fontSize: 10.5,
+    color: "#0284C7",
+    marginTop: 1,
+  },
+  statusSubmittedDate: {
+    fontFamily: FontFamily.regular,
+    fontSize: 10,
+    color: "#64748B",
+    marginTop: 2,
+  },
+  viewReceiptPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#E0F2FE",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: "#BAE6FD",
+  },
+  viewReceiptText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 10.5,
+    color: "#0284C7",
+  },
+  statusFrozenRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#FEF2F2",
+    padding: 10,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  statusFrozenTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 12,
+    color: "#991B1B",
+  },
+  statusFrozenSub: {
+    fontFamily: FontFamily.regular,
+    fontSize: 10.5,
+    color: "#B91C1C",
+    marginTop: 1,
+    lineHeight: 15,
+  },
+  statusGraceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#FFFBEB",
+    padding: 10,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+  statusGraceTitle: {
+    fontFamily: FontFamily.bold,
+    fontSize: 12,
+    color: "#92400E",
+  },
+  statusGraceSub: {
+    fontFamily: FontFamily.regular,
+    fontSize: 10.5,
+    color: "#B45309",
+    marginTop: 1,
+  },
+  remittanceFormContainer: {
+    padding: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#FEF3C7",
+    backgroundColor: Colors.white,
+    gap: 8,
+  },
+  formHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 4,
+  },
+  formHeaderText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 12.5,
+    color: Colors.dark,
+  },
+  formLabel: {
+    fontFamily: FontFamily.medium,
+    fontSize: 11,
+    color: "#475569",
+    marginTop: 4,
+  },
+  methodSelectorRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  methodPill: {
+    flex: 1,
+    paddingVertical: 7,
+    alignItems: "center",
+    borderRadius: Radius.sm,
+    backgroundColor: "#F1F5F9",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  methodPillActive: {
+    backgroundColor: Colors.dark,
+    borderColor: Colors.dark,
+  },
+  methodPillText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 11,
+    color: "#475569",
+  },
+  methodPillTextActive: {
+    fontFamily: FontFamily.bold,
+    color: Colors.white,
+  },
+  formInput: {
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: Radius.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    color: Colors.dark,
+  },
+  uploadReceiptBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1.5,
+    borderColor: "#CBD5E1",
+    borderStyle: "dashed",
+    borderRadius: Radius.md,
+    paddingVertical: 14,
+  },
+  uploadReceiptText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 11.5,
+    color: Colors.secondary,
+  },
+  receiptPreviewBox: {
+    position: "relative",
+    borderRadius: Radius.md,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  receiptPreviewImg: {
+    width: "100%",
+    height: 120,
+    backgroundColor: "#F1F5F9",
+  },
+  receiptRemoveBtn: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(15, 23, 42, 0.8)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: Radius.full,
+  },
+  receiptRemoveText: {
+    color: Colors.white,
+    fontFamily: FontFamily.bold,
+    fontSize: 10,
+  },
+  submitRemittanceBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: Colors.primary,
+    borderRadius: Radius.md,
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  submitBtnDisabled: {
+    opacity: 0.6,
+  },
+  submitRemittanceBtnText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 12.5,
+    color: Colors.dark,
+  },
+  previewModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.85)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
+  },
+  previewModalCloseBtn: {
+    position: "absolute",
+    top: 40,
+    right: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.25)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 20,
+  },
+  previewModalImg: {
+    width: "95%",
+    height: "75%",
+    borderRadius: Radius.md,
   },
 });

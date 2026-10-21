@@ -16,6 +16,7 @@ import {
 } from "@/constants/theme";
 
 interface AppInputProps extends TextInputProps {
+  compact?: boolean;
 
   label?: string;
 
@@ -28,6 +29,7 @@ export default function AppInput({
   label,
 
   error,
+  compact = false,
 
   ...props
 
@@ -35,11 +37,11 @@ export default function AppInput({
 
   return (
 
-    <View style={styles.container}>
+    <View style={[styles.container, compact && styles.compactContainer]}>
 
       {label && (
 
-        <Text style={styles.label}>
+        <Text style={[styles.label, compact && styles.compactLabel]}>
 
           {label}
 
@@ -50,8 +52,14 @@ export default function AppInput({
       <TextInput
         placeholderTextColor={Colors.secondary}
         {...props}
+        onChangeText={(value) => {
+          if (["number-pad", "numeric"].includes(props.keyboardType || "")) props.onChangeText?.(value.replace(/\D/g, ""));
+          else if (props.keyboardType === "decimal-pad") { const [whole, ...fraction] = value.replace(/[^\d.]/g, "").split("."); props.onChangeText?.(whole + (fraction.length ? "." + fraction.join("").slice(0, 2) : "")); }
+          else props.onChangeText?.(value);
+        }}
         style={[
           styles.input,
+          compact && styles.compactInput,
           error ? styles.errorInput : null,
           props.style,
         ]}
@@ -74,6 +82,9 @@ export default function AppInput({
 }
 
 const styles = StyleSheet.create({
+  compactContainer: { marginBottom: 16 },
+  compactLabel: { marginBottom: 6, fontSize: 14, lineHeight: 20 },
+  compactInput: { minHeight: 50, paddingVertical: 12, paddingHorizontal: 18, fontSize: 16 },
 
   container: {
 

@@ -11,6 +11,36 @@ class ConversationActionsTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_conversation_pages_and_archive_search(): void
+    {
+        [$renter, $operator] = $this->createConversation();
+        for ($i = 0; $i < 24; $i++) {
+            $contact = $operator->replicate(); $contact->email = "operator{$i}@example.com"; $contact->first_name = "Host{$i}"; $contact->save();
+            Message::create(['sender_id' => $contact->id, 'receiver_id' => $renter->id, 'message' => "Message {$i}"]);
+        }
+        $url = '/api/v1/messages/conversations?limit=10&page=';
+        $first = $this->actingAs($renter, 'sanctum')->getJson($url.'1')->assertOk()->assertJsonCount(10, 'data')->assertJsonPath('has_more', true);
+        $second = $this->getJson($url.'2')->assertOk()->assertJsonCount(10, 'data');
+        $third = $this->getJson($url.'3')->assertOk()->assertJsonCount(5, 'data')->assertJsonPath('has_more', false);
+        $ids = array_merge(array_column($first->json('data'), 'user_id'), array_column($second->json('data'), 'user_id'), array_column($third->json('data'), 'user_id'));
+        $this->assertCount(25, array_unique($ids));
+        $this->postJson("/api/v1/messages/conversations/{$operator->id}/archive")->assertOk();
+        $this->getJson('/api/v1/messages/conversations?limit=20&page=1&folder=archived')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.user_id', $operator->id);
+        $this->getJson('/api/v1/messages/conversations?limit=20&page=1&search=Host23')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('has_more', false);
+    }
+
+    public function test_message_history_cutoff_applies_to_both_participants(): void
+    {
+        [$renter, $operator] = $this->createConversation();
+        $url = "/api/v1/messages/thread/{$operator->id}";
+        $this->actingAs($renter, 'sanctum')->getJson($url.'?limit=40')->assertOk()->assertJsonPath('has_more', false);
+        for ($i = 0; $i < 40; $i++) Message::create(['sender_id' => $i % 2 ? $renter->id : $operator->id, 'receiver_id' => $i % 2 ? $operator->id : $renter->id, 'message' => "History {$i}"]);
+        $latest = $this->getJson($url.'?limit=40')->assertOk()->assertJsonCount(40, 'data')->assertJsonPath('has_more', true);
+        $oldestId = $latest->json('data.0.id');
+        $earlier = $this->getJson($url.'?limit=40&before_id='.$oldestId)->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('has_more', false);
+        $this->assertLessThan((int) $oldestId, (int) $earlier->json('data.0.id'));
+    }
+
     public function test_chat_message_time_is_the_same_philippine_time_for_both_participants(): void
     {
         $this->travelTo(\Carbon\Carbon::parse('2026-10-20 20:35:00', 'UTC'));

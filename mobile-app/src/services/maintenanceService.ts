@@ -28,9 +28,10 @@ export interface VehicleHealthInfo {
   service_interval_km: number;
   km_since_last_service: number;
   km_remaining_until_service: number;
-  health_status: "good" | "due_soon" | "overdue";
+  health_status: "good" | "due_soon" | "overdue" | "unknown";
   health_label: string;
   health_badge: string;
+  recommendation_basis: string;
   recommendations: MaintenanceRecommendation[];
   recent_logs: MaintenanceLog[];
 }
@@ -52,3 +53,7 @@ export const logVehicleMaintenance = async (data: {
   const response = await api.post("/operator/maintenance", data);
   return response.data.data;
 };
+
+export async function updateMaintenanceSchedule(vehicleId: number, data: { current_odometer: number; last_service_odometer: number; service_interval_km: number }): Promise<void> {
+  await api.put(`/operator/maintenance/${vehicleId}/schedule`, data);
+}

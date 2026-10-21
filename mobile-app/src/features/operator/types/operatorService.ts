@@ -103,6 +103,30 @@ export interface AvailableMonth {
   count: number;
 }
 
+export interface RemittanceInfo {
+  id?: number;
+  status:
+    | "pending"
+    | "submitted"
+    | "verified"
+    | "rejected"
+    | "settled"
+    | "overdue"
+    | "frozen";
+  grace_period_expires_at?: string;
+  grace_hours_remaining?: number;
+  is_grace_expired?: boolean;
+  is_account_frozen?: boolean;
+  frozen_at?: string | null;
+  freeze_reason?: string | null;
+  payment_method?: string | null;
+  payment_reference?: string | null;
+  receipt_image_url?: string | null;
+  submitted_at?: string | null;
+  verified_at?: string | null;
+  admin_notes?: string | null;
+}
+
 export interface OperatorRevenueData {
   month: string;
   month_label: string;
@@ -113,9 +137,20 @@ export interface OperatorRevenueData {
   commission_percent: number;
   gross_revenue: number;
   commission_due: number;
+  admin_payment_info?: { account_name: string; account_number: string };
   net_earnings: number;
   completed_bookings_count: number;
   active_bookings_count: number;
   available_months: AvailableMonth[];
   bookings: RevenueBookingItem[];
+  remittance?: RemittanceInfo;
 }
+
+export interface SubmitRemittancePayload {
+  billing_month: string;
+  payment_method: string;
+  payment_reference: string;
+  receipt_image: string; // local file URI
+  operator_notes?: string;
+}
+

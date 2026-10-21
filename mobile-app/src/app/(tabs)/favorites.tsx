@@ -181,6 +181,7 @@ export default function Favorites() {
                   seats: item.seats ?? undefined,
                   transmission: item.transmission ?? undefined,
                   available_units: item.available_units,
+                  availability_status: item.availability_status,
                 };
 
                 return (

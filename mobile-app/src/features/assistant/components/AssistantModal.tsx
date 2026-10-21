@@ -1,8 +1,10 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { StatusBar } from "expo-status-bar";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { KeyboardAwareScrollView as ScrollView } from "@/components/common/KeyboardAwareScrollView";
+import { ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Colors } from "@/constants/colors";
@@ -69,6 +71,14 @@ const assistantMessage = (text: string): MessageItem => ({
 
 export default function AssistantModal(props: Props) {
   return <AssistantSession key={props.initialPrompt || "general"} {...props} />;
+}
+
+function AssistantAvatar({ size }: { size: number }) {
+  return (
+    <View style={[styles.assistantAvatar, { width: size, height: size, borderRadius: size / 2 }]}>
+      <MaterialCommunityIcons name="robot-excited" size={Math.round(size * 0.57)} color={Colors.dark} />
+    </View>
+  );
 }
 
 function AssistantSession({ visible, onClose, initialPrompt }: Props) {
@@ -181,6 +191,8 @@ function AssistantSession({ visible, onClose, initialPrompt }: Props) {
   };
 
   return (
+    <>
+    {visible && <StatusBar style="dark" hidden={false} />}
     <Modal
       visible={visible}
       animationType="slide"
@@ -197,13 +209,7 @@ function AssistantSession({ visible, onClose, initialPrompt }: Props) {
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerLeft}>
-              <View style={styles.avatarWrap}>
-                <MaterialCommunityIcons
-                  name="robot-excited"
-                  size={24}
-                  color={Colors.white}
-                />
-              </View>
+              <AssistantAvatar size={42} />
               <View style={styles.headerInfo}>
                 <Text style={styles.headerTitle}>Ride4Rent AI Assistant</Text>
                 <View style={styles.statusRow}>
@@ -241,12 +247,8 @@ function AssistantSession({ visible, onClose, initialPrompt }: Props) {
                 ]}
               >
                 {item.sender === "assistant" && (
-                  <View style={styles.botIconSmall}>
-                    <MaterialCommunityIcons
-                      name="robot-outline"
-                      size={16}
-                      color={Colors.white}
-                    />
+                  <View style={styles.botAvatarWrap}>
+                    <AssistantAvatar size={28} />
                   </View>
                 )}
 
@@ -299,10 +301,10 @@ function AssistantSession({ visible, onClose, initialPrompt }: Props) {
                             </Text>
                             <View style={styles.vehiclePills}>
                               <Text style={styles.pillText}>
-                                {v.transmission || "Auto"}
+                                {v.transmission || "Transmission —"}
                               </Text>
                               <Text style={styles.pillText}>
-                                {v.seats || 5} Seats
+                                {v.seats ? `${v.seats} Seats` : "Seats —"}
                               </Text>
                             </View>
                           </View>
@@ -372,7 +374,7 @@ function AssistantSession({ visible, onClose, initialPrompt }: Props) {
             <TextInput
               value={input}
               onChangeText={setInput}
-              placeholder="Ask anything about cars, bookings, rules..."
+              placeholder="Message"
               placeholderTextColor={Colors.secondary}
               style={styles.input}
               onSubmitEditing={() => handleSend()}
@@ -398,6 +400,7 @@ function AssistantSession({ visible, onClose, initialPrompt }: Props) {
         </KeyboardAvoidingView>
       </SafeAreaView>
     </Modal>
+    </>
   );
 }
 
@@ -425,10 +428,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
-  avatarWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+  assistantAvatar: {
     backgroundColor: Colors.primary,
     justifyContent: "center",
     alignItems: "center",
@@ -477,13 +477,7 @@ const styles = StyleSheet.create({
   assistantRow: {
     justifyContent: "flex-start",
   },
-  botIconSmall: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: Colors.primary,
-    justifyContent: "center",
-    alignItems: "center",
+  botAvatarWrap: {
     marginBottom: 4,
   },
   bubble: {

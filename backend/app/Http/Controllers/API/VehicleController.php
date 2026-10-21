@@ -50,9 +50,9 @@ class VehicleController extends Controller
             'images',
         ])
             ->where('is_active', true)
-            ->where('availability_status', 'available')
+            ->whereIn('availability_status', ['available', 'maintenance'])
             ->where(function ($q) {
-                $q->whereRaw('(SELECT COUNT(*) FROM bookings WHERE bookings.vehicle_id = vehicles.id AND bookings.status IN (\'approved\', \'awaiting_pickup\', \'pickup_in_progress\', \'ready_to_start\', \'trip_in_progress\', \'ongoing\', \'return_pending\') AND bookings.end_date >= CURRENT_DATE) < COALESCE(vehicles.quantity, 1)');
+                $q->where('availability_status', 'maintenance')->orWhereRaw('(SELECT COUNT(*) FROM bookings WHERE bookings.vehicle_id = vehicles.id AND bookings.status IN (\'approved\', \'awaiting_pickup\', \'pickup_in_progress\', \'ready_to_start\', \'trip_in_progress\', \'ongoing\', \'return_pending\') AND bookings.end_date >= CURRENT_DATE) < COALESCE(vehicles.quantity, 1)');
             })
             ->whereHas('operator', fn ($q) => $q
                 ->where('role', 'operator')
@@ -508,7 +508,7 @@ class VehicleController extends Controller
             if ($activeCount >= $totalUnits) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Cannot set to Available: this vehicle is currently rented out on an active trip. It will automatically become available once the trip is completed.',
+                    'message' => 'Cannot set to Available: this vehicle is currently rented out on an active trip. After the return inspection, clear the maintenance hold when the vehicle is ready.',
                 ], 422);
             }
         }

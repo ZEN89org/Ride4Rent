@@ -1,17 +1,10 @@
+import { rentalSheetStyle } from "@/constants/rentalDesign";
+import RentalSheetHeader from "@/components/common/RentalSheetHeader";
 import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 
-import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { KeyboardAwareScrollView as ScrollView } from "@/components/common/KeyboardAwareScrollView";
+import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppBottomSheet from "@/components/common/AppBottomSheet";
@@ -243,7 +236,7 @@ export default function OperatorOwnerInfo({
 
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <ScrollView
           style={styles.scroll}
@@ -385,7 +378,8 @@ function FormField({
           placeholder={placeholder}
           placeholderTextColor="#A0A0A0"
           value={value}
-          onChangeText={onChangeText}
+          onChangeText={(text) => onChangeText(text.replace(/[^\p{L}\p{M} .’\x27-]/gu, ""))}
+          maxLength={100}
           autoCapitalize="words"
           autoCorrect
           style={styles.input}
@@ -664,16 +658,9 @@ function GenderPickerModal({
   onSelect,
 }: GenderPickerModalProps) {
   return (
-    <AppBottomSheet visible={visible} onClose={onClose}>
+    <AppBottomSheet visible={visible} onClose={onClose} sheetStyle={rentalSheetStyle}>
       <View style={{ paddingBottom: 16 }}>
-        <Text style={styles.pickerTitle}>
-          Select Gender
-        </Text>
-
-        <Text style={styles.pickerSubtitle}>
-          Choose the option that best
-          describes you.
-        </Text>
+        <RentalSheetHeader title="Select Gender" subtitle="Choose the option that describes you." icon="person-outline" onClose={onClose} />
 
         {genders.map((item) => (
           <Pressable
@@ -701,7 +688,7 @@ function GenderPickerModal({
               <Ionicons
                 name="checkmark"
                 size={20}
-                color={Colors.primary}
+                color={Colors.dark}
               />
             )}
           </Pressable>
@@ -907,7 +894,7 @@ const styles = StyleSheet.create({
   },
 
   pickerItemActive: {
-    backgroundColor: "#FFF4E8",
+    backgroundColor: "#FFF4CC",
   },
 
   pickerItemText: {
@@ -946,7 +933,7 @@ const styles = StyleSheet.create({
   },
 
   genderOptionActive: {
-    backgroundColor: "#FFF4E8",
+    backgroundColor: "#FFF4CC",
   },
 
   genderText: {
@@ -957,6 +944,6 @@ const styles = StyleSheet.create({
 
   genderTextActive: {
     fontFamily: FontFamily.semiBold,
-    color: Colors.primary,
+    color: Colors.dark,
   },
 });

@@ -1,274 +1,52 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Animated,
-  Dimensions,
-  Modal,
-  PanResponder,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-
+import { useRef } from "react";
+import { KeyboardAwareScrollView as ScrollView } from "@/components/common/KeyboardAwareScrollView";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { AppBottomSheet } from "@/components/common/AppBottomSheet";
 import { Colors } from "@/constants/colors";
-import { FontSize, Radius, Spacing } from "@/constants/theme";
+import { FontFamily } from "@/constants/theme";
 
-interface AuthRequiredBottomSheetProps {
-  visible: boolean;
-  onClose: () => void;
-}
+interface AuthRequiredBottomSheetProps { visible: boolean; onClose: () => void; }
 
-const { height } = Dimensions.get("window");
-
-export default function AuthRequiredBottomSheet({
-  visible,
-  onClose,
-}: AuthRequiredBottomSheetProps) {
-  const [translateY] = useState(() => new Animated.Value(height));
-  const [backdropOpacity] = useState(() => new Animated.Value(0));
-
-  const closeSheet = useCallback(() => {
-    Animated.parallel([
-      Animated.timing(translateY, {
-        toValue: height,
-        duration: 220,
-        useNativeDriver: true,
-      }),
-      Animated.timing(backdropOpacity, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start(({ finished }) => {
-      if (finished) {
-        onClose();
-      }
-    });
-  }, [translateY, backdropOpacity, onClose]);
-
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, gestureState) => {
-          return gestureState.dy > 5;
-        },
-
-        onPanResponderMove: (_, gestureState) => {
-          if (gestureState.dy > 0) {
-            translateY.setValue(gestureState.dy);
-          }
-        },
-
-        onPanResponderRelease: (_, gestureState) => {
-          if (
-            gestureState.dy > 100 ||
-            gestureState.vy > 1
-          ) {
-            closeSheet();
-          } else {
-            Animated.spring(translateY, {
-              toValue: 0,
-              useNativeDriver: true,
-            }).start();
-          }
-        },
-      }),
-    [translateY, closeSheet]
-  );
-
-  useEffect(() => {
-    if (!visible) {
-      return;
-    }
-
-    translateY.setValue(height);
-    backdropOpacity.setValue(0);
-
-    Animated.parallel([
-      Animated.spring(translateY, {
-        toValue: 0,
-        useNativeDriver: true,
-        tension: 65,
-        friction: 11,
-      }),
-      Animated.timing(backdropOpacity, {
-        toValue: 1,
-        duration: 220,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [visible, translateY, backdropOpacity]);
-
-  const continueToAuth = () => {
-    closeSheet();
-
-    setTimeout(() => {
-      router.push("/auth");
-    }, 220);
-  };
-
+export default function AuthRequiredBottomSheet({ visible, onClose }: AuthRequiredBottomSheetProps) {
+  const navigateAfterClose = useRef(false);
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      statusBarTranslucent={true}
-      onRequestClose={closeSheet}
-    >
-      <View style={styles.overlay}>
-        <Animated.View style={[StyleSheet.absoluteFill, { opacity: backdropOpacity }]}>
-          <Pressable
-            style={styles.backdrop}
-            onPress={closeSheet}
-          />
-        </Animated.View>
-
-        <Animated.View
-          style={[
-            styles.sheet,
-            {
-              transform: [{ translateY }],
-            },
-          ]}
-          {...panResponder.panHandlers}
-        >
-          <View style={styles.handle} />
-
-          <Pressable
-            style={styles.closeButton}
-            onPress={closeSheet}
-            hitSlop={10}
-          >
-            <Ionicons
-              name="close"
-              size={24}
-              color={Colors.secondary}
-            />
-          </Pressable>
-
-          <View style={styles.iconContainer}>
-            <Ionicons
-              name="warning"
-              size={30}
-              color={Colors.primary}
-            />
-          </View>
-
-          <Text style={styles.title}>
-            Sign In Required
-          </Text>
-
-          <Text style={styles.description}>
-            You’re currently browsing as a guest. Create an
-            account or sign in to access all features and enjoy
-            a personalized, secure experience.
-          </Text>
-
-          <Pressable
-            style={styles.continueButton}
-            onPress={continueToAuth}
-          >
-            <Text style={styles.continueText}>
-              Continue
-            </Text>
-          </Pressable>
-
-        </Animated.View>
-      </View>
-    </Modal>
+    <AppBottomSheet visible={visible} onClose={onClose} onClosed={() => {
+      if (!navigateAfterClose.current) return;
+      navigateAfterClose.current = false;
+      router.push("/login");
+    }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close sign-in prompt" onPress={onClose} style={styles.close} hitSlop={8}>
+          <Ionicons name="close" size={22} color={Colors.dark} />
+        </Pressable>
+        <View style={styles.icon}><Ionicons name="log-in-outline" size={32} color={Colors.dark} /></View>
+        <Text style={styles.title}>Sign In Required</Text>
+        <Text style={styles.description}>Sign in to book a vehicle, message an operator, and manage your trips.</Text>
+        <Pressable accessibilityRole="button" style={({ pressed }) => [styles.signIn, pressed && styles.pressed]} onPress={() => {
+          if (navigateAfterClose.current) return;
+          navigateAfterClose.current = true;
+          onClose();
+        }}>
+          <Text style={styles.signInText}>Sign In</Text>
+          <Ionicons name="arrow-forward" size={20} color={Colors.dark} />
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={onClose} style={styles.browse}><Text style={styles.browseText}>Keep Browsing</Text></Pressable>
+      </ScrollView>
+    </AppBottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: "rgba(0, 0, 0, 0.45)",
-  },
-
-  sheet: {
-    backgroundColor: Colors.white,
-    borderTopLeftRadius: Radius.xl,
-    borderTopRightRadius: Radius.xl,
-    paddingHorizontal: Spacing.xl,
-    paddingTop: 12,
-    paddingBottom: 35,
-    minHeight: 360,
-    elevation: 12,
-
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    shadowOffset: {
-      width: 0,
-      height: -4,
-    },
-  },
-
-  handle: {
-    width: 45,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: "#D0D0D0",
-    alignSelf: "center",
-    marginBottom: 10,
-  },
-
-  closeButton: {
-    position: "absolute",
-    top: 18,
-    right: 18,
-    width: 36,
-    height: 36,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  iconContainer: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: "#FFF5CC",
-    alignItems: "center",
-    justifyContent: "center",
-    alignSelf: "center",
-    marginTop: 18,
-    marginBottom: 18,
-  },
-
-  title: {
-    fontSize: FontSize.heading,
-    fontWeight: "700",
-    color: Colors.dark,
-    textAlign: "center",
-  },
-
-  description: {
-    fontSize: FontSize.body,
-    color: Colors.secondary,
-    lineHeight: 24,
-    textAlign: "center",
-    marginTop: 16,
-  },
-
-  continueButton: {
-    height: 52,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 28,
-  },
-
-  continueText: {
-    fontSize: FontSize.body,
-    fontWeight: "700",
-    color: Colors.dark,
-  },
+  content: { paddingTop: 16, paddingBottom: 8 },
+  close: { position: "absolute", top: 0, right: 0, width: 44, height: 44, alignItems: "center", justifyContent: "center", zIndex: 1 },
+  icon: { width: 64, height: 64, borderRadius: 22, backgroundColor: "#FFF5CC", alignSelf: "center", alignItems: "center", justifyContent: "center", marginBottom: 18 },
+  title: { fontFamily: FontFamily.bold, fontSize: 24, color: Colors.dark, textAlign: "center" },
+  description: { fontFamily: FontFamily.regular, fontSize: 14, lineHeight: 22, color: Colors.secondary, textAlign: "center", marginTop: 10, marginHorizontal: 12 },
+  signIn: { minHeight: 52, borderRadius: 16, backgroundColor: Colors.primary, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, marginTop: 24, padding: 14 },
+  signInText: { fontFamily: FontFamily.semiBold, fontSize: 16, color: Colors.dark },
+  pressed: { opacity: 0.75 },
+  browse: { minHeight: 48, alignItems: "center", justifyContent: "center", marginTop: 6 },
+  browseText: { fontFamily: FontFamily.medium, fontSize: 14, color: Colors.secondary },
 });

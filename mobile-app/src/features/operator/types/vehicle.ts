@@ -31,6 +31,7 @@ export interface Vehicle {
   interior_color?: string | null;
   exterior_color?: string | null;
   price_per_day: number;
+  base_price_per_day?: number;
   reservation_fee?: number;
   rating?: number;
   rating_count?: number;

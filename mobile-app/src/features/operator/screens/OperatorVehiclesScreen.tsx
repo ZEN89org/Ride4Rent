@@ -1,3 +1,5 @@
+import { rentalSheetStyle } from "@/constants/rentalDesign";
+import RentalSheetHeader from "@/components/common/RentalSheetHeader";
 import { AppBottomSheet } from "@/components/common/AppBottomSheet";
 import ListPagination from "@/components/common/ListPagination";
 import { Skeleton } from "@/components/common/Skeleton";
@@ -16,22 +18,14 @@ import { resolveImageUrl } from "@/services/api";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
-import {
-  FlatList,
-  Image,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { KeyboardAwareScrollView as ScrollView } from "@/components/common/KeyboardAwareScrollView";
+import { FlatList, Image, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 export default function OperatorVehiclesScreen() {
-  const { user, isOperatorPending } = useAuth();
+  const { user, isOperatorPending, loading: authLoading } = useAuth();
   const { showModal, showSuccess, showError } = useAppToast();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -41,7 +35,6 @@ export default function OperatorVehiclesScreen() {
   const [selectedVehicleForEdit, setSelectedVehicleForEdit] =
     useState<Vehicle | null>(null);
   const [editDailyRate, setEditDailyRate] = useState("");
-  const [editReservationFee, setEditReservationFee] = useState("");
   const [editStatus, setEditStatus] = useState<
     "available" | "unavailable" | "maintenance"
   >("available");
@@ -73,7 +66,7 @@ export default function OperatorVehiclesScreen() {
           { text: "Cancel", style: "cancel" },
           {
             text: "Set Up Now",
-            onPress: () => router.push("/operator-profile" as any),
+            onPress: () => router.push("/operator-payment" as any),
           },
         ],
         "warning",
@@ -88,8 +81,10 @@ export default function OperatorVehiclesScreen() {
     try {
       const data = await getMyVehicles();
       setVehicles(data);
-    } catch {
-      console.error("Unable to load fleet vehicles.");
+      setLoadError("");
+    } catch (error: any) {
+      console.warn("Fleet request failed", { status: error?.response?.status, message: error?.message });
+      setLoadError(error?.response?.status === 401 ? "Your session has expired. Please sign in again." : "Unable to load your fleet. Check your connection and try again.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -97,24 +92,27 @@ export default function OperatorVehiclesScreen() {
   }, []);
 
   useEffect(() => {
+    if (authLoading || !user || user.role !== "operator") return;
     let active = true;
     getMyVehicles()
       .then((data) => {
-        if (active) setVehicles(data);
+        if (active) { setVehicles(data); setLoadError(""); }
       })
-      .catch(() => console.error("Unable to load fleet vehicles."))
+      .catch((error) => {
+        console.warn("Fleet request failed", { status: error?.response?.status, message: error?.message });
+        if (active) setLoadError(error?.response?.status === 401 ? "Your session has expired. Please sign in again." : "Unable to load your fleet. Check your connection and try again.");
+      })
       .finally(() => {
         if (active) setLoading(false);
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [authLoading, user?.id, user?.role]);
 
   const openEditModal = (v: Vehicle) => {
     setSelectedVehicleForEdit(v);
-    setEditDailyRate(String(v.price_per_day || ""));
-    setEditReservationFee(String(v.reservation_fee || "0"));
+    setEditDailyRate(String(v.base_price_per_day ?? v.price_per_day ?? ""));
     const rawStatus =
       (v.availability_status as any) ||
       (v.is_available ? "available" : "unavailable");
@@ -131,7 +129,7 @@ export default function OperatorVehiclesScreen() {
   const handleSaveVehicleEdit = async () => {
     if (!selectedVehicleForEdit) return;
     const rateNum = parseFloat(editDailyRate);
-    if (isNaN(rateNum) || rateNum <= 0) {
+    if (!/^\d+(\.\d{1,2})?$/.test(editDailyRate.trim()) || !Number.isFinite(rateNum) || rateNum < 1 || rateNum > 1000000) {
       showModal(
         "Validation Error",
         "Please enter a valid daily rental rate greater than ₱0.",
@@ -141,11 +139,11 @@ export default function OperatorVehiclesScreen() {
       return;
     }
 
+    if (editDescription.trim().length > 3000) { showError("Check description", "Use at most 3,000 characters."); return; }
     try {
       setSubmittingEdit(true);
       await updateVehicle(selectedVehicleForEdit.id, {
         daily_rate: rateNum,
-        reservation_fee: parseFloat(editReservationFee) || 0,
         availability_status: editStatus,
         description: editDescription.trim() || undefined,
       });
@@ -206,7 +204,7 @@ export default function OperatorVehiclesScreen() {
   };
 
   const getStatusBadge = (item: Vehicle) => {
-    if (item.is_rented) {
+    if (item.is_rented && item.availability_status !== "maintenance") {
       return {
         label: "On Active Trip",
         bg: "#EFF6FF",
@@ -283,7 +281,7 @@ export default function OperatorVehiclesScreen() {
         ) && (
           <TouchableOpacity
             style={styles.paymentNoticeBanner}
-            onPress={() => router.push("/operator-profile" as any)}
+            onPress={() => router.push("/operator-payment" as any)}
             activeOpacity={0.85}
           >
             <View style={styles.paymentNoticeIconCircle}>
@@ -306,6 +304,14 @@ export default function OperatorVehiclesScreen() {
           <View style={{ gap: 14 }}>
             <Skeleton height={130} borderRadius={18} />
             <Skeleton height={130} borderRadius={18} />
+          </View>
+        ) : loadError ? (
+          <View style={styles.empty}>
+            <Text style={styles.emptyTitle}>Fleet unavailable</Text>
+            <Text style={styles.emptySubtitle}>{loadError}</Text>
+            <TouchableOpacity style={styles.addFirstBtn} onPress={() => { setLoading(true); void load(); }}>
+              <Text style={styles.addFirstBtnText}>Try again</Text>
+            </TouchableOpacity>
           </View>
         ) : vehicles.length === 0 ? (
           <View style={styles.empty}>
@@ -388,12 +394,6 @@ export default function OperatorVehiclesScreen() {
                             },
                           ]}
                         >
-                          <View
-                            style={[
-                              styles.statusDot,
-                              { backgroundColor: statusCfg.dot },
-                            ]}
-                          />
                           <Text
                             style={[
                               styles.statusText,
@@ -406,8 +406,7 @@ export default function OperatorVehiclesScreen() {
                       </View>
 
                       <Text style={styles.specsText}>
-                        {item.transmission || "Auto"} • {item.seats || 5} Seats
-                        • {item.fuel_type || "Gas"}
+                        {item.plate_number || "Plate not set"} · {Number(item.current_odometer || 0).toLocaleString()} km
                       </Text>
 
                       <View style={styles.priceRow}>
@@ -415,12 +414,6 @@ export default function OperatorVehiclesScreen() {
                           ₱{Number(item.price_per_day).toLocaleString()}
                           <Text style={styles.pricePeriod}> / day</Text>
                         </Text>
-                        {Number(item.reservation_fee) > 0 ? (
-                          <Text style={styles.depositText}>
-                            Deposit: ₱
-                            {Number(item.reservation_fee).toLocaleString()}
-                          </Text>
-                        ) : null}
                       </View>
                     </View>
                   </View>
@@ -479,12 +472,12 @@ export default function OperatorVehiclesScreen() {
           showHandle={true}
           sheetStyle={styles.editSheet}
         >
-          <Text style={styles.sheetTitle}>Manage Vehicle</Text>
-          <Text style={styles.sheetSub}>{selectedVehicleForEdit?.name}</Text>
+          <RentalSheetHeader title="Manage Vehicle" subtitle={selectedVehicleForEdit?.name} icon="car-outline" onClose={() => setSelectedVehicleForEdit(null)} />
 
           <ScrollView
             showsVerticalScrollIndicator={false}
-            style={{ maxHeight: 380 }}
+            style={{ flexShrink: 1 }}
+            keyboardShouldPersistTaps="handled"
           >
             {/* Availability Status Selector */}
             <Text style={styles.fieldLabel}>Availability Status</Text>
@@ -553,20 +546,8 @@ export default function OperatorVehiclesScreen() {
               <Text style={styles.unitSuffix}>/ day</Text>
             </View>
 
-            {/* Reservation Fee */}
-            <Text style={styles.fieldLabel}>Reservation Fee Deposit (₱)</Text>
-            <View style={styles.inputBox}>
-              <Text style={styles.currencyPrefix}>₱</Text>
-              <TextInput
-                style={styles.textInput}
-                keyboardType="numeric"
-                value={editReservationFee}
-                onChangeText={setEditReservationFee}
-                placeholder="e.g. 500"
-                placeholderTextColor={Colors.secondary}
-              />
-            </View>
-
+            <Text style={styles.fieldLabel}>Reservation Fee</Text>
+            <Text style={styles.sheetSub}>Automatically calculated as 50% of each booking total.</Text>
             {/* Description / Special Notes */}
             <Text style={styles.fieldLabel}>Description & Features</Text>
             <TextInput
@@ -861,18 +842,7 @@ const styles = StyleSheet.create({
     color: "#B45309",
     marginTop: 2,
   },
-  editSheet: {
-    backgroundColor: Colors.white,
-    paddingHorizontal: 20,
-    paddingBottom: 28,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-  },
-  sheetTitle: {
-    fontFamily: FontFamily.bold,
-    fontSize: 18,
-    color: Colors.dark,
-  },
+  editSheet: rentalSheetStyle,
   sheetSub: {
     fontFamily: FontFamily.regular,
     fontSize: 13,
@@ -917,6 +887,7 @@ const styles = StyleSheet.create({
     color: Colors.dark,
   },
   inputBox: {
+    minHeight: 48,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#F8FAFC",
@@ -925,6 +896,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
   },
+  directInput: { minHeight: 48, paddingVertical: 12, fontFamily: FontFamily.regular, fontSize: 13, color: Colors.dark },
   currencyPrefix: {
     fontFamily: FontFamily.bold,
     fontSize: 14,
@@ -958,19 +930,14 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 18,
   },
-  cancelSheetBtn: {
-    flex: 1,
-    backgroundColor: "#F1F5F9",
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: "center",
-  },
+  cancelSheetBtn: { flex: 1, minHeight: 50, borderRadius: 14, backgroundColor: Colors.white, borderWidth: 1, borderColor: "#E2E8F0", alignItems: "center", justifyContent: "center", padding: 12 },
   cancelSheetBtnText: {
     fontFamily: FontFamily.semiBold,
     fontSize: 13,
     color: Colors.secondary,
   },
   saveSheetBtn: {
+    minHeight: 50,
     flex: 1.6,
     flexDirection: "row",
     gap: 6,

@@ -1,11 +1,16 @@
+import { registerPushDevice, unregisterPushDevice } from "@/services/pushRegistration";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, AppState, Linking, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
+import { KeyboardAwareScrollView as ScrollView } from "@/components/common/KeyboardAwareScrollView";
+import { ActivityIndicator, Alert, AppState, Linking, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
+import { copyToClipboard } from "@/utils/clipboard";
+import { reportActiveTripLocationOff } from "@/services/tripLocationService";
+import { checkImageLoading } from "@/services/imageDiagnostics";
 
 
 import { Colors } from "@/constants/colors";
@@ -31,6 +36,7 @@ try {
 
 const PROTECTED_STORAGE_KEYS = new Set([
   "@ride4rent_token",
+  "@ride4rent_push_token",
   "@ride4rent_user",
   "@ride4rent_favorites",
   "@ride4rent_has_onboarded",
@@ -46,6 +52,29 @@ export default function SettingsScreen() {
   const [notifications, setNotifications] = useState(true);
   const [locationServices, setLocationServices] = useState(true);
   const [clearingCache, setClearingCache] = useState(false);
+  const [checkingImages, setCheckingImages] = useState(false);
+
+  const handleCheckImages = async () => {
+    setCheckingImages(true);
+    try {
+      const report = await checkImageLoading();
+      Alert.alert("Image Loading Check", report, [
+        { text: "Close", style: "cancel" },
+        { text: "Copy Results", onPress: () => {
+          void copyToClipboard(report).then(
+            (copied) => copied
+              ? showSuccess("Copied", "Paste the results into your support conversation.")
+              : showInfo("Could not copy", "You can take a screenshot of the results."),
+            () => showInfo("Could not copy", "You can take a screenshot of the results."),
+          );
+        } },
+      ]);
+    } catch {
+      showInfo("Image Check", "Could not complete the check. Please try again.");
+    } finally {
+      setCheckingImages(false);
+    }
+  };
 
   const syncSettingsAndPermissions = useCallback(async () => {
     try {
@@ -137,11 +166,13 @@ export default function SettingsScreen() {
       }
       setNotifications(true);
       await AsyncStorage.setItem(STORAGE_KEY_NOTIFS, JSON.stringify(true));
+      void registerPushDevice();
       showSuccess("Notifications On", "You will receive live booking and trip updates.");
     } else {
       setNotifications(false);
       await AsyncStorage.setItem(STORAGE_KEY_NOTIFS, JSON.stringify(false));
       await cancelAllBookingReminders();
+      await unregisterPushDevice().catch(() => {});
       showInfo("Notifications Off", "Push alerts have been muted.");
     }
   };
@@ -153,6 +184,7 @@ export default function SettingsScreen() {
         if (status !== "granted") {
           setLocationServices(false);
           await AsyncStorage.setItem(STORAGE_KEY_LOCATION, JSON.stringify(false));
+          void reportActiveTripLocationOff("permission_denied").catch(() => {});
           showModal(
             "Location Permission Required",
             "Location access is turned off in your device settings.",
@@ -171,11 +203,12 @@ export default function SettingsScreen() {
       }
       setLocationServices(true);
       await AsyncStorage.setItem(STORAGE_KEY_LOCATION, JSON.stringify(true));
-      showSuccess("Location Enabled", "Nearby vehicles will be shown on your home screen.");
+      showSuccess("Location Enabled", "Location access is enabled. Active-trip GPS sharing resumes automatically.");
     } else {
       setLocationServices(false);
       await AsyncStorage.setItem(STORAGE_KEY_LOCATION, JSON.stringify(false));
-      showInfo("Location Disabled", "Showing all available vehicles without location filtering.");
+      void reportActiveTripLocationOff("app_setting").catch(() => {});
+      showInfo("Location Disabled", "Location access is off. Active-trip GPS sharing will stop.");
     }
   };
 
@@ -183,7 +216,7 @@ export default function SettingsScreen() {
     try {
       setClearingCache(true);
       const allKeys = await AsyncStorage.getAllKeys();
-      const cacheKeys = allKeys.filter((k) => !PROTECTED_STORAGE_KEYS.has(k));
+      const cacheKeys = allKeys.filter((k) => !PROTECTED_STORAGE_KEYS.has(k) && !k.startsWith("@ride4rent_archived_notifications:"));
       if (cacheKeys.length > 0) {
         await AsyncStorage.multiRemove(cacheKeys);
       }
@@ -259,6 +292,22 @@ export default function SettingsScreen() {
         {/* Storage & System */}
         <Text style={styles.sectionLabel}>Storage & System</Text>
         <View style={styles.sectionGroup}>
+          <TouchableOpacity
+            style={styles.settingCard}
+            onPress={handleCheckImages}
+            disabled={checkingImages}
+            activeOpacity={0.8}
+          >
+            <View style={styles.iconBox}>
+              <Ionicons name="image-outline" size={20} color={Colors.dark} />
+            </View>
+            <View style={styles.textCol}>
+              <Text style={styles.rowTitle}>Check Image Loading</Text>
+              <Text style={styles.rowSubtitle}>Test photo loading and copy results for support</Text>
+            </View>
+            {checkingImages ? <ActivityIndicator size="small" color={Colors.dark} /> :
+              <Ionicons name="chevron-forward" size={18} color={Colors.secondary} />}
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.settingCard}
             onPress={handleClearCache}

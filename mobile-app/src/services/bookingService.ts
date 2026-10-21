@@ -26,6 +26,26 @@ export interface Booking {
   total_days: number;
   daily_rate: number;
   reservation_fee: number;
+  balance_due?: number;
+  rental_paid_amount?: number;
+  rental_balance_paid_at?: string;
+  reservation_paid_at?: string;
+  extension_paid_total?: number;
+  pickup_at?: string;
+  return_at?: string;
+  booked_return_at?: string;
+  early_return_status?: "pending" | "approved" | "declined" | "withdrawn" | "completed";
+  early_return_requested_for?: string;
+  early_return_requested_at?: string;
+  early_return_reason?: string;
+  early_return_response?: string;
+  returned_early?: boolean;
+  early_return_refund_amount?: number;
+  early_return_refund_method?: string;
+  early_return_refund_reference?: string;
+  early_return_refund_reason?: string;
+  early_return_refund_recorded_at?: string;
+  early_return_refund_received_at?: string;
   total_price: number;
   status:
     | "pending_payment"
@@ -64,6 +84,7 @@ export interface Booking {
   secondary_driver_license_back?: string;
   extension_days?: number;
   extension_end_date?: string;
+  extension_return_time?: string;
   extended_end_date?: string;
   extension_price?: number;
   extension_fee?: number;
@@ -79,6 +100,8 @@ export interface Booking {
   };
   updated_at?: string;
   extension_notes?: string;
+  extension_decision_note?: string;
+  extension_payment_review_note?: string;
   created_at: string;
   vehicle?: any;
   operator?: any;
@@ -94,6 +117,8 @@ export const createBooking = async (data: {
   vehicle_id: number | string;
   start_date: string;
   end_date: string;
+  pickup_time?: string;
+  return_time?: string;
   notes?: string;
   secondary_driver_name?: string;
   secondary_driver_phone?: string;
@@ -144,9 +169,10 @@ export const updateBookingStatus = async (
     | "completed"
     | "cancelled"
     | "rejected"
-    | "no_show"
+    | "no_show",
+  options?: { license_rejected?: boolean; rejection_reason?: string }
 ): Promise<Booking> => {
-  const response = await api.patch(`/bookings/${bookingId}/status`, { status });
+  const response = await api.patch(`/bookings/${bookingId}/status`, { status, ...options });
   return response.data.data;
 };
 
@@ -154,6 +180,7 @@ export const startTrip = async (
   bookingId: number | string,
   data:
     | {
+        rental_balance_collected: boolean;
         start_mileage: number;
         start_fuel_level: number;
         start_inspection_notes?: string;
@@ -174,6 +201,7 @@ export const completeTrip = async (
   bookingId: number | string,
   data:
     | {
+        settlement_confirmed: boolean;
         end_mileage: number;
         end_fuel_level: number;
         fuel_charge?: number;
@@ -200,6 +228,7 @@ export const sendBookingLocation = async (
     latitude: number;
     longitude: number;
     speed?: number;
+    accuracy?: number;
     street?: string;
     barangay?: string;
     city?: string;
@@ -210,12 +239,19 @@ export const sendBookingLocation = async (
   return response.data;
 };
 
+export const reportTripLocationOff = async (bookingId: number, reason: "app_setting" | "permission_denied" | "device_location_off"): Promise<void> => {
+  await api.post(`/bookings/${bookingId}/location-sharing`, { reason });
+};
+
 export const getBookingLocation = async (
   bookingId: number | string
 ): Promise<{
   success: boolean;
   data: {
     booking_id: number;
+    location_sharing_status?: "on" | "off" | "unavailable" | null;
+    location_sharing_reason?: string | null;
+    outside_service_area?: boolean | null;
     vehicle_name?: string;
     status: string;
     current_latitude?: number;
@@ -260,9 +296,12 @@ export const requestBookingExtension = async (
   bookingId: number | string,
   data: {
     extension_end_date?: string;
+    extension_return_time?: string;
     extended_end_date?: string;
     extension_days?: number;
     extension_notes?: string;
+  extension_decision_note?: string;
+  extension_payment_review_note?: string;
     extension_payment_method?: string;
     extension_payment_reference?: string;
   }
@@ -271,6 +310,7 @@ export const requestBookingExtension = async (
     extension_end_date: data.extension_end_date || data.extended_end_date,
     extended_end_date: data.extended_end_date || data.extension_end_date,
     extension_days: data.extension_days,
+    extension_return_time: data.extension_return_time,
     extension_notes: data.extension_notes,
     extension_payment_method: data.extension_payment_method || "gcash",
     extension_payment_reference: data.extension_payment_reference || "0000000000000",
@@ -284,8 +324,8 @@ export const approveBookingExtension = async (bookingId: number | string): Promi
   return response.data.data;
 };
 
-export const rejectBookingExtension = async (bookingId: number | string): Promise<Booking> => {
-  const response = await api.post(`/bookings/${bookingId}/reject-extension`);
+export const rejectBookingExtension = async (bookingId: number | string, reason?: string): Promise<Booking> => {
+  const response = await api.post(`/bookings/${bookingId}/reject-extension`, { reason });
   return response.data.data;
 };
 
@@ -312,3 +352,10 @@ export const confirmExtensionPayment = async (bookingId: number | string): Promi
   const response = await api.post(`/bookings/${bookingId}/confirm-extension-payment`);
   return response.data.data;
 };
+
+export const earlyReturnAction = async (bookingId: number, action: "request" | "review" | "withdraw" | "refund" | "confirm", data: Record<string, unknown> = {}): Promise<Booking> => {
+  const suffix = { request: "", review: "/review", withdraw: "/withdraw", refund: "/refund", confirm: "/refund/confirm" }[action];
+  return (await api.post(`/bookings/${bookingId}/early-return${suffix}`, data)).data.data;
+};
+
+export const rejectExtensionPayment = async (bookingId: number, reason: string): Promise<Booking> => (await api.post(`/bookings/${bookingId}/reject-extension-payment`, { reason })).data.data;

@@ -25,7 +25,7 @@ export default function PasswordInput(props: any) {
       />
 
       <Pressable
-        style={styles.icon}
+        style={[styles.icon, props.compact && { top: 26, height: 50, width: 44, right: 6, alignItems: "center", justifyContent: "center" }]}
         onPress={() => setHidden(!hidden)}
       >
 

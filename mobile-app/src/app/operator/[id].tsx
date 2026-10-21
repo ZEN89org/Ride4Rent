@@ -1,10 +1,12 @@
+import ProfileInformation from "@/components/common/ProfileInformation";
+import { ProfileSummary } from "@/components/common/ProfileSummary";
+import { paginateItems } from "@/utils/paginateItems";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   FlatList,
   Image,
-  Linking,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -12,10 +14,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import ListPagination from "@/components/common/ListPagination";
 import { ProCardSkeleton, Skeleton } from "@/components/common/Skeleton";
 import { Colors } from "@/constants/colors";
 import { resolveCoordinatesFromAddress } from "@/constants/orientalMindoroLocations";
 import { FontFamily, FontSize, Spacing } from "@/constants/theme";
+import { useCall } from "@/context/CallContext";
 import { useFavorites } from "@/context/FavoritesContext";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { getOperatorFleet } from "@/features/operator/services/vehicleService";
@@ -24,10 +28,13 @@ import { Vehicle } from "@/features/operator/types/vehicle";
 export default function OperatorProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { isGuest } = useAuth();
+  const { startCall } = useCall();
+  const [page, setPage] = useState(1);
   const { isFavorite, toggleFavorite } = useFavorites();
 
   const [operator, setOperator] = useState<any>(null);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const pagination = paginateItems(vehicles, page, 5);
   const [loadedId, setLoadedId] = useState<string | null>(null);
   const validId = !!id && /^\d+$/.test(String(id));
   const loading = validId && loadedId !== String(id);
@@ -83,7 +90,7 @@ export default function OperatorProfileScreen() {
             <Ionicons name="arrow-back" size={22} color={Colors.dark} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Host Profile</Text>
-          <View style={{ width: 40 }} />
+          <View style={{ width: 44 }} />
         </View>
         <View style={{ padding: Spacing.lg }}>
           <Skeleton
@@ -109,7 +116,7 @@ export default function OperatorProfileScreen() {
             <Ionicons name="arrow-back" size={22} color={Colors.dark} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Host Profile</Text>
-          <View style={{ width: 40 }} />
+          <View style={{ width: 44 }} />
         </View>
         <View style={styles.emptyWrap}>
           <Text style={styles.emptyText}>Host Profile Unavailable</Text>
@@ -134,7 +141,6 @@ export default function OperatorProfileScreen() {
       ? addressParts.join(", ")
       : operator?.address || null;
   const profilePhoto = operator?.profile_photo;
-
   const vehicleWithCoords = vehicles.find(
     (v) =>
       v.pickup_latitude &&
@@ -174,7 +180,7 @@ export default function OperatorProfileScreen() {
       params: {
         type: "pickup",
         mode: "pickup",
-        title: "Pickup & Garage Location",
+        title: "Pickup Location",
         vehicleName: businessName,
         address: effectiveAddress,
         latitude: String(finalLat),
@@ -196,168 +202,34 @@ export default function OperatorProfileScreen() {
           <Ionicons name="arrow-back" size={22} color={Colors.dark} />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>
-          {businessName}
+          Operator Profile
         </Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 44 }} />
       </View>
 
       <FlatList
-        data={vehicles}
+        data={pagination.items}
+        ListFooterComponent={<ListPagination currentPage={pagination.page} totalItems={vehicles.length} pageSize={5} onPageChange={setPage} itemName="vehicles" />}
         keyExtractor={(item) => String(item.id)}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
-          <View style={styles.profileHeaderSection}>
-            {/* Host Cover Accent Banner */}
-            <View style={styles.coverAccent}>
-              <View style={styles.accentCircleOne} />
-              <View style={styles.accentCircleTwo} />
+          <View style={{ paddingBottom: 16 }}>
+            <ProfileSummary image={profilePhoto} title={businessName} email={operator?.business_email || operator?.email} badge="Verified Operator" />
+            <View style={{ flexDirection: "row", gap: 10, marginBottom: 24 }}>
+              <TouchableOpacity style={profileViewStyles.message} onPress={handleChatPress}><Ionicons name="chatbubble-outline" size={18} color={Colors.dark} /><Text style={profileViewStyles.buttonText}>Message</Text></TouchableOpacity>
+              {!isGuest && <TouchableOpacity style={profileViewStyles.call} onPress={() => startCall({ id: Number(id), name: businessName, role: "operator", profile_photo: profilePhoto })}><Ionicons name="call-outline" size={18} color={Colors.dark} /><Text style={profileViewStyles.buttonText}>Call</Text></TouchableOpacity>}
             </View>
-
-            {/* Avatar overlapping the banner */}
-            <View style={styles.avatarRowWrapper}>
-              <View style={styles.avatarWrap}>
-                {profilePhoto ? (
-                  <Image
-                    source={{ uri: profilePhoto }}
-                    style={styles.avatarImg}
-                  />
-                ) : (
-                  <Ionicons name="business" size={36} color={Colors.dark} />
-                )}
-              </View>
-
-              <View style={styles.verifiedBadge}>
-                <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-                <Text style={styles.verifiedText}>Verified Host</Text>
-              </View>
-            </View>
-
-            {/* Host Identity Details */}
-            <View style={styles.detailsBlock}>
-              <Text style={styles.businessTitle} numberOfLines={2}>
-                {businessName}
-              </Text>
-
-              <Text style={styles.ownerText}>
-                Managed by {operator?.name || "Verified Host"}
-              </Text>
-
-              {fullAddress ? (
-                <View style={styles.addressContainer}>
-                  <Ionicons
-                    name="location-sharp"
-                    size={15}
-                    color={Colors.primary}
-                  />
-                  <Text style={styles.addressText} numberOfLines={2}>
-                    {fullAddress}
-                  </Text>
-                </View>
-              ) : null}
-
-              {/* Action Buttons Row */}
-              <View style={styles.actionButtonsRow}>
-                <TouchableOpacity
-                  style={styles.chatAction}
-                  onPress={handleChatPress}
-                  activeOpacity={0.85}
-                >
-                  <Ionicons
-                    name="chatbubble-ellipses"
-                    size={18}
-                    color={Colors.dark}
-                  />
-                  <Text style={styles.chatActionText}>Message Host</Text>
-                </TouchableOpacity>
-
-                {operator?.business_contact_number ||
-                operator?.mobile_number ? (
-                  <TouchableOpacity
-                    style={styles.contactBadge}
-                    onPress={() => {
-                      const phone =
-                        operator.business_contact_number ||
-                        operator.mobile_number;
-                      if (phone) {
-                        Linking.openURL(`tel:${phone}`);
-                      }
-                    }}
-                    activeOpacity={0.75}
-                  >
-                    <Ionicons name="call" size={15} color={Colors.dark} />
-                    <Text style={styles.contactText}>
-                      {operator.business_contact_number ||
-                        operator.mobile_number}
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-
-              {/* Statistics Pill Line */}
-              <View style={styles.statsRow}>
-                <View style={styles.statPill}>
-                  <Text style={styles.statNumber}>{vehicles.length}</Text>
-                  <Text style={styles.statLabel}>Available Cars</Text>
-                </View>
-
-                <View style={styles.statPill}>
-                  <Text style={styles.statNumber}>Fast</Text>
-                  <Text style={styles.statLabel}>Response Rate</Text>
-                </View>
-
-                <View style={styles.statPill}>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 3,
-                    }}
-                  >
-                    <Text style={styles.statNumber}>5.0</Text>
-                    <Ionicons name="star" size={13} color={Colors.primary} />
-                  </View>
-                  <Text style={styles.statLabel}>Host Rating</Text>
-                </View>
-              </View>
-
-              {/* Pickup & Garage Location - Exactly matching vehicle details card */}
-              <View style={styles.sectionDivider} />
-              <Text style={styles.sectionHeading}>
-                Pickup & Garage Location
-              </Text>
-              <View style={styles.locationCard}>
-                <View style={styles.locationInfoRow}>
-                  <Ionicons
-                    name="location-sharp"
-                    size={22}
-                    color={Colors.primary}
-                  />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.locationTitle}>{effectiveAddress}</Text>
-                    <Text style={styles.locationSubtitle}>
-                      Official garage & vehicle meetup point for this host.
-                    </Text>
-                  </View>
-                </View>
-
-                <TouchableOpacity
-                  style={styles.directionsButton}
-                  onPress={handleViewLocationInApp}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="map-outline" size={16} color={Colors.dark} />
-                  <Text style={styles.directionsButtonText}>
-                    View Location on Map
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.dividerLine} />
-            <Text style={styles.fleetHeader}>
-              Fleet Listings ({vehicles.length})
-            </Text>
+            <ProfileInformation title="Business Information" rows={[
+              { icon: "business-outline", label: "Business Name", value: businessName },
+              { icon: "person-outline", label: "Representative", value: operator?.name || "Not provided" },
+              { icon: "mail-outline", label: "Email Address", value: operator?.business_email || operator?.email || "Not provided" },
+              { icon: "call-outline", label: "Phone Number", value: operator?.business_contact_number || operator?.mobile_number || "Not provided" },
+              { icon: "location-outline", label: "Pickup Address", value: effectiveAddress },
+              { icon: "car-outline", label: "Listed Vehicles", value: String(vehicles.length) },
+            ]} />
+            <TouchableOpacity style={profileViewStyles.location} onPress={handleViewLocationInApp}><Ionicons name="map-outline" size={18} color={Colors.dark} /><Text style={profileViewStyles.buttonText}>View pickup location</Text><Ionicons name="chevron-forward" size={18} color={Colors.secondary} /></TouchableOpacity>
+            <Text style={profileViewStyles.fleetTitle}>Listed Vehicles</Text>
           </View>
         }
         ListEmptyComponent={
@@ -390,8 +262,7 @@ export default function OperatorProfileScreen() {
                   {item.name}
                 </Text>
                 <Text style={styles.carSpecs}>
-                  {item.transmission || "Auto"} • {item.seats || 4} Seats •{" "}
-                  {item.vehicle_type || "Sedan"}
+                  {item.availability_status === "maintenance" ? "Under Maintenance" : `${item.transmission || "Auto"} · ${item.seats || 4} Seats · ${item.vehicle_type || "Sedan"}`}
                 </Text>
 
                 <View style={styles.priceRow}>
@@ -429,23 +300,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     backgroundColor: Colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.divider,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.inputBackground,
+    width: 44,
+    height: 44,
     justifyContent: "center",
     alignItems: "center",
   },
   headerTitle: {
-    fontFamily: FontFamily.bold,
-    fontSize: FontSize.title,
+    fontFamily: FontFamily.semiBold,
+    fontSize: 16,
     color: Colors.dark,
     flex: 1,
     textAlign: "center",
@@ -596,14 +463,16 @@ const styles = StyleSheet.create({
   },
   statsRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
     marginTop: Spacing.md,
   },
   statPill: {
-    flex: 1,
+    flexDirection: "row",
+    gap: 6,
     backgroundColor: Colors.white,
     paddingVertical: 10,
-    paddingHorizontal: 8,
+    paddingHorizontal: 12,
     borderRadius: 14,
     alignItems: "center",
     borderWidth: 1,
@@ -616,9 +485,8 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontFamily: FontFamily.regular,
-    fontSize: 11,
+    fontSize: 12,
     color: Colors.secondary,
-    marginTop: 2,
   },
   sectionDivider: {
     height: 1,
@@ -765,4 +633,12 @@ const styles = StyleSheet.create({
   favSmall: {
     padding: 4,
   },
+});
+
+const profileViewStyles = StyleSheet.create({
+  message: { flex: 1, minHeight: 48, borderRadius: 14, backgroundColor: Colors.primary, flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center" },
+  call: { flex: 1, minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: "#E2E8F0", flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center" },
+  buttonText: { fontFamily: FontFamily.semiBold, fontSize: 13, color: Colors.dark },
+  location: { flexDirection: "row", gap: 10, alignItems: "center", justifyContent: "center", minHeight: 48, backgroundColor: "#F8FAFC", borderRadius: 14, marginBottom: 24 },
+  fleetTitle: { fontFamily: FontFamily.bold, fontSize: 15, color: Colors.dark },
 });

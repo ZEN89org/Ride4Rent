@@ -1,17 +1,11 @@
+import { rentalSheetStyle } from "@/constants/rentalDesign";
+import RentalSheetHeader from "@/components/common/RentalSheetHeader";
+import { normalizePhilippinePhone } from "@/utils/inputValidation";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import React, { useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { KeyboardAwareScrollView as ScrollView } from "@/components/common/KeyboardAwareScrollView";
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppBottomSheet from "@/components/common/AppBottomSheet";
@@ -353,7 +347,7 @@ export default function OperatorBusinessInfo({
 
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <ScrollView
           style={styles.scroll}
@@ -791,11 +785,9 @@ function SelectionModal({
     <AppBottomSheet
       visible={visible}
       onClose={handleClose}
-      title={title}
+      sheetStyle={rentalSheetStyle}
     >
-      <Text style={styles.pickerSubtitle}>
-        {subtitle}
-      </Text>
+      <RentalSheetHeader title={title} subtitle={subtitle} icon="location-outline" onClose={handleClose} />
 
       <View style={styles.searchContainer}>
         <Ionicons
@@ -816,7 +808,7 @@ function SelectionModal({
       </View>
 
       <ScrollView
-        style={[styles.selectionList, { maxHeight: 320 }]}
+        style={[styles.selectionList, { flexShrink: 1 }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -1097,7 +1089,7 @@ const styles = StyleSheet.create({
   },
 
   searchContainer: {
-    minHeight: 44,
+    minHeight: 48,
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
@@ -1132,7 +1124,7 @@ const styles = StyleSheet.create({
   },
 
   selectionItemActive: {
-    backgroundColor: "#FFF4E8",
+    backgroundColor: "#FFF4CC",
   },
 
   selectionItemText: {
